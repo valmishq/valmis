@@ -1,0 +1,27 @@
+{
+  "name": "@repo/utils",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "build": "tsc --noEmit",
+    "typecheck": "tsc --noEmit",
+    "lint": "tsc --noEmit"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@repo/tsconfig": "workspace:*",
+    "@types/js-yaml": "^4.0.9",
+    "@types/node": "^25.9.1"
+  },
+  "dependencies": {
+    "@repo/types": "workspace:*",
+    "js-yaml": "^4.1.1",
+    "zod": "^4.4.3"
+  }
+}
