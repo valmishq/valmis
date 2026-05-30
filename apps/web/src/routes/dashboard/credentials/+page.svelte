@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { api } from '$lib/api.client.js';
+	import { setAlert } from '$lib/components/custom/alert/alert-state.svelte.js';
 	import * as Card from '$lib/components/ui/card/index.js';
 	import * as Dialog from '$lib/components/ui/dialog/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
@@ -13,7 +14,6 @@
 	import TrashIcon from '@lucide/svelte/icons/trash-2';
 	import LinkIcon from '@lucide/svelte/icons/link';
 	import CheckCircleIcon from '@lucide/svelte/icons/check-circle-2';
-	import XCircleIcon from '@lucide/svelte/icons/x-circle';
 	import LoaderIcon from '@lucide/svelte/icons/loader-circle';
 	import ShieldIcon from '@lucide/svelte/icons/shield';
 	import ChevronLeftIcon from '@lucide/svelte/icons/chevron-left';
@@ -185,16 +185,14 @@
 	}
 
 	// ── Test connection ────────────────────────────────────────────────────────
-	/** Maps credential id → loading/result state */
-	let testStatus = $state<Record<string, 'idle' | 'testing' | 'ok' | 'fail'>>({});
-	let testMessage = $state<Record<string, string>>({});
+	/** Maps credential id → loading state for the test button */
+	let testStatus = $state<Record<string, 'idle' | 'testing'>>({});
 
 	async function handleTest(cred: CredentialMetadata) {
 		const { user } = get(authStore);
 		if (!user) return;
 
 		testStatus[cred.id] = 'testing';
-		testMessage[cred.id] = '';
 
 		try {
 			const res = await api(`/credentials/${cred.id}/test`, {
@@ -204,15 +202,32 @@
 
 			const body = await res.json();
 			if (body.success && body.data?.valid) {
-				testStatus[cred.id] = 'ok';
-				testMessage[cred.id] = `Connection successful (HTTP ${body.data.status})`;
+				setAlert({
+					type: 'success',
+					title: 'Connection successful',
+					message: `Connected to "${cred.name}" (HTTP ${body.data.status})`,
+					duration: 5000,
+					show: true
+				});
 			} else {
-				testStatus[cred.id] = 'fail';
-				testMessage[cred.id] = body.error ?? 'Connection test failed';
+				setAlert({
+					type: 'error',
+					title: 'Connection failed',
+					message: body.error ?? 'Connection test failed',
+					duration: 5000,
+					show: true
+				});
 			}
 		} catch {
-			testStatus[cred.id] = 'fail';
-			testMessage[cred.id] = 'Unexpected error during test';
+			setAlert({
+				type: 'error',
+				title: 'Connection failed',
+				message: 'Unexpected error during test',
+				duration: 5000,
+				show: true
+			});
+		} finally {
+			testStatus[cred.id] = 'idle';
 		}
 	}
 
@@ -546,21 +561,6 @@
 							<p class="mt-0.5 text-xs text-muted-foreground">
 								Created {formatDate(cred.createdAt)}
 							</p>
-
-							<!-- Inline test / OAuth result -->
-							{#if status === 'ok'}
-								<p
-									class="mt-1.5 flex items-center gap-1 text-xs text-green-600 dark:text-green-400"
-								>
-									<CheckCircleIcon class="size-3.5" />
-									{testMessage[cred.id]}
-								</p>
-							{:else if status === 'fail'}
-								<p class="mt-1.5 flex items-center gap-1 text-xs text-destructive">
-									<XCircleIcon class="size-3.5" />
-									{testMessage[cred.id]}
-								</p>
-							{/if}
 						</div>
 
 						<!-- Right: actions -->

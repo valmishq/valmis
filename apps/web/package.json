@@ -15,6 +15,7 @@
 		"format": "prettier --write ."
 	},
 	"dependencies": {
+		"@iconify/svelte": "^5.2.1",
 		"@repo/types": "workspace:*",
 		"jose": "^6.2.3"
 	},
