@@ -1,13 +1,22 @@
 <script lang="ts">
 	import { api } from '$lib/api.client.js';
+	import * as Card from '$lib/components/ui/card/index.js';
+	import * as Dialog from '$lib/components/ui/dialog/index.js';
+	import { Button } from '$lib/components/ui/button/index.js';
+	import { Input } from '$lib/components/ui/input/index.js';
+	import { Label } from '$lib/components/ui/label/index.js';
+	import { Badge } from '$lib/components/ui/badge/index.js';
+	import PageHeader from '$lib/components/page-header.svelte';
+	import CopyIcon from '@lucide/svelte/icons/copy';
+	import CheckIcon from '@lucide/svelte/icons/check';
+	import TrashIcon from '@lucide/svelte/icons/trash-2';
 	import type { PageData } from './$types';
 	import type { ApiKey } from '@repo/types';
 
 	let { data }: { data: PageData } = $props();
 
-	// Mutable local list — initialized from SSR data, updated by client-side mutations.
-	// $effect keeps it in sync if the server data changes (e.g. invalidation).
-	let keys = $state<ApiKey[]>(data.keys);
+	// Mutable local list — synced from SSR data and updated by client-side mutations
+	let keys = $state<ApiKey[]>([]);
 	$effect(() => {
 		keys = data.keys;
 	});
@@ -21,6 +30,11 @@
 	// The newly created raw key (shown once, immediately after generation)
 	let newRawKey = $state('');
 	let copied = $state(false);
+
+	// Delete confirmation dialog state
+	let deleteDialogOpen = $state(false);
+	let keyToDelete = $state<ApiKey | null>(null);
+	let isDeleting = $state(false);
 
 	async function handleGenerate(e: SubmitEvent) {
 		e.preventDefault();
@@ -46,7 +60,6 @@
 			name = '';
 			expiresInDays = 30;
 
-			// Refresh the list
 			await refreshKeys();
 		} catch {
 			generateError = 'An unexpected error occurred';
@@ -55,16 +68,28 @@
 		}
 	}
 
-	async function handleDelete(id: string) {
-		if (!confirm('Delete this API key? This cannot be undone.')) return;
+	/** Opens the delete confirmation dialog for the given key. */
+	function requestDelete(key: ApiKey) {
+		keyToDelete = key;
+		deleteDialogOpen = true;
+	}
+
+	/** Called when user confirms deletion in the dialog. */
+	async function confirmDelete() {
+		if (!keyToDelete) return;
+		isDeleting = true;
 
 		try {
-			const res = await api(`/api-keys/${id}`, { method: 'DELETE' });
+			const res = await api(`/api-keys/${keyToDelete.id}`, { method: 'DELETE' });
 			if (res.ok) {
-				keys = keys.filter((k) => k.id !== id);
+				keys = keys.filter((k) => k.id !== keyToDelete!.id);
 			}
 		} catch {
 			// silently ignore — list will be stale until page refresh
+		} finally {
+			isDeleting = false;
+			deleteDialogOpen = false;
+			keyToDelete = null;
 		}
 	}
 
@@ -93,120 +118,168 @@
 			day: 'numeric'
 		});
 	}
+
+	function isExpired(iso: string): boolean {
+		return new Date(iso) < new Date();
+	}
 </script>
 
 <svelte:head>
-	<title>API Keys — Dashboard</title>
-	<meta name="description" content="Manage your personal API keys" />
+	<title>API Keys — OpenAgent Dashboard</title>
+	<meta
+		name="description"
+		content="Manage your OpenAgent API keys for secure programmatic access to integrations."
+	/>
+	<meta name="keywords" content="API keys, authentication, OpenAgent, integration, access tokens" />
 </svelte:head>
 
-<div class="space-y-8">
-	<div>
-		<h1 class="text-xl font-semibold text-gray-900">API Keys</h1>
-		<p class="mt-1 text-sm text-gray-500">
-			Generate API keys to authenticate programmatic access. The full key is shown only once at
-			creation.
-		</p>
-	</div>
+<!-- Delete confirmation dialog -->
+<Dialog.Root bind:open={deleteDialogOpen}>
+	<Dialog.Content class="sm:max-w-md">
+		<Dialog.Header>
+			<Dialog.Title>Delete API key</Dialog.Title>
+			<Dialog.Description>
+				Are you sure you want to delete <span class="font-medium text-foreground"
+					>{keyToDelete?.name}</span
+				>? This action cannot be undone and any integrations using this key will stop working.
+			</Dialog.Description>
+		</Dialog.Header>
+		<Dialog.Footer class="gap-2 sm:gap-0">
+			<Button
+				variant="outline"
+				onclick={() => {
+					deleteDialogOpen = false;
+					keyToDelete = null;
+				}}
+				disabled={isDeleting}
+			>
+				Cancel
+			</Button>
+			<Button variant="destructive" onclick={confirmDelete} disabled={isDeleting}>
+				{isDeleting ? 'Deleting…' : 'Delete key'}
+			</Button>
+		</Dialog.Footer>
+	</Dialog.Content>
+</Dialog.Root>
 
-	<!-- Generate new key form -->
-	<div class="rounded-lg border border-gray-200 bg-white p-6">
-		<h2 class="mb-4 text-sm font-semibold text-gray-900">Generate new key</h2>
+<PageHeader
+	title="API Keys"
+	description="Generate keys to authenticate programmatic access. The full key is shown only once at creation."
+/>
 
+<!-- Generate new key -->
+<Card.Root>
+	<Card.Header class="pb-4">
+		<Card.Title class="text-sm font-medium">Generate new key</Card.Title>
+	</Card.Header>
+	<Card.Content class="space-y-4">
 		{#if generateError}
-			<p class="mb-4 rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+			<p class="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive" role="alert">
 				{generateError}
 			</p>
 		{/if}
 
 		{#if newRawKey}
-			<div class="mb-4 rounded border border-green-200 bg-green-50 p-4">
-				<p class="mb-2 text-sm font-medium text-green-800">
+			<!-- One-time key display -->
+			<div class="rounded-md border border-border bg-muted/40 p-4">
+				<p class="mb-2 text-sm font-medium text-foreground">
 					Key generated — copy it now. It will not be shown again.
 				</p>
 				<div class="flex items-center gap-2">
 					<code
-						class="flex-1 overflow-x-auto rounded border border-green-200 bg-white px-3 py-2 font-mono text-xs text-gray-800"
+						class="flex-1 overflow-x-auto rounded-md border border-border bg-background px-3 py-2 font-mono text-xs text-foreground"
 					>
 						{newRawKey}
 					</code>
-					<button
-						onclick={copyKey}
-						class="shrink-0 rounded border border-green-300 bg-white px-3 py-2 text-xs font-medium text-green-700 hover:bg-green-50"
-					>
-						{copied ? 'Copied!' : 'Copy'}
-					</button>
+					<Button variant="outline" size="sm" onclick={copyKey} class="shrink-0 gap-1.5">
+						{#if copied}
+							<CheckIcon class="size-3.5" />
+							Copied
+						{:else}
+							<CopyIcon class="size-3.5" />
+							Copy
+						{/if}
+					</Button>
 				</div>
 			</div>
 		{/if}
 
 		<form onsubmit={handleGenerate} class="flex flex-wrap items-end gap-3">
-			<div class="min-w-40 flex-1">
-				<label for="keyName" class="mb-1 block text-sm font-medium text-gray-700">Name</label>
-				<input
+			<div class="min-w-44 flex-1 space-y-1.5">
+				<Label for="keyName">Name</Label>
+				<Input
 					id="keyName"
 					type="text"
 					bind:value={name}
 					required
 					placeholder="e.g. CI / Local dev"
-					class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-gray-500 focus:outline-none"
 				/>
 			</div>
 
-			<div class="w-36">
-				<label for="expiresInDays" class="mb-1 block text-sm font-medium text-gray-700"
-					>Expires in (days)</label
-				>
-				<input
+			<div class="w-40 space-y-1.5">
+				<Label for="expiresInDays">Expires in (days)</Label>
+				<Input
 					id="expiresInDays"
 					type="number"
 					bind:value={expiresInDays}
 					min="1"
 					max="365"
 					required
-					class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-gray-500 focus:outline-none"
 				/>
 			</div>
 
-			<button
-				type="submit"
-				disabled={isGenerating}
-				class="rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-700 disabled:opacity-50"
-			>
-				{isGenerating ? 'Generating…' : 'Generate'}
-			</button>
+			<Button type="submit" disabled={isGenerating}>
+				{isGenerating ? 'Generating…' : 'Generate key'}
+			</Button>
 		</form>
-	</div>
+	</Card.Content>
+</Card.Root>
 
-	<!-- Existing keys list -->
-	<div class="rounded-lg border border-gray-200 bg-white">
-		<div class="border-b border-gray-200 px-6 py-4">
-			<h2 class="text-sm font-semibold text-gray-900">Your keys</h2>
-		</div>
+<!-- Existing keys list -->
+<Card.Root>
+	<Card.Header class="pb-3">
+		<Card.Title class="text-sm font-medium">Your keys</Card.Title>
+		<Card.Description class="text-xs">
+			{keys.length} key{keys.length !== 1 ? 's' : ''} total
+		</Card.Description>
+	</Card.Header>
 
-		{#if keys.length === 0}
-			<p class="px-6 py-8 text-center text-sm text-gray-400">No API keys yet.</p>
-		{:else}
-			<ul class="divide-y divide-gray-100">
+	{#if keys.length === 0}
+		<Card.Content>
+			<p class="py-4 text-center text-sm text-muted-foreground">No API keys yet.</p>
+		</Card.Content>
+	{:else}
+		<Card.Content class="p-0">
+			<ul class="divide-y divide-border">
 				{#each keys as key (key.id)}
 					<li class="flex items-center justify-between gap-4 px-6 py-4">
-						<div class="min-w-0">
-							<p class="truncate text-sm font-medium text-gray-900">{key.name}</p>
-							<p class="mt-0.5 text-xs text-gray-400">
-								<code class="font-mono">{key.key}</code>
-								&nbsp;·&nbsp; expires {formatDate(key.expiresAt)}
-								&nbsp;·&nbsp; created {formatDate(key.createdAt)}
+						<div class="min-w-0 flex-1">
+							<div class="flex items-center gap-2">
+								<p class="truncate text-sm font-medium text-foreground">{key.name}</p>
+								{#if isExpired(key.expiresAt)}
+									<Badge variant="destructive" class="shrink-0 text-xs">Expired</Badge>
+								{:else}
+									<Badge variant="secondary" class="shrink-0 text-xs">Active</Badge>
+								{/if}
+							</div>
+							<p class="mt-0.5 font-mono text-xs text-muted-foreground">
+								{key.key}
+								<span class="font-sans"> · expires {formatDate(key.expiresAt)}</span>
+								<span class="font-sans"> · created {formatDate(key.createdAt)}</span>
 							</p>
 						</div>
-						<button
-							onclick={() => handleDelete(key.id)}
-							class="shrink-0 rounded border border-red-200 px-3 py-1 text-xs font-medium text-red-600 hover:bg-red-50"
+						<Button
+							variant="ghost"
+							size="sm"
+							onclick={() => requestDelete(key)}
+							class="shrink-0 text-destructive hover:bg-destructive/10 hover:text-destructive"
 						>
-							Delete
-						</button>
+							<TrashIcon class="size-4" />
+							<span class="sr-only">Delete {key.name}</span>
+						</Button>
 					</li>
 				{/each}
 			</ul>
-		{/if}
-	</div>
-</div>
+		</Card.Content>
+	{/if}
+</Card.Root>

@@ -1,39 +1,22 @@
 <script lang="ts">
-	import { goto } from '$app/navigation';
-	import { authStore } from '$lib/stores/auth.store.js';
+	import * as Sidebar from '$lib/components/ui/sidebar/index.js';
+	import AppSidebar from '$lib/components/app-sidebar.svelte';
 	import type { LayoutData } from './$types';
 
 	let { children, data }: { children: import('svelte').Snippet; data: LayoutData } = $props();
-
-	async function handleLogout() {
-		authStore.logout();
-		goto('/signin');
-	}
 </script>
 
-<div class="min-h-screen bg-gray-50">
-	<!-- Nav bar -->
-	<header class="border-b border-gray-200 bg-white">
-		<div class="mx-auto flex max-w-5xl items-center justify-between px-4 py-3">
-			<div class="flex items-center gap-6">
-				<span class="text-sm font-semibold text-gray-900">Dashboard</span>
-				<nav class="flex items-center gap-4">
-					<a href="/dashboard" class="text-sm text-gray-500 hover:text-gray-900">Home</a>
-					<a href="/dashboard/api-keys" class="text-sm text-gray-500 hover:text-gray-900"
-						>API Keys</a
-					>
-				</nav>
-			</div>
-			<div class="flex items-center gap-4">
-				<span class="text-sm text-gray-500">{data.user.email}</span>
-				<button onclick={handleLogout} class="text-sm text-gray-500 hover:text-gray-900">
-					Sign out
-				</button>
-			</div>
-		</div>
-	</header>
+<Sidebar.Provider>
+	<AppSidebar user={data.user} />
+	<Sidebar.Inset>
+		<!-- Top header bar with sidebar trigger — h-[72px] matches sidebar header height (p-2 + h-14 + p-2) -->
+		<header class="flex h-[72px] shrink-0 items-center gap-2 border-b border-border/50 px-4">
+			<Sidebar.Trigger class="-ml-1 text-muted-foreground hover:text-foreground" />
+		</header>
 
-	<main class="mx-auto max-w-5xl px-4 py-8">
-		{@render children()}
-	</main>
-</div>
+		<!-- Page content -->
+		<main class="flex flex-1 flex-col gap-6 p-6">
+			{@render children()}
+		</main>
+	</Sidebar.Inset>
+</Sidebar.Provider>

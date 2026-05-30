@@ -2,6 +2,10 @@
 	import { goto } from '$app/navigation';
 	import { api } from '$lib/api.client.js';
 	import { authStore } from '$lib/stores/auth.store.js';
+	import { Button } from '$lib/components/ui/button/index.js';
+	import { Input } from '$lib/components/ui/input/index.js';
+	import { Label } from '$lib/components/ui/label/index.js';
+	import * as Card from '$lib/components/ui/card/index.js';
 	import type { LoginResponse } from '@repo/types';
 
 	let email = $state('');
@@ -39,52 +43,57 @@
 </script>
 
 <svelte:head>
-	<title>Sign In</title>
-	<meta name="description" content="Sign in to your account" />
+	<title>Sign In — OpenAgent</title>
+	<meta name="description" content="Sign in to your OpenAgent Integration Hub account." />
+	<meta name="keywords" content="sign in, login, OpenAgent, integration hub" />
 </svelte:head>
 
-<div class="flex min-h-screen items-center justify-center bg-gray-50">
-	<div class="w-full max-w-sm rounded-lg border border-gray-200 bg-white p-8 shadow-sm">
-		<h1 class="mb-6 text-2xl font-semibold text-gray-900">Sign in</h1>
+<div class="flex min-h-screen items-center justify-center bg-muted/40 p-4">
+	<Card.Root class="w-full max-w-sm">
+		<Card.Header class="pb-4">
+			<Card.Title class="text-xl">Sign in</Card.Title>
+			<Card.Description>Enter your credentials to access the dashboard.</Card.Description>
+		</Card.Header>
 
-		{#if error}
-			<p class="mb-4 rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-				{error}
-			</p>
-		{/if}
+		<Card.Content>
+			{#if error}
+				<p
+					class="mb-4 rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive"
+					role="alert"
+				>
+					{error}
+				</p>
+			{/if}
 
-		<form onsubmit={handleSubmit} class="space-y-4">
-			<div>
-				<label for="email" class="mb-1 block text-sm font-medium text-gray-700">Email</label>
-				<input
-					id="email"
-					type="email"
-					bind:value={email}
-					required
-					autocomplete="email"
-					class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-gray-500 focus:outline-none"
-				/>
-			</div>
+			<form onsubmit={handleSubmit} class="space-y-4">
+				<div class="space-y-1.5">
+					<Label for="email">Email</Label>
+					<Input
+						id="email"
+						type="email"
+						bind:value={email}
+						required
+						autocomplete="email"
+						placeholder="you@example.com"
+					/>
+				</div>
 
-			<div>
-				<label for="password" class="mb-1 block text-sm font-medium text-gray-700">Password</label>
-				<input
-					id="password"
-					type="password"
-					bind:value={password}
-					required
-					autocomplete="current-password"
-					class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-gray-500 focus:outline-none"
-				/>
-			</div>
+				<div class="space-y-1.5">
+					<Label for="password">Password</Label>
+					<Input
+						id="password"
+						type="password"
+						bind:value={password}
+						required
+						autocomplete="current-password"
+						placeholder="••••••••"
+					/>
+				</div>
 
-			<button
-				type="submit"
-				disabled={isLoading}
-				class="w-full rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-700 disabled:opacity-50"
-			>
-				{isLoading ? 'Signing in…' : 'Sign in'}
-			</button>
-		</form>
-	</div>
+				<Button type="submit" class="w-full" disabled={isLoading}>
+					{isLoading ? 'Signing in…' : 'Sign in'}
+				</Button>
+			</form>
+		</Card.Content>
+	</Card.Root>
 </div>
