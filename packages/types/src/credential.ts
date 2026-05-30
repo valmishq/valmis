@@ -76,3 +76,29 @@ export interface CredentialDefinition {
 	oauth2?: OAuth2Config;
 	testRequest?: TestRequest;
 }
+
+// ─── Request Bodies ───────────────────────────────────────────────────────────
+
+/** POST /v1/credentials — create a new credential */
+export interface CreateCredentialRequestBody {
+	ownerId: string;
+	name: string;
+	type: string;
+	data: Record<string, unknown>;
+}
+
+/** PUT /v1/credentials/:id — update an existing credential */
+export interface UpdateCredentialRequestBody {
+	ownerId: string;
+	name?: string;
+	data?: Record<string, unknown>;
+}
+
+/**
+ * Shared single-field body carrying only an ownerId.
+ * Used by: POST /v1/credentials/:id/test, DELETE /v1/credentials/:id,
+ *          POST /v1/llm-providers/:id/set-default, DELETE /v1/llm-providers/:id
+ */
+export interface OwnerIdRequestBody {
+	ownerId: string;
+}

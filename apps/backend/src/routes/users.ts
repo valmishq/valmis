@@ -8,6 +8,10 @@ import type {
 	UserResponse,
 	PasswordUpdateResponse,
 	UserDeleteResponse,
+	UpdateProfileRequestBody,
+	ChangePasswordRequestBody,
+	CreateUserRequestBody,
+	UpdateUserRequestBody,
 } from '@repo/types';
 
 const userService = new UserService();
@@ -57,11 +61,7 @@ export function createUsersRouter(authService: AuthService): Router {
 	/** PATCH /v1/users/profile — update own profile fields */
 	router.patch('/profile', auth, async (req: Request, res: Response) => {
 		const userId = req.user!.sub!;
-		const { email, first_name, last_name } = req.body as {
-			email?: string;
-			first_name?: string;
-			last_name?: string;
-		};
+		const { email, first_name, last_name } = req.body as UpdateProfileRequestBody;
 
 		const ip = (req.ip ?? req.socket.remoteAddress) as string;
 		const updated = await userService.updateUser(
@@ -83,10 +83,7 @@ export function createUsersRouter(authService: AuthService): Router {
 	/** POST /v1/users/profile/password — change own password */
 	router.post('/profile/password', auth, async (req: Request, res: Response) => {
 		const userId = req.user!.sub!;
-		const { currentPassword, newPassword } = req.body as {
-			currentPassword?: string;
-			newPassword?: string;
-		};
+		const { currentPassword, newPassword } = req.body as ChangePasswordRequestBody;
 
 		if (!currentPassword || !newPassword) {
 			const body: PasswordUpdateResponse = {
@@ -134,13 +131,7 @@ export function createUsersRouter(authService: AuthService): Router {
 		auth,
 		requirePermission('manage', 'all'),
 		async (req: Request, res: Response) => {
-			const { email, first_name, last_name, password, roleId } = req.body as {
-				email?: string;
-				first_name?: string;
-				last_name?: string;
-				password?: string;
-				roleId?: string;
-			};
+			const { email, first_name, last_name, password, roleId } = req.body as CreateUserRequestBody;
 
 			if (!email || !password || !roleId) {
 				const body: UserResponse = {
@@ -170,12 +161,7 @@ export function createUsersRouter(authService: AuthService): Router {
 		auth,
 		requirePermission('manage', 'all'),
 		async (req: Request, res: Response) => {
-			const { email, first_name, last_name, roleId } = req.body as {
-				email?: string;
-				first_name?: string;
-				last_name?: string;
-				roleId?: string;
-			};
+			const { email, first_name, last_name, roleId } = req.body as UpdateUserRequestBody;
 
 			const ip = (req.ip ?? req.socket.remoteAddress) as string;
 			const actor = req.user!.sub!;

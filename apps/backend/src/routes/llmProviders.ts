@@ -10,6 +10,9 @@ import type {
 	LlmProvidersListResponse,
 	LlmProviderResponse,
 	LlmProviderDeleteResponse,
+	CreateLlmProviderRequestBody,
+	UpdateLlmProviderRequestBody,
+	OwnerIdRequestBody,
 } from '@repo/types';
 
 const encryption = new EncryptionService();
@@ -88,14 +91,8 @@ export function createLlmProvidersRouter(authService: AuthService): Router {
 	 * Body: { ownerId, provider, name, model, isDefault?, data: { apiKey, baseUrl? } }
 	 */
 	router.post('/', auth, async (req: Request, res: Response) => {
-		const { ownerId, provider, name, model, isDefault, data } = req.body as {
-			ownerId?: string;
-			provider?: string;
-			name?: string;
-			model?: string;
-			isDefault?: boolean;
-			data?: { apiKey?: string; baseUrl?: string };
-		};
+		const { ownerId, provider, name, model, isDefault, data } =
+			req.body as CreateLlmProviderRequestBody;
 
 		if (!ownerId || !provider || !name || !model || !data?.apiKey) {
 			const body: LlmProviderResponse = {
@@ -127,13 +124,7 @@ export function createLlmProvidersRouter(authService: AuthService): Router {
 	 * Returns 404 if the record does not exist or does not belong to the given owner.
 	 */
 	router.put('/:id', auth, async (req: Request, res: Response) => {
-		const { ownerId, name, model, isDefault, data } = req.body as {
-			ownerId?: string;
-			name?: string;
-			model?: string;
-			isDefault?: boolean;
-			data?: { apiKey?: string; baseUrl?: string };
-		};
+		const { ownerId, name, model, isDefault, data } = req.body as UpdateLlmProviderRequestBody;
 
 		if (!ownerId) {
 			const body: LlmProviderResponse = { success: false, error: 'ownerId is required' };
@@ -185,7 +176,7 @@ export function createLlmProvidersRouter(authService: AuthService): Router {
 	 */
 	router.post('/:id/set-default', auth, async (req: Request, res: Response) => {
 		const id = req.params.id as string;
-		const { ownerId } = req.body as { ownerId?: string };
+		const { ownerId } = req.body as OwnerIdRequestBody;
 
 		if (!ownerId) {
 			const body: LlmProviderResponse = { success: false, error: 'ownerId is required' };
@@ -214,7 +205,7 @@ export function createLlmProvidersRouter(authService: AuthService): Router {
 	 */
 	router.delete('/:id', auth, async (req: Request, res: Response) => {
 		const deleteId = req.params.id as string;
-		const { ownerId } = req.body as { ownerId?: string };
+		const { ownerId } = req.body as OwnerIdRequestBody;
 
 		if (!ownerId) {
 			const body: LlmProviderDeleteResponse = { success: false, error: 'ownerId is required' };

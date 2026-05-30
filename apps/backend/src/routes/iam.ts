@@ -3,7 +3,13 @@ import type { Request, Response } from 'express';
 import { IamService } from '../services/IamService.js';
 import { requireAuth, requirePermission } from '../middleware/auth.js';
 import type { AuthService } from '../services/AuthService.js';
-import type { CaslPolicy, RolesListResponse, RoleResponse, RoleDeleteResponse } from '@repo/types';
+import type {
+	RolesListResponse,
+	RoleResponse,
+	RoleDeleteResponse,
+	CreateRoleRequestBody,
+	UpdateRoleRequestBody,
+} from '@repo/types';
 
 const iamService = new IamService();
 
@@ -56,11 +62,7 @@ export function createIamRouter(authService: AuthService): Router {
 		auth,
 		requirePermission('manage', 'all'),
 		async (req: Request, res: Response) => {
-			const { name, policies, slug } = req.body as {
-				name?: string;
-				policies?: CaslPolicy[];
-				slug?: string;
-			};
+			const { name, policies, slug } = req.body as CreateRoleRequestBody;
 
 			if (!name || !policies) {
 				const body: RoleResponse = {
@@ -83,10 +85,7 @@ export function createIamRouter(authService: AuthService): Router {
 		auth,
 		requirePermission('manage', 'all'),
 		async (req: Request, res: Response) => {
-			const { name, policies } = req.body as {
-				name?: string;
-				policies?: CaslPolicy[];
-			};
+			const { name, policies } = req.body as UpdateRoleRequestBody;
 
 			const updated = await iamService.updateRole(req.params.id as string, { name, policies });
 			if (!updated) {

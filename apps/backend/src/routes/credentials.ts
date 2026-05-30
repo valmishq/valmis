@@ -13,6 +13,9 @@ import type {
 	CredentialResponse,
 	CredentialDeleteResponse,
 	CredentialTestResponse,
+	CreateCredentialRequestBody,
+	UpdateCredentialRequestBody,
+	OwnerIdRequestBody,
 } from '@repo/types';
 
 const encryption = new EncryptionService();
@@ -120,12 +123,7 @@ export function createCredentialsRouter(authService: AuthService): Router {
 	 * Body: { ownerId, name, type, data }
 	 */
 	router.post('/', auth, async (req: Request, res: Response) => {
-		const { ownerId, name, type, data } = req.body as {
-			ownerId?: string;
-			name?: string;
-			type?: string;
-			data?: Record<string, unknown>;
-		};
+		const { ownerId, name, type, data } = req.body as CreateCredentialRequestBody;
 
 		if (!ownerId || !name || !type || !data) {
 			const body: CredentialResponse = {
@@ -173,11 +171,7 @@ export function createCredentialsRouter(authService: AuthService): Router {
 	 * Returns 404 if the record does not exist or does not belong to the given owner.
 	 */
 	router.put('/:id', auth, async (req: Request, res: Response) => {
-		const { ownerId, name, data } = req.body as {
-			ownerId?: string;
-			name?: string;
-			data?: Record<string, unknown>;
-		};
+		const { ownerId, name, data } = req.body as UpdateCredentialRequestBody;
 
 		if (!ownerId) {
 			const body: CredentialResponse = { success: false, error: 'ownerId is required' };
@@ -214,7 +208,7 @@ export function createCredentialsRouter(authService: AuthService): Router {
 	 */
 	router.post('/:id/test', auth, async (req: Request, res: Response) => {
 		const testId = req.params.id as string;
-		const { ownerId } = req.body as { ownerId?: string };
+		const { ownerId } = req.body as OwnerIdRequestBody;
 
 		if (!ownerId) {
 			const body: CredentialTestResponse = { success: false, error: 'ownerId is required' };
@@ -280,7 +274,7 @@ export function createCredentialsRouter(authService: AuthService): Router {
 	 */
 	router.delete('/:id', auth, async (req: Request, res: Response) => {
 		const deleteId = req.params.id as string;
-		const { ownerId } = req.body as { ownerId?: string };
+		const { ownerId } = req.body as OwnerIdRequestBody;
 
 		if (!ownerId) {
 			const body: CredentialDeleteResponse = { success: false, error: 'ownerId is required' };

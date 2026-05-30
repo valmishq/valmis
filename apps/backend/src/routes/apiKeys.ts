@@ -3,7 +3,12 @@ import type { Request, Response } from 'express';
 import { ApiKeyService } from '../services/ApiKeyService.js';
 import { requireAuth } from '../middleware/auth.js';
 import type { AuthService } from '../services/AuthService.js';
-import type { ApiKeyCreateResponse, ApiKeysListResponse, ApiKeyDeleteResponse } from '@repo/types';
+import type {
+	ApiKeyCreateResponse,
+	ApiKeysListResponse,
+	ApiKeyDeleteResponse,
+	CreateApiKeyRequestBody,
+} from '@repo/types';
 
 /**
  * Factory — creates the API keys router with an injected AuthService instance.
@@ -23,7 +28,7 @@ export function createApiKeysRouter(authService: AuthService): Router {
 	 * Returns the raw key once — store it immediately as it is not retrievable later.
 	 */
 	router.post('/', auth, async (req: Request, res: Response) => {
-		const { name, expiresInDays } = req.body as { name?: string; expiresInDays?: number };
+		const { name, expiresInDays } = req.body as CreateApiKeyRequestBody;
 
 		if (!name || !expiresInDays) {
 			const body: ApiKeyCreateResponse = {

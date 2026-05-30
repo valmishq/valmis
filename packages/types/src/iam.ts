@@ -17,3 +17,18 @@ export interface CaslPolicy {
 	inverted?: boolean;
 	reason?: string;
 }
+
+// ─── Request Bodies ───────────────────────────────────────────────────────────
+
+/** POST /v1/iam/roles — create a new role */
+export interface CreateRoleRequestBody {
+	name: string;
+	policies: CaslPolicy[];
+	slug?: string;
+}
+
+/** PUT /v1/iam/roles/:id — update an existing role */
+export interface UpdateRoleRequestBody {
+	name?: string;
+	policies?: CaslPolicy[];
+}

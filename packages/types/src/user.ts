@@ -32,3 +32,41 @@ export interface ApiKey {
 	expiresAt: string;
 	createdAt: string;
 }
+
+// ─── Request Bodies ───────────────────────────────────────────────────────────
+
+/** PATCH /v1/users/profile — update own profile fields */
+export interface UpdateProfileRequestBody {
+	email?: string;
+	first_name?: string;
+	last_name?: string;
+}
+
+/** POST /v1/users/profile/password — change own password */
+export interface ChangePasswordRequestBody {
+	currentPassword: string;
+	newPassword: string;
+}
+
+/** POST /v1/users — create a new user (admin) */
+export interface CreateUserRequestBody {
+	email: string;
+	password: string;
+	roleId: string;
+	first_name?: string;
+	last_name?: string;
+}
+
+/** PUT /v1/users/:id — update a user (admin) */
+export interface UpdateUserRequestBody {
+	email?: string;
+	first_name?: string;
+	last_name?: string;
+	roleId?: string;
+}
+
+/** POST /v1/api-keys — generate a new API key */
+export interface CreateApiKeyRequestBody {
+	name: string;
+	expiresInDays: number;
+}

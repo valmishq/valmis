@@ -39,3 +39,24 @@ export interface UpdateLlmProviderConfigInput {
 	isDefault?: boolean;
 	data?: LlmProviderSecretData;
 }
+
+// ─── Request Bodies ───────────────────────────────────────────────────────────
+
+/** POST /v1/llm-providers — create a new LLM provider config */
+export interface CreateLlmProviderRequestBody {
+	ownerId: string;
+	provider: string;
+	name: string;
+	model: string;
+	isDefault?: boolean;
+	data: { apiKey: string; baseUrl?: string };
+}
+
+/** PUT /v1/llm-providers/:id — update an existing LLM provider config */
+export interface UpdateLlmProviderRequestBody {
+	ownerId: string;
+	name?: string;
+	model?: string;
+	isDefault?: boolean;
+	data?: { apiKey: string; baseUrl?: string };
+}

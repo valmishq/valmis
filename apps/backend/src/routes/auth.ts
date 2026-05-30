@@ -5,7 +5,13 @@ import { db } from '../db/index.js';
 import { users } from '../db/schema/index.js';
 import { UserService } from '../services/UserService.js';
 import type { AuthService } from '../services/AuthService.js';
-import type { AuthStatusResponse, SetupResponse, LoginApiResponse } from '@repo/types';
+import type {
+	AuthStatusResponse,
+	SetupResponse,
+	LoginApiResponse,
+	SetupRequestBody,
+	LoginRequestBody,
+} from '@repo/types';
 
 const userService = new UserService();
 
@@ -44,12 +50,7 @@ export function createAuthRouter(authService: AuthService): Router {
 			return;
 		}
 
-		const { email, password, first_name, last_name } = req.body as {
-			email?: string;
-			password?: string;
-			first_name?: string;
-			last_name?: string;
-		};
+		const { email, password, first_name, last_name } = req.body as SetupRequestBody;
 
 		if (!email || !password) {
 			const body: SetupResponse = { success: false, error: 'email and password are required' };
@@ -74,7 +75,7 @@ export function createAuthRouter(authService: AuthService): Router {
 	 * Returns: { accessToken, user }
 	 */
 	router.post('/login', async (req: Request, res: Response) => {
-		const { email, password } = req.body as { email?: string; password?: string };
+		const { email, password } = req.body as LoginRequestBody;
 
 		if (!email || !password) {
 			const body: LoginApiResponse = {
