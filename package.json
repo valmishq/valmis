@@ -3,12 +3,16 @@
   "private": true,
   "version": "1.0.0",
   "scripts": {
-    "build": "turbo run build",
-    "dev": "turbo run dev",
-    "lint": "turbo run lint",
-    "typecheck": "turbo run typecheck",
+    "build": "dotenv -- turbo run build",
+    "dev": "dotenv -- turbo run dev",
+    "lint": "dotenv -- turbo run lint",
+    "typecheck": "dotenv -- turbo run typecheck",
     "clean": "turbo run clean",
-    "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md,css}\""
+    "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md,css}\"",
+    "db:generate": "dotenv -- pnpm --filter @repo/backend exec drizzle-kit generate",
+    "db:migrate": "dotenv -- pnpm --filter @repo/backend exec drizzle-kit migrate",
+    "db:studio": "dotenv -- pnpm --filter @repo/backend exec drizzle-kit studio",
+    "db:push": "dotenv -- pnpm --filter @repo/backend exec drizzle-kit push"
   },
   "packageManager": "pnpm@10.20.0",
   "engines": {
@@ -19,5 +23,8 @@
     "prettier": "^3.8.3",
     "turbo": "^2.9.16",
     "typescript": "^6.0.3"
+  },
+  "dependencies": {
+    "dotenv-cli": "^11.0.0"
   }
 }
