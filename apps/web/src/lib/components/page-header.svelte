@@ -7,7 +7,7 @@
 		$props();
 </script>
 
-<!-- Unified page header used across all dashboard pages -->
+<!-- Unified page header used across all app pages -->
 <div>
 	<div class="flex items-start justify-between gap-4">
 		<div>

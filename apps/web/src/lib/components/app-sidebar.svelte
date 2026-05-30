@@ -15,10 +15,10 @@
 
 	/** Navigation items for the main menu */
 	const navItems = [
-		{ title: 'Home', url: '/dashboard', icon: HouseIcon },
-		{ title: 'API Keys', url: '/dashboard/api-keys', icon: KeyIcon },
-		{ title: 'Credentials', url: '/dashboard/credentials', icon: ShieldIcon },
-		{ title: 'LLM Providers', url: '/dashboard/llm-providers', icon: CpuIcon }
+		{ title: 'Home', url: '/app', icon: HouseIcon },
+		{ title: 'LLM Providers', url: '/app/llm-providers', icon: CpuIcon },
+		{ title: 'Credentials', url: '/app/credentials', icon: ShieldIcon },
+		{ title: 'API Keys', url: '/app/api-keys', icon: KeyIcon }
 	];
 
 	function isActive(url: string): boolean {

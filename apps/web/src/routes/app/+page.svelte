@@ -11,7 +11,7 @@
 		{
 			title: 'API Keys',
 			description: 'Generate and manage API keys for programmatic access.',
-			href: '/dashboard/api-keys',
+			href: '/app/api-keys',
 			icon: KeyIcon
 		}
 	];

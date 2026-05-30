@@ -3,7 +3,7 @@ import type { LayoutServerLoad } from './$types';
 
 /**
  * Dashboard layout guard.
- * Any page nested under /dashboard requires an authenticated user.
+ * Any page nested under /app requires an authenticated user.
  * Unauthenticated requests are redirected to /signin.
  */
 export const load: LayoutServerLoad = async ({ locals }) => {

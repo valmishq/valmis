@@ -4,6 +4,6 @@
 
 	// Root page — redirect to dashboard; layout will redirect to signin/setup if needed
 	onMount(() => {
-		goto('/dashboard');
+		goto('/app');
 	});
 </script>

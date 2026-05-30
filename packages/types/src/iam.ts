@@ -2,7 +2,7 @@
 export type AppActions = 'manage' | 'create' | 'read' | 'update' | 'delete' | 'search' | 'export';
 
 /** Subjects (resource types) that policies can target */
-export type AppSubjects = 'users' | 'roles' | 'settings' | 'dashboard' | 'all';
+export type AppSubjects = 'users' | 'roles' | 'settings' | 'all';
 
 /**
  * A CASL policy rule stored in the database.

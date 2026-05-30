@@ -33,7 +33,7 @@
 			const body = await res.json();
 			const data = body.data as LoginResponse;
 			authStore.login(data.accessToken, data.user);
-			goto('/dashboard');
+			goto('/app');
 		} catch {
 			error = 'An unexpected error occurred';
 		} finally {
