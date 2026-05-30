@@ -3,16 +3,10 @@ import { v4 as uuidv4 } from 'uuid';
 import { db } from '../db/index.js';
 import { credentials } from '../db/schema/index.js';
 import { EncryptionService } from './encryptionService.js';
+import type { CredentialMetadata } from '@repo/types';
 
-/** Shape of a credential row without the encrypted data payload */
-export interface CredentialMetadata {
-	id: string;
-	ownerId: string;
-	name: string;
-	type: string;
-	createdAt: Date;
-	updatedAt: Date;
-}
+// Re-export so existing imports from this file continue to work
+export type { CredentialMetadata };
 
 /** Input for creating a new credential */
 export interface CreateCredentialInput {

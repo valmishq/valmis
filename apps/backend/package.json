@@ -15,15 +15,20 @@
     "db:push": "drizzle-kit push"
   },
   "dependencies": {
+    "@casl/ability": "^7.0.0",
     "@repo/utils": "workspace:*",
+    "bcrypt": "^6.0.0",
     "drizzle-orm": "^0.45.2",
     "express": "^5.2.1",
+    "express-rate-limit": "^8.5.2",
+    "jose": "^6.2.3",
     "pg": "^8.21.0",
     "uuid": "^14.0.0"
   },
   "devDependencies": {
     "@repo/tsconfig": "workspace:*",
     "@repo/types": "workspace:*",
+    "@types/bcrypt": "^6.0.0",
     "@types/express": "^5.0.6",
     "@types/node": "^25.9.1",
     "@types/pg": "^8.20.0",

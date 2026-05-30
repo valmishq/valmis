@@ -14,6 +14,10 @@
 		"lint": "prettier --check .",
 		"format": "prettier --write ."
 	},
+	"dependencies": {
+		"@repo/types": "workspace:*",
+		"jose": "^6.2.3"
+	},
 	"devDependencies": {
 		"@sveltejs/adapter-auto": "^7.0.1",
 		"@sveltejs/kit": "^2.57.0",
