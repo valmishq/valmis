@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import type { Request, Response } from 'express';
-import { EncryptionService } from '../services/encryptionService.js';
+import { EncryptionService } from '../services/EncryptionService.js';
 import { LlmProviderService } from '../services/llmProviderService.js';
 import { requireAuth } from '../middleware/auth.js';
 import type { AuthService } from '../services/AuthService.js';

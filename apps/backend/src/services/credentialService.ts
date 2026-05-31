@@ -2,7 +2,7 @@ import { eq, and } from 'drizzle-orm';
 import { v4 as uuidv4 } from 'uuid';
 import { db } from '../db/index.js';
 import { credentials } from '../db/schema/index.js';
-import { EncryptionService } from './encryptionService.js';
+import { EncryptionService } from './EncryptionService.js';
 import type { CredentialMetadata, CredentialDefinition } from '@repo/types';
 
 // Re-export so existing imports from this file continue to work

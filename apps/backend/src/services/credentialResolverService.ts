@@ -1,6 +1,6 @@
 import type { CredentialDefinition, ResolvedCredential, ExecuteRequestOptions } from '@repo/types';
 import { getCredentialDefinition } from '@repo/utils';
-import { CredentialService } from './credentialService.js';
+import { CredentialService } from './CredentialService.js';
 
 // Re-export so callers can import these types from this module if needed
 export type { ResolvedCredential, ExecuteRequestOptions };
@@ -67,6 +67,8 @@ export class CredentialResolverService {
 		}
 
 		const resolved = this.applyRequestMapping(currentData, definition);
+		// const resolved = await this.resolve(credentialId, ownerId)
+
 		const url = this.buildUrl(request.url, request.qs, resolved.qs);
 		const mergedHeaders = { ...request.headers, ...resolved.headers };
 

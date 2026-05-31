@@ -1,13 +1,13 @@
 import { Router } from 'express';
 import type { Request, Response } from 'express';
 import { loadCredentialDefinitions, getCredentialDefinition } from '@repo/utils';
-import { EncryptionService } from '../services/encryptionService.js';
+import { EncryptionService } from '../services/EncryptionService.js';
 import {
 	CredentialService,
 	redactCredentialData,
 	unredactCredentialData,
-} from '../services/credentialService.js';
-import { CredentialResolverService } from '../services/credentialResolverService.js';
+} from '../services/CredentialService.js';
+import { CredentialResolverService } from '../services/CredentialResolverService.js';
 import { requireAuth } from '../middleware/auth.js';
 import { logger } from '../config/logger.js';
 import type { AuthService } from '../services/AuthService.js';

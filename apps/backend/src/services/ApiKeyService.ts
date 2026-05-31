@@ -2,7 +2,7 @@ import crypto from 'node:crypto';
 import { eq, and } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import { apiKeys } from '../db/schema/index.js';
-import { EncryptionService } from './encryptionService.js';
+import { EncryptionService } from './EncryptionService.js';
 import type { ApiKey } from '@repo/types';
 
 const encryption = new EncryptionService();
