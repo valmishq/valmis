@@ -2,9 +2,14 @@ import { Router } from 'express';
 import type { Request, Response } from 'express';
 import { loadCredentialDefinitions, getCredentialDefinition } from '@repo/utils';
 import { EncryptionService } from '../services/encryptionService.js';
-import { CredentialService } from '../services/credentialService.js';
+import {
+	CredentialService,
+	redactCredentialData,
+	unredactCredentialData,
+} from '../services/credentialService.js';
 import { CredentialResolverService } from '../services/credentialResolverService.js';
 import { requireAuth } from '../middleware/auth.js';
+import { logger } from '../config/logger.js';
 import type { AuthService } from '../services/AuthService.js';
 import type {
 	CredentialDefinitionsResponse,
@@ -30,9 +35,10 @@ const resolverService = new CredentialResolverService(credentialService);
  *   GET    /v1/credentials/definitions/:id   — get a single credential definition
  *   GET    /v1/credentials                   — list credentials for an owner
  *   GET    /v1/credentials/:id               — get a single credential's metadata
+ *   GET    /v1/credentials/:id/data          — get redacted credential data (for edit form pre-fill)
  *   POST   /v1/credentials                   — create a new credential
- *   PUT    /v1/credentials/:id               — update a credential
- *   POST   /v1/credentials/:id/test          — test a credential
+ *   PUT    /v1/credentials/:id               — update a credential (supports sentinel values)
+ *   POST   /v1/credentials/:id/test          — test a credential (saves connectedAccount on success)
  *   DELETE /v1/credentials/:id               — delete a credential
  */
 export function createCredentialsRouter(authService: AuthService): Router {
@@ -118,6 +124,44 @@ export function createCredentialsRouter(authService: AuthService): Router {
 	});
 
 	/**
+	 * GET /v1/credentials/:id/data
+	 * Returns the credential's data payload with sensitive fields redacted.
+	 * Secret-typed properties and internal OAuth fields (accessToken, refreshToken,
+	 * codeVerifier) are replaced with the sentinel value "__REDACTED__".
+	 * This endpoint is used to pre-fill the edit form in the UI.
+	 * Requires `ownerId` query parameter.
+	 */
+	router.get('/:id/data', auth, async (req: Request, res: Response) => {
+		const id = req.params.id as string;
+		const ownerId = req.query.ownerId as string | undefined;
+		if (!ownerId) {
+			res.status(400).json({ success: false, error: 'ownerId query parameter is required' });
+			return;
+		}
+
+		const metadata = await credentialService.getById(id, ownerId);
+		if (!metadata) {
+			res.status(404).json({ success: false, error: 'Credential not found' });
+			return;
+		}
+
+		const definition = getCredentialDefinition(metadata.type);
+		if (!definition) {
+			res.status(400).json({ success: false, error: `Unknown credential type: ${metadata.type}` });
+			return;
+		}
+
+		const data = await credentialService.getDecryptedData(id, ownerId);
+		if (!data) {
+			res.status(500).json({ success: false, error: 'Failed to decrypt credential data' });
+			return;
+		}
+
+		const redacted = redactCredentialData(data, definition);
+		res.json({ success: true, data: redacted });
+	});
+
+	/**
 	 * POST /v1/credentials
 	 * Create a new credential instance.
 	 * Body: { ownerId, name, type, data }
@@ -168,6 +212,12 @@ export function createCredentialsRouter(authService: AuthService): Router {
 	 * PUT /v1/credentials/:id
 	 * Update an existing credential (name and/or data).
 	 * Body: { ownerId, name?, data? }
+	 *
+	 * When `data` is provided, any field containing the sentinel value "__REDACTED__"
+	 * is treated as "keep the existing stored value" — the real secret is restored
+	 * from the DB before re-encrypting. This allows the edit form to submit without
+	 * sending actual secret values back.
+	 *
 	 * Returns 404 if the record does not exist or does not belong to the given owner.
 	 */
 	router.put('/:id', auth, async (req: Request, res: Response) => {
@@ -189,7 +239,20 @@ export function createCredentialsRouter(authService: AuthService): Router {
 		}
 
 		const updateId = req.params.id as string;
-		const updated = await credentialService.update(updateId, ownerId, { name, data });
+
+		// Unredact incoming data before saving — restore sentinel-masked fields from DB
+		let finalData = data;
+		if (data) {
+			const stored = await credentialService.getDecryptedData(updateId, ownerId);
+			if (!stored) {
+				const body: CredentialResponse = { success: false, error: 'Credential not found' };
+				res.status(404).json(body);
+				return;
+			}
+			finalData = unredactCredentialData(data, stored);
+		}
+
+		const updated = await credentialService.update(updateId, ownerId, { name, data: finalData });
 		if (!updated) {
 			const body: CredentialResponse = { success: false, error: 'Credential not found' };
 			res.status(404).json(body);
@@ -202,7 +265,13 @@ export function createCredentialsRouter(authService: AuthService): Router {
 
 	/**
 	 * POST /v1/credentials/:id/test
-	 * Validates a credential by executing the testRequest defined in the YAML definition.
+	 * Validates a credential by executing the testRequest defined in the YAML definition
+	 * via executeWithCredential() (which handles reactive 401 token refresh for OAuth2).
+	 *
+	 * On success, if testRequest.accountIdentifierKey is defined, the identity value
+	 * is extracted from the response and saved as `connectedAccount` in the credential data.
+	 * This makes connectedAccount work for API key types, not just OAuth2.
+	 *
 	 * Requires `ownerId` in the request body.
 	 * Returns 404 if the record does not exist or does not belong to the given owner.
 	 */
@@ -242,28 +311,60 @@ export function createCredentialsRouter(authService: AuthService): Router {
 			return;
 		}
 
-		// Resolve headers via the execution engine (handles OAuth refresh too)
-		const resolved = await resolverService.resolve(testId, ownerId);
-
-		const testResponse = await fetch(definition.testRequest.url, {
+		// Execute via resolver — handles proactive/reactive OAuth2 token refresh
+		const testResponse = await resolverService.executeWithCredential(testId, ownerId, {
+			url: definition.testRequest.url,
 			method: definition.testRequest.method,
-			headers: resolved.headers,
 		});
 
-		if (testResponse.ok) {
-			const body: CredentialTestResponse = {
-				success: true,
-				data: { valid: true, status: testResponse.status },
-			};
-			res.json(body);
-		} else {
+		if (!testResponse.ok) {
 			const body: CredentialTestResponse = {
 				success: false,
 				error: `Test request failed with status ${testResponse.status}`,
 				data: { valid: false, status: testResponse.status },
 			};
 			res.json(body);
+			return;
 		}
+
+		// On success, attempt to extract and persist the account identifier
+		if (definition.testRequest.accountIdentifierKey) {
+			try {
+				const responseBody = (await testResponse.json()) as Record<string, unknown>;
+				// Traverse dot-notation path (e.g. "data.user.login")
+				const value = definition.testRequest.accountIdentifierKey
+					.split('.')
+					.reduce<unknown>((obj, key) => {
+						if (obj !== null && typeof obj === 'object') {
+							return (obj as Record<string, unknown>)[key];
+						}
+						return undefined;
+					}, responseBody);
+
+				if (typeof value === 'string' || typeof value === 'number') {
+					// Merge connectedAccount into the stored data without touching other fields
+					const currentData = await credentialService.getDecryptedData(testId, ownerId);
+					if (currentData) {
+						await credentialService.updateData(testId, ownerId, {
+							...currentData,
+							connectedAccount: String(value),
+						});
+					}
+				}
+			} catch (err) {
+				// Non-fatal — test still passes even if identity extraction fails
+				logger.warn(
+					{ credentialId: testId, err },
+					'Failed to extract account identifier from test response',
+				);
+			}
+		}
+
+		const body: CredentialTestResponse = {
+			success: true,
+			data: { valid: true, status: testResponse.status },
+		};
+		res.json(body);
 	});
 
 	/**

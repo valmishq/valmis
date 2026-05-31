@@ -1,0 +1,24 @@
+id: pineconeApi
+name: Pinecone
+type: apiKey
+description: >
+  Connect to the Pinecone vector database API using an API key sent as a custom header.
+  Use this for semantic search and AI embedding storage.
+documentationUrl: https://docs.pinecone.io/reference/api/introduction
+icon: /logos/pinecone.png
+properties:
+  - name: apiKey
+    displayName: API Key
+    type: secret
+    required: true
+    description: >
+      Create an API key at https://app.pinecone.io.
+      Keys are project-scoped.
+
+requestMapping:
+  headers:
+    Api-Key: '{{properties.apiKey}}'
+
+testRequest:
+  method: GET
+  url: https://api.pinecone.io/indexes

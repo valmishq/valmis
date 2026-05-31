@@ -1,0 +1,18 @@
+id: httpBearerToken
+name: Bearer Token
+type: bearerToken
+description: >
+  Generic Bearer token authentication. The token is sent as
+  "Authorization: Bearer <token>" on every request.
+  Use this for any API that accepts a Bearer token.
+
+properties:
+  - name: token
+    displayName: Token
+    type: secret
+    required: true
+    description: The Bearer token value (without the "Bearer" prefix)
+
+requestMapping:
+  headers:
+    Authorization: 'Bearer {{properties.token}}'

@@ -1,0 +1,24 @@
+id: httpQueryAuth
+name: API Key (Query Parameter)
+type: apiKey
+description: >
+  Generic API key authentication via a URL query parameter.
+  The key is appended to every request URL as ?paramName=value.
+  Common examples: "api_key", "access_token", "token".
+
+properties:
+  - name: paramName
+    displayName: Parameter Name
+    type: string
+    required: true
+    default: 'api_key'
+    description: The query parameter name to send the API key as (e.g. api_key, access_token)
+  - name: paramValue
+    displayName: API Key
+    type: secret
+    required: true
+    description: The API key or token value to send as a query parameter
+
+requestMapping:
+  qs:
+    '{{properties.paramName}}': '{{properties.paramValue}}'

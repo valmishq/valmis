@@ -1,0 +1,26 @@
+id: githubApi
+name: GitHub
+type: bearerToken
+description: >
+  Connect to the GitHub REST API using a Personal Access Token (classic or fine-grained).
+  Required scopes depend on the operations you perform.
+documentationUrl: https://docs.github.com/en/rest/authentication/authenticating-to-the-rest-api
+icon: /logos/github.svg
+properties:
+  - name: token
+    displayName: Personal Access Token
+    type: secret
+    required: true
+    description: >
+      Create one at https://github.com/settings/tokens.
+      Fine-grained tokens are recommended over classic tokens.
+
+requestMapping:
+  headers:
+    Authorization: 'Bearer {{properties.token}}'
+    X-GitHub-Api-Version: '2026-03-10'
+
+testRequest:
+  method: GET
+  url: https://api.github.com/user
+  accountIdentifierKey: login

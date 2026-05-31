@@ -1,0 +1,24 @@
+id: openWeatherMapApi
+name: OpenWeatherMap
+type: apiKey
+description: >
+  Connect to the OpenWeatherMap API using an API key passed as a query parameter.
+  Free tier includes current weather, forecasts, and air quality.
+documentationUrl: https://openweathermap.org/api
+icon: /logos/openweathermap.svg
+properties:
+  - name: apiKey
+    displayName: API Key
+    type: secret
+    required: true
+    description: >
+      Get your API key at https://home.openweathermap.org/api_keys.
+      New keys may take up to 2 hours to activate.
+
+requestMapping:
+  qs:
+    appid: '{{properties.apiKey}}'
+
+testRequest:
+  method: GET
+  url: https://api.openweathermap.org/data/2.5/weather?q=London

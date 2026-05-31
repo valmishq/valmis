@@ -1,14 +1,19 @@
+import crypto from 'node:crypto';
 import { Router } from 'express';
 import type { Request, Response } from 'express';
 import { getCredentialDefinition } from '@repo/utils';
 import { EncryptionService } from '../services/encryptionService.js';
 import { CredentialService } from '../services/credentialService.js';
 import { requireAuth } from '../middleware/auth.js';
+import { logger } from '../config/logger.js';
 import type { AuthService } from '../services/AuthService.js';
 import type { OAuth2AuthorizeResponse, OAuth2CallbackResponse } from '@repo/types';
 
 const encryption = new EncryptionService();
 const credentialService = new CredentialService(encryption);
+
+/** Maximum age for an OAuth2 CSRF state token (5 minutes) */
+const STATE_MAX_AGE_MS = 5 * 60 * 1000;
 
 /**
  * Returns the APP_URL env var (the public-facing frontend URL).
@@ -20,8 +25,83 @@ function getAppUrl(): string {
 	if (!url) {
 		throw new Error('APP_URL environment variable is not set');
 	}
-	// Strip trailing slash
 	return url.replace(/\/+$/, '');
+}
+
+/**
+ * Returns the CREDENTIAL_ENCRYPTION_KEY as a Buffer for HMAC operations.
+ * Reuses the same key already used for AES-256-GCM encryption.
+ */
+function getHmacKey(): Buffer {
+	const hex = process.env.CREDENTIAL_ENCRYPTION_KEY;
+	if (!hex) {
+		throw new Error('CREDENTIAL_ENCRYPTION_KEY environment variable is not set');
+	}
+	return Buffer.from(hex, 'hex');
+}
+
+/**
+ * Creates a HMAC-signed, time-limited OAuth2 CSRF state token.
+ *
+ * Structure: base64url( JSON({ credentialId, ownerId, exp, sig }) )
+ *   - exp: Unix timestamp (ms) after which the token is invalid
+ *   - sig: HMAC-SHA256 of "credentialId:ownerId:exp" using CREDENTIAL_ENCRYPTION_KEY
+ */
+function createOAuthState(credentialId: string, ownerId: string): string {
+	const exp = Date.now() + STATE_MAX_AGE_MS;
+	const payload = `${credentialId}:${ownerId}:${exp}`;
+	const sig = crypto.createHmac('sha256', getHmacKey()).update(payload).digest('hex');
+	const state = JSON.stringify({ credentialId, ownerId, exp, sig });
+	return Buffer.from(state).toString('base64url');
+}
+
+/**
+ * Verifies a CSRF state token and returns its payload.
+ * Throws if the token is tampered with or expired.
+ */
+function verifyOAuthState(stateToken: string): { credentialId: string; ownerId: string } {
+	let parsed: { credentialId?: string; ownerId?: string; exp?: number; sig?: string };
+	try {
+		parsed = JSON.parse(Buffer.from(stateToken, 'base64url').toString('utf8')) as {
+			credentialId?: string;
+			ownerId?: string;
+			exp?: number;
+			sig?: string;
+		};
+	} catch {
+		throw new Error('Invalid state token format');
+	}
+
+	const { credentialId, ownerId, exp, sig } = parsed;
+	if (!credentialId || !ownerId || !exp || !sig) {
+		throw new Error('State token is missing required fields');
+	}
+
+	// Verify HMAC signature
+	const payload = `${credentialId}:${ownerId}:${exp}`;
+	const expectedSig = crypto.createHmac('sha256', getHmacKey()).update(payload).digest('hex');
+	if (!crypto.timingSafeEqual(Buffer.from(sig, 'hex'), Buffer.from(expectedSig, 'hex'))) {
+		throw new Error('State token signature is invalid');
+	}
+
+	// Check expiry
+	if (Date.now() > exp) {
+		throw new Error('State token has expired');
+	}
+
+	return { credentialId, ownerId };
+}
+
+/**
+ * Generates a PKCE code_verifier and its S256 code_challenge.
+ * The verifier must be stored temporarily in the credential data and sent
+ * in the token exchange request.
+ */
+function generatePkce(): { codeVerifier: string; codeChallenge: string } {
+	// RFC 7636: verifier must be 43–128 chars of unreserved characters
+	const codeVerifier = crypto.randomBytes(48).toString('base64url');
+	const codeChallenge = crypto.createHash('sha256').update(codeVerifier).digest('base64url');
+	return { codeVerifier, codeChallenge };
 }
 
 /**
@@ -29,6 +109,7 @@ function getAppUrl(): string {
  *
  * Routes:
  *   GET /v1/oauth2/authorize/:credentialId — protected: build authorization URL
+ *                                            or perform client_credentials exchange
  *   GET /v1/oauth2/callback               — public: OAuth provider redirect target
  */
 export function createOAuth2Router(authService: AuthService): Router {
@@ -37,10 +118,10 @@ export function createOAuth2Router(authService: AuthService): Router {
 
 	/**
 	 * GET /v1/oauth2/authorize/:credentialId
-	 * Protected. Builds and returns the OAuth2 authorization URL for the given credential.
+	 * Protected. For authorization_code flow: builds and returns the OAuth2
+	 * authorization URL. For client_credentials flow: performs the token exchange
+	 * server-side (no browser redirect needed) and returns success immediately.
 	 * Requires `ownerId` query parameter.
-	 * Both credentialId and ownerId are encoded in the state parameter so the
-	 * callback can verify ownership without a separate lookup.
 	 */
 	router.get('/authorize/:credentialId', auth, async (req: Request, res: Response) => {
 		const credentialId = req.params.credentialId as string;
@@ -82,17 +163,82 @@ export function createOAuth2Router(authService: AuthService): Router {
 			return;
 		}
 
-		const clientIdKey = definition.oauth2.clientIdProperty ?? 'clientId';
-		const clientId = data[clientIdKey] as string;
-		const scope = (data.scope as string) ?? definition.oauth2.scope ?? '';
+		const oauth2Config = definition.oauth2;
+		const grantType = oauth2Config.grantType ?? 'authorizationCode';
 
-		// Redirect URI points to the frontend /oauth2/callback route (outside /app/,
-		// no auth guard). The SvelteKit page then proxies to the backend API.
+		// ── Client Credentials grant — no browser redirect ────────────────────
+		if (grantType === 'clientCredentials') {
+			const clientIdKey = oauth2Config.clientIdProperty ?? 'clientId';
+			const clientSecretKey = oauth2Config.clientSecretProperty ?? 'clientSecret';
+			const clientId = data[clientIdKey] as string;
+			const clientSecret = data[clientSecretKey] as string;
+
+			const tokenBody = new URLSearchParams({
+				grant_type: 'client_credentials',
+				client_id: clientId,
+				client_secret: clientSecret,
+			});
+			if (oauth2Config.scope) {
+				tokenBody.set('scope', oauth2Config.scope);
+			}
+
+			const headers: Record<string, string> = {
+				'Content-Type': 'application/x-www-form-urlencoded',
+			};
+			if (oauth2Config.authStyle === 'inHeader') {
+				const encoded = Buffer.from(`${clientId}:${clientSecret}`).toString('base64');
+				headers['Authorization'] = `Basic ${encoded}`;
+			}
+
+			const tokenResponse = await fetch(oauth2Config.accessTokenUrl, {
+				method: 'POST',
+				headers,
+				body: tokenBody.toString(),
+			});
+
+			if (!tokenResponse.ok) {
+				const errorBody = await tokenResponse.text();
+				logger.warn(
+					{ credentialId, status: tokenResponse.status },
+					'Client credentials token exchange failed',
+				);
+				const body: OAuth2AuthorizeResponse = {
+					success: false,
+					error: `Token exchange failed (${tokenResponse.status}): ${errorBody}`,
+				};
+				res.status(502).json(body);
+				return;
+			}
+
+			const tokens = (await tokenResponse.json()) as {
+				access_token: string;
+				expires_in?: number;
+			};
+
+			await credentialService.updateData(credentialId, ownerId, {
+				...data,
+				accessToken: tokens.access_token,
+				expiresAt: tokens.expires_in ? Date.now() + tokens.expires_in * 1000 : undefined,
+			});
+
+			const body: OAuth2AuthorizeResponse = {
+				success: true,
+				data: { authorizationUrl: '' }, // no URL for client_credentials
+			};
+			res.json(body);
+			return;
+		}
+
+		// ── Authorization Code / PKCE flow ────────────────────────────────────
+		const clientIdKey = oauth2Config.clientIdProperty ?? 'clientId';
+		const clientId = data[clientIdKey] as string;
+		const scope = (data.scope as string) ?? oauth2Config.scope ?? '';
+
 		const appUrl = getAppUrl();
 		const redirectUri = `${appUrl}/oauth2/callback`;
 
-		// Encode both credentialId and ownerId in state so the callback can resolve ownership
-		const state = Buffer.from(JSON.stringify({ credentialId, ownerId })).toString('base64');
+		// HMAC-signed state — carries credentialId + ownerId with expiry and signature
+		const state = createOAuthState(credentialId, ownerId);
 
 		const params = new URLSearchParams({
 			client_id: clientId,
@@ -104,7 +250,21 @@ export function createOAuth2Router(authService: AuthService): Router {
 			prompt: 'consent',
 		});
 
-		const authorizationUrl = `${definition.oauth2.authorizationUrl}?${params.toString()}`;
+		// PKCE: generate verifier + challenge, store verifier in credential for callback
+		if (oauth2Config.usePkce) {
+			const { codeVerifier, codeChallenge } = generatePkce();
+
+			// Store the verifier temporarily — it is cleared after the token exchange
+			await credentialService.updateData(credentialId, ownerId, {
+				...data,
+				codeVerifier,
+			});
+
+			params.set('code_challenge', codeChallenge);
+			params.set('code_challenge_method', 'S256');
+		}
+
+		const authorizationUrl = `${oauth2Config.authorizationUrl}?${params.toString()}`;
 
 		const body: OAuth2AuthorizeResponse = { success: true, data: { authorizationUrl } };
 		res.json(body);
@@ -114,7 +274,7 @@ export function createOAuth2Router(authService: AuthService): Router {
 	 * GET /v1/oauth2/callback
 	 * Public — this is the redirect target registered with the OAuth provider.
 	 * Cannot carry a Bearer token since the provider controls the redirect.
-	 * Ownership is verified via the state parameter (credentialId + ownerId encoded at authorize time).
+	 * Ownership and integrity are verified via the HMAC-signed state parameter.
 	 */
 	router.get('/callback', async (req: Request, res: Response) => {
 		const code = req.query.code as string | undefined;
@@ -136,21 +296,17 @@ export function createOAuth2Router(authService: AuthService): Router {
 			return;
 		}
 
-		// Decode credentialId and ownerId from state
+		// Verify HMAC-signed state — rejects tampered or expired tokens
 		let credentialId: string;
 		let ownerId: string;
 		try {
-			const decoded = JSON.parse(Buffer.from(state, 'base64').toString('utf8')) as {
-				credentialId?: string;
-				ownerId?: string;
+			({ credentialId, ownerId } = verifyOAuthState(state));
+		} catch (err) {
+			logger.warn({ err }, 'OAuth2 callback: state verification failed');
+			const body: OAuth2CallbackResponse = {
+				success: false,
+				error: 'Invalid or expired state parameter',
 			};
-			if (!decoded.credentialId || !decoded.ownerId) {
-				throw new Error('Missing fields in state');
-			}
-			credentialId = decoded.credentialId;
-			ownerId = decoded.ownerId;
-		} catch {
-			const body: OAuth2CallbackResponse = { success: false, error: 'Invalid state parameter' };
 			res.status(400).json(body);
 			return;
 		}
@@ -185,35 +341,49 @@ export function createOAuth2Router(authService: AuthService): Router {
 			return;
 		}
 
-		const clientIdKey = definition.oauth2.clientIdProperty ?? 'clientId';
-		const clientSecretKey = definition.oauth2.clientSecretProperty ?? 'clientSecret';
+		const oauth2Config = definition.oauth2;
+		const clientIdKey = oauth2Config.clientIdProperty ?? 'clientId';
+		const clientSecretKey = oauth2Config.clientSecretProperty ?? 'clientSecret';
 		const clientId = data[clientIdKey] as string;
 		const clientSecret = data[clientSecretKey] as string;
 
-		// Must match the redirectUri used in the authorize step
 		const appUrl = getAppUrl();
 		const redirectUri = `${appUrl}/oauth2/callback`;
 
-		// Exchange code for tokens
 		const tokenBody = new URLSearchParams({
 			grant_type: 'authorization_code',
 			code,
 			redirect_uri: redirectUri,
 			client_id: clientId,
-			client_secret: clientSecret,
 		});
+
+		// PKCE: use code_verifier instead of client_secret
+		if (oauth2Config.usePkce) {
+			const codeVerifier = data.codeVerifier as string | undefined;
+			if (!codeVerifier) {
+				const body: OAuth2CallbackResponse = {
+					success: false,
+					error: 'PKCE code verifier missing from credential data',
+				};
+				res.status(400).json(body);
+				return;
+			}
+			tokenBody.set('code_verifier', codeVerifier);
+		} else {
+			tokenBody.set('client_secret', clientSecret);
+		}
 
 		const headers: Record<string, string> = {
 			'Content-Type': 'application/x-www-form-urlencoded',
 		};
 
-		// If authStyle is inHeader, use Basic auth
-		if (definition.oauth2.authStyle === 'inHeader') {
+		// If authStyle is inHeader, use Basic auth (only for non-PKCE flows)
+		if (oauth2Config.authStyle === 'inHeader' && !oauth2Config.usePkce) {
 			const encoded = Buffer.from(`${clientId}:${clientSecret}`).toString('base64');
 			headers['Authorization'] = `Basic ${encoded}`;
 		}
 
-		const tokenResponse = await fetch(definition.oauth2.accessTokenUrl, {
+		const tokenResponse = await fetch(oauth2Config.accessTokenUrl, {
 			method: 'POST',
 			headers,
 			body: tokenBody.toString(),
@@ -221,6 +391,7 @@ export function createOAuth2Router(authService: AuthService): Router {
 
 		if (!tokenResponse.ok) {
 			const errorBody = await tokenResponse.text();
+			logger.warn({ credentialId, status: tokenResponse.status }, 'OAuth2 token exchange failed');
 			const body: OAuth2CallbackResponse = {
 				success: false,
 				error: `Token exchange failed (${tokenResponse.status}): ${errorBody}`,
@@ -235,8 +406,7 @@ export function createOAuth2Router(authService: AuthService): Router {
 			expires_in?: number;
 		};
 
-		// If the definition has a testRequest with an accountIdentifierKey, call that
-		// endpoint immediately to obtain the connected account label (e.g. email).
+		// Attempt to fetch the connected account identifier using the test request endpoint
 		let connectedAccount: string | undefined;
 		if (definition.testRequest?.accountIdentifierKey) {
 			try {
@@ -246,7 +416,6 @@ export function createOAuth2Router(authService: AuthService): Router {
 				});
 				if (identityRes.ok) {
 					const identity = (await identityRes.json()) as Record<string, unknown>;
-					// Traverse dot-notation path (e.g. "data.user.login")
 					const value = definition.testRequest.accountIdentifierKey
 						.split('.')
 						.reduce<unknown>((obj, key) => {
@@ -259,14 +428,21 @@ export function createOAuth2Router(authService: AuthService): Router {
 						connectedAccount = String(value);
 					}
 				}
-			} catch {
-				// Non-fatal — token is still saved even if identity fetch fails
+			} catch (err) {
+				// Non-fatal — tokens are still saved even if identity fetch fails
+				logger.warn(
+					{ credentialId, err },
+					'Failed to fetch account identifier after OAuth2 callback',
+				);
 			}
 		}
 
-		// Merge tokens (and optional account identifier) into existing credential data
+		// Merge tokens into credential data, clearing the temporary codeVerifier
+		const { codeVerifier: _removed, ...dataWithoutVerifier } = data as Record<string, unknown> & {
+			codeVerifier?: string;
+		};
 		const updatedData: Record<string, unknown> = {
-			...data,
+			...dataWithoutVerifier,
 			accessToken: tokens.access_token,
 			refreshToken: tokens.refresh_token ?? data.refreshToken,
 			expiresAt: tokens.expires_in ? Date.now() + tokens.expires_in * 1000 : undefined,

@@ -42,6 +42,10 @@ const oauth2ConfigSchema = z.object({
 	clientSecretProperty: z.string().optional(),
 	scope: z.string().optional(),
 	authStyle: z.enum(['inHeader', 'inBody']).optional(),
+	/** Defaults to authorizationCode when omitted */
+	grantType: z.enum(['authorizationCode', 'clientCredentials']).optional(),
+	/** When true, PKCE S256 challenge is used instead of client_secret */
+	usePkce: z.boolean().optional(),
 });
 
 const testRequestSchema = z.object({

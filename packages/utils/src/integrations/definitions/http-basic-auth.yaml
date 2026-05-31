@@ -1,0 +1,19 @@
+id: httpBasicAuth
+name: Basic Auth
+type: basicAuth
+description: >
+  HTTP Basic Authentication. The username and password are encoded as
+  Base64 and sent as "Authorization: Basic <credentials>" on every request.
+  Supported by many APIs and HTTP servers.
+
+properties:
+  - name: username
+    displayName: Username
+    type: string
+    required: true
+    description: The username or client ID for Basic authentication
+  - name: password
+    displayName: Password
+    type: secret
+    required: true
+    description: The password or client secret for Basic authentication

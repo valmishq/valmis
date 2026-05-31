@@ -3,10 +3,17 @@ import { v4 as uuidv4 } from 'uuid';
 import { db } from '../db/index.js';
 import { credentials } from '../db/schema/index.js';
 import { EncryptionService } from './encryptionService.js';
-import type { CredentialMetadata } from '@repo/types';
+import type { CredentialMetadata, CredentialDefinition } from '@repo/types';
 
 // Re-export so existing imports from this file continue to work
 export type { CredentialMetadata };
+
+/**
+ * Sentinel value placed in credential data when returning redacted fields to
+ * the frontend. If the frontend sends this value back, it means "keep the
+ * existing stored value" — unredact() merges the real value back before saving.
+ */
+export const CREDENTIAL_SENTINEL = '__REDACTED__';
 
 /** Input for creating a new credential */
 export interface CreateCredentialInput {
@@ -20,6 +27,66 @@ export interface CreateCredentialInput {
 export interface UpdateCredentialInput {
 	name?: string;
 	data?: Record<string, unknown>;
+}
+
+/**
+ * Replaces sensitive fields in decrypted credential data before sending to the frontend.
+ *
+ * Redacted fields:
+ *   - Any property where definition.properties[n].type === 'secret'
+ *   - Internal OAuth fields: accessToken, refreshToken, codeVerifier
+ *
+ * These fields are replaced with CREDENTIAL_SENTINEL so the UI can pre-fill the
+ * form (showing that a value exists) without receiving the actual secret.
+ */
+export function redactCredentialData(
+	data: Record<string, unknown>,
+	definition: CredentialDefinition,
+): Record<string, unknown> {
+	const result = { ...data };
+
+	// Redact user-defined secret properties
+	for (const prop of definition.properties) {
+		if (prop.type === 'secret' && prop.name in result) {
+			result[prop.name] = CREDENTIAL_SENTINEL;
+		}
+	}
+
+	// Always redact internal OAuth fields — these are never typed by the user
+	const internalSecrets = ['accessToken', 'refreshToken', 'codeVerifier'];
+	for (const field of internalSecrets) {
+		if (field in result) {
+			result[field] = CREDENTIAL_SENTINEL;
+		}
+	}
+
+	return result;
+}
+
+/**
+ * Merges sentinel values back with real stored values before re-encrypting.
+ * Any key in `incoming` whose value is CREDENTIAL_SENTINEL is replaced with
+ * the corresponding value from `stored`. This ensures that editing a credential's
+ * name or a non-secret field does not wipe the stored secrets.
+ */
+export function unredactCredentialData(
+	incoming: Record<string, unknown>,
+	stored: Record<string, unknown>,
+): Record<string, unknown> {
+	const result = { ...incoming };
+
+	for (const [key, value] of Object.entries(result)) {
+		if (value === CREDENTIAL_SENTINEL) {
+			// Replace sentinel with the real stored value (or delete the key if not stored)
+			if (key in stored) {
+				result[key] = stored[key];
+			} else {
+				delete result[key];
+			}
+		}
+	}
+
+	return result;
 }
 
 /**
@@ -138,6 +205,8 @@ export class CredentialService {
 
 	/**
 	 * Update an existing credential (name and/or re-encrypted data).
+	 * When `input.data` is provided, it must have already been through unredact()
+	 * so sentinels have been replaced with real stored values.
 	 * Ownership is enforced at the DB level — returns null if the record does not
 	 * exist or ownerId does not match.
 	 */
@@ -170,10 +239,9 @@ export class CredentialService {
 	}
 
 	/**
-	 * Update only the encrypted data payload (used by OAuth token refresh).
-	 * This is an internal operation called after a successful OAuth callback —
-	 * ownership was already verified when the credential was fetched during the flow.
-	 * The ownerId is included in the WHERE clause as a defence-in-depth measure.
+	 * Update only the encrypted data payload (used by OAuth token refresh and test endpoint).
+	 * This is an internal operation — ownership was already verified when the credential
+	 * was fetched. The ownerId is included in the WHERE clause as a defence-in-depth measure.
 	 */
 	async updateData(id: string, ownerId: string, data: Record<string, unknown>): Promise<void> {
 		const encryptedData = this.encryption.encrypt(JSON.stringify(data));

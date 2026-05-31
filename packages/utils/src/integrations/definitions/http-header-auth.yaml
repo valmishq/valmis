@@ -1,0 +1,24 @@
+id: httpHeaderAuth
+name: API Key (Header)
+type: apiKey
+description: >
+  Generic API key authentication via a custom HTTP header.
+  The user configures both the header name and value.
+  Common examples: "X-API-Key", "X-Auth-Token", "Api-Key".
+
+properties:
+  - name: headerName
+    displayName: Header Name
+    type: string
+    required: true
+    default: 'X-API-Key'
+    description: The name of the HTTP header to send the API key in (e.g. X-API-Key)
+  - name: headerValue
+    displayName: API Key
+    type: secret
+    required: true
+    description: The API key or token value to send in the header
+
+requestMapping:
+  headers:
+    '{{properties.headerName}}': '{{properties.headerValue}}'

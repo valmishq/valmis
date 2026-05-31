@@ -1,21 +1,20 @@
-import type { CredentialDefinition } from '@repo/types';
+import type { CredentialDefinition, ResolvedCredential, ExecuteRequestOptions } from '@repo/types';
 import { getCredentialDefinition } from '@repo/utils';
 import { CredentialService } from './credentialService.js';
 
-/** The resolved authentication context ready to inject into an HTTP request */
-export interface ResolvedCredential {
-	headers: Record<string, string>;
-	qs: Record<string, string>;
-	body: Record<string, string>;
-}
+// Re-export so callers can import these types from this module if needed
+export type { ResolvedCredential, ExecuteRequestOptions };
 
-/** Token refresh threshold — refresh if token expires within this many ms */
+/** Token refresh threshold — refresh proactively if token expires within this many ms */
 const REFRESH_THRESHOLD_MS = 2 * 60 * 1000; // 2 minutes
 
 /**
  * Service responsible for resolving credential data into HTTP request
  * components (headers, query params, body) based on the YAML definitions.
- * Handles OAuth2 token refresh logic transparently.
+ *
+ * Two public methods:
+ *   - resolve()                 — returns resolved headers/qs/body (declarative use)
+ *   - executeWithCredential()   — owns the full HTTP request + reactive 401 refresh
  */
 export class CredentialResolverService {
 	private credentialService: CredentialService;
@@ -26,10 +25,112 @@ export class CredentialResolverService {
 
 	/**
 	 * Resolves a credential into ready-to-use HTTP request components.
-	 * For OAuth2 credentials, triggers token refresh if the token is expired.
-	 * ownerId is required and is passed through to all DB queries for ownership enforcement.
+	 * For OAuth2 credentials, triggers proactive token refresh only when
+	 * expiresAt is known and the token is approaching expiry.
 	 */
 	async resolve(credentialId: string, ownerId: string): Promise<ResolvedCredential> {
+		const { data, definition } = await this.loadCredentialContext(credentialId, ownerId);
+
+		let currentData = data;
+
+		// Proactive refresh — only when we know the token's expiry time
+		if (definition.type === 'oauth2' && this.isTokenExpiringSoon(currentData)) {
+			currentData = await this.refreshAndSave(credentialId, ownerId, currentData, definition);
+		}
+
+		return this.applyRequestMapping(currentData, definition);
+	}
+
+	/**
+	 * Executes an HTTP request using the resolved credential, with reactive
+	 * 401-triggered token refresh for OAuth2 credentials.
+	 *
+	 * Flow:
+	 *   1. Proactively refresh if expiresAt is known and approaching
+	 *   2. Merge caller-provided qs + credential-resolved qs into the URL
+	 *   3. Make the first request
+	 *   4. On 401 (for oauth2): refresh token once, then retry
+	 *   5. Return the final response regardless of status
+	 */
+	async executeWithCredential(
+		credentialId: string,
+		ownerId: string,
+		request: ExecuteRequestOptions,
+	): Promise<Response> {
+		const { data, definition } = await this.loadCredentialContext(credentialId, ownerId);
+
+		let currentData = data;
+
+		// Proactive refresh only when we have expiry info
+		if (definition.type === 'oauth2' && this.isTokenExpiringSoon(currentData)) {
+			currentData = await this.refreshAndSave(credentialId, ownerId, currentData, definition);
+		}
+
+		const resolved = this.applyRequestMapping(currentData, definition);
+		const url = this.buildUrl(request.url, request.qs, resolved.qs);
+		const mergedHeaders = { ...request.headers, ...resolved.headers };
+
+		const firstResponse = await fetch(url, {
+			method: request.method,
+			headers: mergedHeaders,
+			body: request.body,
+		});
+
+		// Reactive refresh — retry once on 401 for OAuth2 credentials
+		if (firstResponse.status === 401 && definition.type === 'oauth2') {
+			const refreshed = await this.refreshAndSave(credentialId, ownerId, currentData, definition);
+			const retriedResolved = this.applyRequestMapping(refreshed, definition);
+			const retriedUrl = this.buildUrl(request.url, request.qs, retriedResolved.qs);
+			const retriedHeaders = { ...request.headers, ...retriedResolved.headers };
+			return fetch(retriedUrl, {
+				method: request.method,
+				headers: retriedHeaders,
+				body: request.body,
+			});
+		}
+
+		return firstResponse;
+	}
+
+	/**
+	 * Builds the final URL by appending caller-provided qs and credential-resolved qs.
+	 * Credential-resolved params take precedence over caller-provided params for
+	 * any overlapping keys (e.g. an API token param in the YAML wins over an
+	 * accidental duplicate from the caller).
+	 */
+	private buildUrl(
+		baseUrl: string,
+		callerQs: Record<string, string> | undefined,
+		credentialQs: Record<string, string>,
+	): string {
+		const merged = { ...(callerQs ?? {}), ...credentialQs };
+		if (Object.keys(merged).length === 0) return baseUrl;
+
+		const url = new URL(baseUrl);
+		for (const [key, value] of Object.entries(merged)) {
+			url.searchParams.set(key, value);
+		}
+		return url.toString();
+	}
+
+	/**
+	 * Returns true only when we have an expiresAt value and the token is within
+	 * the refresh threshold window. Avoids unnecessary refreshes when the provider
+	 * does not return expires_in.
+	 */
+	private isTokenExpiringSoon(data: Record<string, unknown>): boolean {
+		const expiresAt = data.expiresAt as number | undefined;
+		return expiresAt !== undefined && Date.now() >= expiresAt - REFRESH_THRESHOLD_MS;
+	}
+
+	/**
+	 * Loads credential metadata + definition + decrypted data in one shot.
+	 * Throws descriptive errors if anything is missing.
+	 */
+	private async loadCredentialContext(
+		credentialId: string,
+		ownerId: string,
+	): Promise<{ data: Record<string, unknown>; definition: CredentialDefinition }> {
 		const metadata = await this.credentialService.getById(credentialId, ownerId);
 		if (!metadata) {
 			throw new Error(`Credential not found: ${credentialId}`);
@@ -40,43 +141,33 @@ export class CredentialResolverService {
 			throw new Error(`No credential definition found for type: ${metadata.type}`);
 		}
 
-		let data = await this.credentialService.getDecryptedData(credentialId, ownerId);
+		const data = await this.credentialService.getDecryptedData(credentialId, ownerId);
 		if (!data) {
 			throw new Error(`Failed to decrypt credential data for: ${credentialId}`);
 		}
 
-		// Handle OAuth2 token refresh if needed
-		if (definition.type === 'oauth2') {
-			data = await this.ensureValidToken(credentialId, ownerId, data, definition);
-		}
-
-		return this.applyRequestMapping(data, definition);
+		return { data, definition };
 	}
 
 	/**
-	 * Checks if the OAuth2 access token is expired or about to expire.
-	 * If so, refreshes it and updates the stored credential data.
+	 * Refreshes the OAuth2 access token and persists the new tokens.
+	 * Returns the updated data object with the new tokens merged in.
 	 */
-	private async ensureValidToken(
+	private async refreshAndSave(
 		credentialId: string,
 		ownerId: string,
 		data: Record<string, unknown>,
 		definition: CredentialDefinition,
 	): Promise<Record<string, unknown>> {
-		const expiresAt = data.expiresAt as number | undefined;
-
-		if (!expiresAt || Date.now() >= expiresAt - REFRESH_THRESHOLD_MS) {
-			const refreshed = await this.refreshOAuth2Token(data, definition);
-			await this.credentialService.updateData(credentialId, ownerId, refreshed);
-			return refreshed;
-		}
-
-		return data;
+		const refreshed = await this.refreshOAuth2Token(data, definition);
+		await this.credentialService.updateData(credentialId, ownerId, refreshed);
+		return refreshed;
 	}
 
 	/**
-	 * Performs the OAuth2 token refresh request using the refresh token.
-	 * Returns updated data with new access token, refresh token, and expiration.
+	 * Performs the OAuth2 token refresh/re-fetch.
+	 * - client_credentials: re-fetches a new token directly (no refresh_token needed)
+	 * - authorizationCode: uses the stored refresh_token
 	 */
 	private async refreshOAuth2Token(
 		data: Record<string, unknown>,
@@ -87,28 +178,44 @@ export class CredentialResolverService {
 			throw new Error(`OAuth2 config missing for definition: ${definition.id}`);
 		}
 
-		const refreshToken = data.refreshToken as string | undefined;
-		if (!refreshToken) {
-			throw new Error(`No refresh token available for credential type: ${definition.id}`);
-		}
-
 		const clientIdKey = oauth2Config.clientIdProperty ?? 'clientId';
 		const clientSecretKey = oauth2Config.clientSecretProperty ?? 'clientSecret';
 		const clientId = data[clientIdKey] as string;
 		const clientSecret = data[clientSecretKey] as string;
 
-		const body = new URLSearchParams({
-			grant_type: 'refresh_token',
-			refresh_token: refreshToken,
-			client_id: clientId,
-			client_secret: clientSecret,
-		});
+		const grantType = oauth2Config.grantType ?? 'authorizationCode';
+
+		let body: URLSearchParams;
+
+		if (grantType === 'clientCredentials') {
+			// Re-fetch a token using client credentials — no refresh_token involved
+			body = new URLSearchParams({
+				grant_type: 'client_credentials',
+				client_id: clientId,
+				client_secret: clientSecret,
+			});
+			if (oauth2Config.scope) {
+				body.set('scope', oauth2Config.scope);
+			}
+		} else {
+			// Authorization code grant — use the stored refresh_token
+			const refreshToken = data.refreshToken as string | undefined;
+			if (!refreshToken) {
+				throw new Error(`No refresh token available for credential type: ${definition.id}`);
+			}
+			body = new URLSearchParams({
+				grant_type: 'refresh_token',
+				refresh_token: refreshToken,
+				client_id: clientId,
+				client_secret: clientSecret,
+			});
+		}
 
 		const headers: Record<string, string> = {
 			'Content-Type': 'application/x-www-form-urlencoded',
 		};
 
-		// If authStyle is inHeader, send client credentials via Basic auth
+		// If authStyle is inHeader, send client credentials as Basic auth instead of body
 		if (oauth2Config.authStyle === 'inHeader') {
 			const encoded = Buffer.from(`${clientId}:${clientSecret}`).toString('base64');
 			headers['Authorization'] = `Basic ${encoded}`;
@@ -134,7 +241,8 @@ export class CredentialResolverService {
 		return {
 			...data,
 			accessToken: tokenResponse.access_token,
-			refreshToken: tokenResponse.refresh_token ?? refreshToken,
+			// Preserve the existing refresh_token when the provider does not rotate it
+			refreshToken: tokenResponse.refresh_token ?? data.refreshToken,
 			expiresAt: tokenResponse.expires_in
 				? Date.now() + tokenResponse.expires_in * 1000
 				: undefined,
@@ -144,11 +252,27 @@ export class CredentialResolverService {
 	/**
 	 * Applies the YAML requestMapping template to produce final HTTP components.
 	 * Replaces {{properties.keyName}} placeholders with actual decrypted values.
+	 *
+	 * Special handling for basicAuth: if type is 'basicAuth' and no explicit
+	 * requestMapping is defined, auto-injects a standard Basic auth header
+	 * from the credential's `username` and `password` properties.
 	 */
 	private applyRequestMapping(
 		data: Record<string, unknown>,
 		definition: CredentialDefinition,
 	): ResolvedCredential {
+		// Auto-inject Basic auth header when no explicit requestMapping is provided
+		if (definition.type === 'basicAuth' && !definition.requestMapping) {
+			const username = (data.username as string) ?? '';
+			const password = (data.password as string) ?? '';
+			const encoded = Buffer.from(`${username}:${password}`).toString('base64');
+			return {
+				headers: { Authorization: `Basic ${encoded}` },
+				qs: {},
+				body: {},
+			};
+		}
+
 		const mapping = definition.requestMapping;
 		if (!mapping) {
 			return { headers: {}, qs: {}, body: {} };
@@ -162,18 +286,19 @@ export class CredentialResolverService {
 	}
 
 	/**
-	 * Interpolates {{properties.keyName}} placeholders in a Record's values.
+	 * Interpolates {{properties.keyName}} placeholders in both keys and values
+	 * of a Record. Key interpolation is needed for dynamic header names
+	 * (e.g. httpHeaderAuth where the header name itself is user-configured).
 	 */
 	private interpolateRecord(
 		record: Record<string, string>,
 		data: Record<string, unknown>,
 	): Record<string, string> {
 		const result: Record<string, string> = {};
-
 		for (const [key, template] of Object.entries(record)) {
-			result[key] = this.interpolateTemplate(template, data);
+			const resolvedKey = this.interpolateTemplate(key, data);
+			result[resolvedKey] = this.interpolateTemplate(template, data);
 		}
-
 		return result;
 	}
 

@@ -36,6 +36,17 @@ export interface OAuth2Config {
 	clientSecretProperty?: string;
 	scope?: string;
 	authStyle?: 'inHeader' | 'inBody';
+	/**
+	 * OAuth2 grant type to use.
+	 * - `authorizationCode` (default): standard 3-legged flow with browser redirect
+	 * - `clientCredentials`: machine-to-machine, no user redirect needed
+	 */
+	grantType?: 'authorizationCode' | 'clientCredentials';
+	/**
+	 * When true, uses PKCE (S256 code challenge) in the authorization code flow.
+	 * Recommended for public clients. Replaces client_secret in the token exchange.
+	 */
+	usePkce?: boolean;
 }
 
 /** HTTP request mapping — tells the engine where to inject credentials */
@@ -93,6 +104,34 @@ export interface CredentialDefinition {
 	requestMapping?: RequestMapping;
 	oauth2?: OAuth2Config;
 	testRequest?: TestRequest;
+}
+
+// ─── Resolver / Execution Types ───────────────────────────────────────────────
+
+/**
+ * The resolved authentication context produced by CredentialResolverService.
+ * Ready to inject into an outbound HTTP request.
+ */
+export interface ResolvedCredential {
+	headers: Record<string, string>;
+	/** Query string parameters to append to the request URL */
+	qs: Record<string, string>;
+	body: Record<string, string>;
+}
+
+/**
+ * Options for CredentialResolverService.executeWithCredential().
+ * Caller-provided qs and headers are merged with credential-resolved values,
+ * with credential values taking precedence for auth-specific keys.
+ */
+export interface ExecuteRequestOptions {
+	url: string;
+	method: string;
+	/** Additional headers to send alongside the credential-injected ones */
+	headers?: Record<string, string>;
+	/** Additional query string params to append to the URL */
+	qs?: Record<string, string>;
+	body?: string;
 }
 
 // ─── Request Bodies ───────────────────────────────────────────────────────────

@@ -18,43 +18,43 @@ let definitionsCache: CredentialDefinition[] | null = null;
  * Validates each file against the Zod schema. Results are cached after first load.
  */
 export function loadCredentialDefinitions(): CredentialDefinition[] {
-  if (definitionsCache) {
-    return definitionsCache;
-  }
+	if (definitionsCache) {
+		return definitionsCache;
+	}
 
-  const files = fs.readdirSync(DEFINITIONS_DIR).filter((f) => f.endsWith('.yaml'));
+	const files = fs.readdirSync(DEFINITIONS_DIR).filter((f) => f.endsWith('.yaml'));
 
-  const definitions: CredentialDefinition[] = [];
+	const definitions: CredentialDefinition[] = [];
 
-  for (const file of files) {
-    const filePath = path.join(DEFINITIONS_DIR, file);
-    const content = fs.readFileSync(filePath, 'utf-8');
-    const parsed = yaml.load(content);
+	for (const file of files) {
+		const filePath = path.join(DEFINITIONS_DIR, file);
+		const content = fs.readFileSync(filePath, 'utf-8');
+		const parsed = yaml.load(content);
 
-    const result = credentialDefinitionSchema.safeParse(parsed);
-    if (!result.success) {
-      console.error(`[registry] Invalid credential definition in ${file}:`, result.error.format());
-      continue;
-    }
+		const result = credentialDefinitionSchema.safeParse(parsed);
+		if (!result.success) {
+			console.error(`[registry] Invalid credential definition in ${file}:`, result.error.format());
+			continue;
+		}
 
-    definitions.push(result.data as CredentialDefinition);
-  }
+		definitions.push(result.data as CredentialDefinition);
+	}
 
-  definitionsCache = definitions;
-  return definitions;
+	definitionsCache = definitions;
+	return definitions;
 }
 
 /**
  * Returns a single credential definition by its unique id.
  */
 export function getCredentialDefinition(id: string): CredentialDefinition | undefined {
-  const definitions = loadCredentialDefinitions();
-  return definitions.find((def) => def.id === id);
+	const definitions = loadCredentialDefinitions();
+	return definitions.find((def) => def.id === id);
 }
 
 /**
  * Clears the cached definitions. Useful for testing or hot-reloading.
  */
 export function clearDefinitionsCache(): void {
-  definitionsCache = null;
+	definitionsCache = null;
 }
