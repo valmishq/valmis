@@ -1,6 +1,7 @@
 id: googleWorkspaceOAuth2
 name: Google Workspace (OAuth2)
 type: oauth2
+icon: /logos/google.svg
 description: Authenticate via Google OAuth2. You must create credentials in Google Cloud Console.
 documentationUrl: https://developers.google.com/identity/protocols/oauth2
 
@@ -18,7 +19,7 @@ properties:
     type: string
     required: true
     description: Space-separated list of Google API scopes
-    default: 'https://www.googleapis.com/auth/drive.readonly'
+    default: 'openid email https://www.googleapis.com/auth/drive.readonly'
 
 oauth2:
   authorizationUrl: 'https://accounts.google.com/o/oauth2/v2/auth'
@@ -30,3 +31,9 @@ oauth2:
 requestMapping:
   headers:
     Authorization: 'Bearer {{properties.accessToken}}'
+
+testRequest:
+  method: GET
+  url: 'https://www.googleapis.com/oauth2/v3/userinfo'
+  # Key in the userinfo JSON response to use as the connected account label
+  accountIdentifierKey: email

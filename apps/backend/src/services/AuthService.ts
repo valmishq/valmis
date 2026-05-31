@@ -53,7 +53,6 @@ export class AuthService {
 		};
 
 		const accessToken = await this.#generateAccessToken(payload);
-		console.info(`[audit] LOGIN_SUCCESS userId=${user.id} ip=${ip}`);
 
 		return { accessToken, user };
 	}

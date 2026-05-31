@@ -1,6 +1,7 @@
 import { redirect } from '@sveltejs/kit';
 import type { LayoutServerLoad } from './$types';
 import { api } from '$lib/server/api';
+import { page } from '$app/state';
 
 /**
  * Root layout server load.
@@ -11,7 +12,8 @@ import { api } from '$lib/server/api';
 export const load: LayoutServerLoad = async (event) => {
 	const res = await api('/auth/status', event);
 
-	if (res.ok) {
+	// Skip setup/signin redirects if the user is already authenticated
+	if (!event.locals.user && res.ok) {
 		const body = await res.json();
 		const needsSetup = body?.data?.needsSetup as boolean | undefined;
 

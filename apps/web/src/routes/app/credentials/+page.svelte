@@ -31,6 +31,36 @@
 		definitions = data.definitions;
 	});
 
+	// ── OAuth2 callback result alert ──────────────────────────────────────────
+	// Runs once when the page loads with ?oauth=success or ?oauth=error query params
+	// (set by the /app/credentials/oauth2/callback redirect).
+	let oauthAlertShown = $state(false);
+	$effect(() => {
+		if (oauthAlertShown) return;
+		if (data.oauthResult === 'success') {
+			oauthAlertShown = true;
+			setAlert({
+				type: 'success',
+				title: 'Account connected',
+				message: 'OAuth2 authorization completed successfully.',
+				duration: 5000,
+				show: true
+			});
+			// Refresh credentials client-side so isAuthorized and connectedAccount
+			// are reflected immediately without a full page reload.
+			refreshCredentials();
+		} else if (data.oauthResult === 'error') {
+			oauthAlertShown = true;
+			setAlert({
+				type: 'error',
+				title: 'Connection failed',
+				message: data.oauthMessage ?? 'OAuth2 authorization failed.',
+				duration: 5000,
+				show: true
+			});
+		}
+	});
+
 	// ── Multi-step "Add credential" dialog ────────────────────────────────────
 	// Step 1: pick a service type; Step 2: fill in the form
 	type DialogStep = 'pick' | 'form';
@@ -288,6 +318,11 @@
 		return getDefinition(type)?.type === 'oauth2';
 	}
 
+	/** Returns the icon path for a credential type, or null to show the fallback */
+	function getIcon(type: string): string | null {
+		return getDefinition(type)?.icon ?? null;
+	}
+
 	function hasTestRequest(type: string): boolean {
 		return Boolean(getDefinition(type)?.testRequest);
 	}
@@ -377,7 +412,11 @@
 									<div
 										class="flex size-8 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground"
 									>
-										<ShieldIcon class="size-4" />
+										{#if def.icon}
+											<img src={def.icon} alt={def.name} class="size-5 object-contain" />
+										{:else}
+											<ShieldIcon class="size-4" />
+										{/if}
 									</div>
 									<div class="min-w-0 flex-1">
 										<p class="text-sm font-medium text-foreground">{def.name}</p>
@@ -421,6 +460,23 @@
 					<p class="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive" role="alert">
 						{createError}
 					</p>
+				{/if}
+
+				<!-- OAuth2: show the callback URL the user must register with their OAuth provider -->
+				{#if selectedDefinition.type === 'oauth2' && data.oauthCallbackUrl}
+					<div class="space-y-1.5">
+						<Label for="callbackUrl">Authorized redirect URI</Label>
+						<Input
+							id="callbackUrl"
+							type="text"
+							value={data.oauthCallbackUrl}
+							readonly
+							class="cursor-default bg-muted font-mono text-xs text-muted-foreground select-all"
+						/>
+						<p class="text-xs text-muted-foreground">
+							Add this URL as an authorized redirect URI in your OAuth provider's console.
+						</p>
+					</div>
 				{/if}
 
 				<!-- User-facing label for this credential instance -->
@@ -548,28 +604,56 @@
 			<ul class="divide-y divide-border">
 				{#each credentials as cred (cred.id)}
 					{@const status = testStatus[cred.id] ?? 'idle'}
-					<li class="flex items-start justify-between gap-4 px-6 py-4">
-						<!-- Left: identity + status feedback -->
-						<div class="min-w-0 flex-1">
-							<div class="flex flex-wrap items-center gap-2">
-								<p class="truncate text-sm font-medium text-foreground">{cred.name}</p>
-								<Badge variant="secondary" class="shrink-0 text-xs">{typeLabel(cred.type)}</Badge>
-								{#if isOAuth2(cred.type)}
-									<Badge variant="outline" class="shrink-0 text-xs">OAuth2</Badge>
+					<li
+						class="flex flex-col gap-3 px-6 py-4 sm:flex-row sm:items-start sm:justify-between sm:gap-4"
+					>
+						<!-- Identity: icon + name + badges + date -->
+						<div class="flex min-w-0 flex-1 items-start gap-3">
+							<div
+								class="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground"
+							>
+								{#if getIcon(cred.type)}
+									<img
+										src={getIcon(cred.type)}
+										alt={typeLabel(cred.type)}
+										class="size-4 object-contain"
+									/>
+								{:else}
+									<ShieldIcon class="size-3.5" />
 								{/if}
 							</div>
-							<p class="mt-0.5 text-xs text-muted-foreground">
-								Created {formatDate(cred.createdAt)}
-							</p>
+							<div class="min-w-0 flex-1">
+								<div class="flex flex-wrap items-center gap-1.5">
+									<p class="truncate text-sm font-medium text-foreground">{cred.name}</p>
+									<Badge variant="secondary" class="shrink-0 px-1.5 py-0 text-[10px]"
+										>{typeLabel(cred.type)}</Badge
+									>
+									{#if isOAuth2(cred.type)}
+										<Badge variant="outline" class="shrink-0 px-1.5 py-0 text-[10px]">OAuth2</Badge>
+									{/if}
+								</div>
+								<p class="mt-0.5 text-xs text-muted-foreground">
+									Created {formatDate(cred.createdAt)}
+								</p>
+							</div>
 						</div>
 
-						<!-- Right: actions -->
-						<div class="flex shrink-0 items-center gap-1.5">
+						<!-- Actions: wraps on mobile, row on desktop -->
+						<div class="flex flex-wrap items-center gap-1.5 sm:shrink-0 sm:flex-nowrap">
 							{#if isOAuth2(cred.type)}
-								<!-- OAuth2: authorize account -->
+								<!-- Connected account label -->
+								{#if cred.isAuthorized}
+									<div class="flex items-center gap-1.5">
+										<CheckCircleIcon class="size-3 shrink-0 text-green-500" />
+										<span class="max-w-40 truncate text-xs text-muted-foreground">
+											{cred.connectedAccount ?? 'Connected'}
+										</span>
+									</div>
+								{/if}
+								<!-- Authorize / Re-authorize -->
 								<Button
 									variant="outline"
-									size="sm"
+									size="xs"
 									onclick={() => handleOAuth2Connect(cred)}
 									disabled={oauthLoading[cred.id]}
 									class="gap-1.5 text-xs"
@@ -579,16 +663,16 @@
 										Redirecting…
 									{:else}
 										<LinkIcon class="size-3.5" />
-										Connect account
+										{cred.isAuthorized ? 'Re-authorize' : 'Connect account'}
 									{/if}
 								</Button>
 							{/if}
 
 							{#if hasTestRequest(cred.type)}
-								<!-- Test connection (available for all types that define a testRequest) -->
+								<!-- Test connection -->
 								<Button
 									variant="outline"
-									size="sm"
+									size="xs"
 									onclick={() => handleTest(cred)}
 									disabled={status === 'testing'}
 									class="gap-1.5 text-xs"
@@ -603,11 +687,12 @@
 								</Button>
 							{/if}
 
+							<!-- Delete — pushed to end, icon only -->
 							<Button
 								variant="ghost"
-								size="sm"
+								size="xs"
 								onclick={() => requestDelete(cred)}
-								class="text-destructive hover:bg-destructive/10 hover:text-destructive"
+								class="ml-auto text-destructive hover:bg-destructive/10 hover:text-destructive sm:ml-0"
 							>
 								<TrashIcon class="size-4" />
 								<span class="sr-only">Delete {cred.name}</span>

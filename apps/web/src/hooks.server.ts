@@ -1,8 +1,11 @@
 import type { Handle } from '@sveltejs/kit';
 import { jwtVerify } from 'jose';
 import type { AuthTokenPayload } from '@repo/types';
+import { JWT_SECRET as JWT_SECRET_ENV } from '$env/static/private';
 
-const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET ?? '');
+// Use SvelteKit's env system so the root .env (env.dir = '../../') is respected.
+// process.env is NOT populated from the root .env — only $env/static/private is.
+const JWT_SECRET = new TextEncoder().encode(JWT_SECRET_ENV ?? '');
 
 /**
  * Server hook — runs on every incoming request.

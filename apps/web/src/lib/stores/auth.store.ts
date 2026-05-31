@@ -19,8 +19,12 @@ const createAuthStore = () => {
 		/** Called after a successful login — stores the token in a cookie for SSR. */
 		login: (accessToken: string, user: Omit<User, 'password'>) => {
 			if (browser) {
-				// samesite=strict prevents CSRF. Add 'secure' in production.
-				document.cookie = `accessToken=${accessToken}; path=/; max-age=604800; samesite=strict`;
+				// samesite=lax allows the cookie to be sent on top-level navigations from external
+				// contexts (VS Code links, OAuth redirects, bookmarks, address bar) while still
+				// blocking it on cross-site sub-resource requests (protects against CSRF for POST/PUT/DELETE).
+				// SameSite=Strict would block the cookie when navigating from any external origin,
+				// causing a redirect to /signin even for an authenticated user.
+				document.cookie = `accessToken=${accessToken}; path=/; max-age=604800; samesite=lax`;
 			}
 			set({ accessToken, user });
 		},

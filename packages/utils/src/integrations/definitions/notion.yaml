@@ -1,6 +1,7 @@
 id: notionApi
 name: Notion API
 type: bearerToken
+icon: /logos/notion.svg
 description: Connect to your Notion workspace using an Internal Integration Token.
 documentationUrl: https://developers.notion.com/docs/authorization
 
@@ -13,8 +14,8 @@ properties:
 
 requestMapping:
   headers:
-    Authorization: "Bearer {{properties.notionToken}}"
-    Notion-Version: "2022-06-28"
+    Authorization: 'Bearer {{properties.notionToken}}'
+    Notion-Version: '2022-06-28'
 
 testRequest:
   method: GET

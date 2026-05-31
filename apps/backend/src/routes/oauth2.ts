@@ -11,6 +11,20 @@ const encryption = new EncryptionService();
 const credentialService = new CredentialService(encryption);
 
 /**
+ * Returns the APP_URL env var (the public-facing frontend URL).
+ * Used as the base for OAuth2 redirect URIs so the callback lands on
+ * the frontend rather than the (unexposed) backend.
+ */
+function getAppUrl(): string {
+	const url = process.env.APP_URL;
+	if (!url) {
+		throw new Error('APP_URL environment variable is not set');
+	}
+	// Strip trailing slash
+	return url.replace(/\/+$/, '');
+}
+
+/**
  * Factory — creates the OAuth2 router with an injected AuthService instance.
  *
  * Routes:
@@ -72,8 +86,10 @@ export function createOAuth2Router(authService: AuthService): Router {
 		const clientId = data[clientIdKey] as string;
 		const scope = (data.scope as string) ?? definition.oauth2.scope ?? '';
 
-		const baseUrl = `${req.protocol}://${req.get('host')}`;
-		const redirectUri = `${baseUrl}/v1/oauth2/callback`;
+		// Redirect URI points to the frontend /oauth2/callback route (outside /app/,
+		// no auth guard). The SvelteKit page then proxies to the backend API.
+		const appUrl = getAppUrl();
+		const redirectUri = `${appUrl}/oauth2/callback`;
 
 		// Encode both credentialId and ownerId in state so the callback can resolve ownership
 		const state = Buffer.from(JSON.stringify({ credentialId, ownerId })).toString('base64');
@@ -174,8 +190,9 @@ export function createOAuth2Router(authService: AuthService): Router {
 		const clientId = data[clientIdKey] as string;
 		const clientSecret = data[clientSecretKey] as string;
 
-		const baseUrl = `${req.protocol}://${req.get('host')}`;
-		const redirectUri = `${baseUrl}/v1/oauth2/callback`;
+		// Must match the redirectUri used in the authorize step
+		const appUrl = getAppUrl();
+		const redirectUri = `${appUrl}/oauth2/callback`;
 
 		// Exchange code for tokens
 		const tokenBody = new URLSearchParams({
@@ -218,12 +235,42 @@ export function createOAuth2Router(authService: AuthService): Router {
 			expires_in?: number;
 		};
 
-		// Merge tokens into existing credential data and re-encrypt with ownerId in WHERE
+		// If the definition has a testRequest with an accountIdentifierKey, call that
+		// endpoint immediately to obtain the connected account label (e.g. email).
+		let connectedAccount: string | undefined;
+		if (definition.testRequest?.accountIdentifierKey) {
+			try {
+				const identityRes = await fetch(definition.testRequest.url, {
+					method: definition.testRequest.method,
+					headers: { Authorization: `Bearer ${tokens.access_token}` },
+				});
+				if (identityRes.ok) {
+					const identity = (await identityRes.json()) as Record<string, unknown>;
+					// Traverse dot-notation path (e.g. "data.user.login")
+					const value = definition.testRequest.accountIdentifierKey
+						.split('.')
+						.reduce<unknown>((obj, key) => {
+							if (obj !== null && typeof obj === 'object') {
+								return (obj as Record<string, unknown>)[key];
+							}
+							return undefined;
+						}, identity);
+					if (typeof value === 'string' || typeof value === 'number') {
+						connectedAccount = String(value);
+					}
+				}
+			} catch {
+				// Non-fatal — token is still saved even if identity fetch fails
+			}
+		}
+
+		// Merge tokens (and optional account identifier) into existing credential data
 		const updatedData: Record<string, unknown> = {
 			...data,
 			accessToken: tokens.access_token,
 			refreshToken: tokens.refresh_token ?? data.refreshToken,
 			expiresAt: tokens.expires_in ? Date.now() + tokens.expires_in * 1000 : undefined,
+			...(connectedAccount !== undefined ? { connectedAccount } : {}),
 		};
 
 		await credentialService.updateData(credentialId, ownerId, updatedData);

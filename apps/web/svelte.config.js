@@ -13,6 +13,11 @@ const config = {
 		adapter: adapter(),
 		alias: {
 			'@/*': './src/lib/*'
+		},
+		// Resolve env vars from the monorepo root so that shared variables
+		// (e.g. APP_URL) are available via $env/static/private.
+		env: {
+			dir: '../../'
 		}
 	}
 };

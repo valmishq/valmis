@@ -38,7 +38,7 @@ export class CredentialService {
 		this.encryption = encryption;
 	}
 
-	/** List all credentials for an owner (metadata only — no decrypted data) */
+	/** List all credentials for an owner, including isAuthorized and connectedAccount for OAuth2 */
 	async listByOwner(ownerId: string): Promise<CredentialMetadata[]> {
 		const rows = await db
 			.select({
@@ -46,13 +46,30 @@ export class CredentialService {
 				ownerId: credentials.ownerId,
 				name: credentials.name,
 				type: credentials.type,
+				data: credentials.data,
 				createdAt: credentials.createdAt,
 				updatedAt: credentials.updatedAt,
 			})
 			.from(credentials)
 			.where(eq(credentials.ownerId, ownerId));
 
-		return rows;
+		return rows.map((row) => {
+			const { data: encryptedData, ...meta } = row;
+			try {
+				const parsed = JSON.parse(this.encryption.decrypt(encryptedData)) as Record<
+					string,
+					unknown
+				>;
+				const isAuthorized =
+					typeof parsed.accessToken === 'string' && parsed.accessToken.length > 0;
+				const connectedAccount =
+					typeof parsed.connectedAccount === 'string' ? parsed.connectedAccount : undefined;
+				return { ...meta, isAuthorized, connectedAccount };
+			} catch {
+				// If decryption fails, return metadata without auth status
+				return meta;
+			}
+		});
 	}
 
 	/**

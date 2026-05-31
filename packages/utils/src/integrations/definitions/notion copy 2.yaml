@@ -1,6 +1,7 @@
 id: notionApi2
 name: Notion API
 type: bearerToken
+icon: https://static.vecteezy.com/system/resources/previews/073/494/911/non_2x/notion-logo-circular-glossy-icon-with-transparent-background-free-png.png
 description: Connect to your Notion workspace using an Internal Integration Token.
 documentationUrl: https://developers.notion.com/docs/authorization
 

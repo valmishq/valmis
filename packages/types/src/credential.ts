@@ -45,15 +45,27 @@ export interface RequestMapping {
 	body?: Record<string, string>;
 }
 
-/** Test request definition — used to validate a credential on save */
+/** Test request definition — used to validate a credential and optionally fetch account identity */
 export interface TestRequest {
 	method: 'GET' | 'POST';
 	url: string;
+	/**
+	 * Dot-notation key path into the JSON response body whose value is stored as
+	 * `connectedAccount` on the credential after a successful OAuth2 authorization.
+	 * Example: "email"  →  response.email
+	 *          "data.user.login"  →  response.data.user.login
+	 */
+	accountIdentifierKey?: string;
 }
 
 /**
  * Shape of a credential record without the encrypted data payload.
  * Shared between the backend service and API response types.
+ *
+ * `isAuthorized` is populated for OAuth2 credentials and is true when an access
+ * token has been obtained (i.e. the user has completed the authorization flow).
+ * `connectedAccount` holds the email or display name of the authorized account,
+ * fetched from the provider's identity endpoint at authorization time.
  */
 export interface CredentialMetadata {
 	id: string;
@@ -62,6 +74,10 @@ export interface CredentialMetadata {
 	type: string;
 	createdAt: Date;
 	updatedAt: Date;
+	/** OAuth2 only — true when an access token is present */
+	isAuthorized?: boolean;
+	/** OAuth2 only — email or display name of the connected account */
+	connectedAccount?: string;
 }
 
 /** Full credential definition loaded from a YAML file */
@@ -69,6 +85,8 @@ export interface CredentialDefinition {
 	id: string;
 	name: string;
 	type: CredentialType;
+	/** Path or URL to the service logo/icon for the UI */
+	icon?: string;
 	description?: string;
 	documentationUrl?: string;
 	properties: CredentialProperty[];
