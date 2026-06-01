@@ -9,6 +9,7 @@ import { createAuthRouter } from './routes/auth.js';
 import { createUsersRouter } from './routes/users.js';
 import { createApiKeysRouter } from './routes/apiKeys.js';
 import { createIamRouter } from './routes/iam.js';
+import { createAgentsRouter } from './routes/agents.js';
 import { UserService } from './services/UserService.js';
 import { AuthService } from './services/AuthService.js';
 
@@ -58,6 +59,7 @@ app.use('/v1/auth', createAuthRouter(authService));
 app.use('/v1/users', createUsersRouter(authService));
 app.use('/v1/api-keys', createApiKeysRouter(authService));
 app.use('/v1/iam', createIamRouter(authService));
+app.use('/v1/agents', createAgentsRouter(authService));
 
 app.listen(PORT, () => {
 	console.log(`[backend] Server running at http://localhost:${PORT}`);

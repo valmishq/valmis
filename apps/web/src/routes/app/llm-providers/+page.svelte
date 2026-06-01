@@ -17,11 +17,12 @@
 	import TrashIcon from '@lucide/svelte/icons/trash-2';
 	import StarIcon from '@lucide/svelte/icons/star';
 	import BotIcon from '@lucide/svelte/icons/bot';
+	import BrainCircuitIcon from '@lucide/svelte/icons/brain-circuit';
 	import PencilIcon from '@lucide/svelte/icons/pencil';
 	import CheckIcon from '@lucide/svelte/icons/check';
 	import ChevronsUpDownIcon from '@lucide/svelte/icons/chevrons-up-down';
 	import type { PageData } from './$types';
-	import type { LlmProviderConfig } from '@repo/types';
+	import type { LlmProviderConfig, LlmCatalogProvider, LlmCatalogModel } from '@repo/types';
 
 	let { data }: { data: PageData } = $props();
 
@@ -31,60 +32,17 @@
 		configs = data.configs;
 	});
 
-	// ── Known providers ────────────────────────────────────────────────────────
-	// Defines the selectable provider presets with their default model suggestions
-	interface ProviderPreset {
-		id: string;
-		label: string;
-		defaultModel: string;
-		modelPlaceholder: string;
-		baseUrlRequired: boolean;
-	}
-
-	const PROVIDER_PRESETS: ProviderPreset[] = [
-		{
-			id: 'openai',
-			label: 'OpenAI',
-			defaultModel: 'gpt-4o',
-			modelPlaceholder: 'e.g. gpt-4o',
-			baseUrlRequired: false
-		},
-		{
-			id: 'anthropic',
-			label: 'Anthropic',
-			defaultModel: 'claude-3-5-sonnet-20241022',
-			modelPlaceholder: 'e.g. claude-3-5-sonnet-20241022',
-			baseUrlRequired: false
-		},
-		{
-			id: 'google',
-			label: 'Google Gemini',
-			defaultModel: 'gemini-1.5-pro',
-			modelPlaceholder: 'e.g. gemini-1.5-pro',
-			baseUrlRequired: false
-		},
-		{
-			id: 'mistral',
-			label: 'Mistral',
-			defaultModel: 'mistral-large-latest',
-			modelPlaceholder: 'e.g. mistral-large-latest',
-			baseUrlRequired: false
-		},
-		{
-			id: 'groq',
-			label: 'Groq',
-			defaultModel: 'llama-3.1-70b-versatile',
-			modelPlaceholder: 'e.g. llama-3.1-70b-versatile',
-			baseUrlRequired: false
-		},
-		{
-			id: 'custom',
-			label: 'Custom / Self-hosted',
-			defaultModel: '',
-			modelPlaceholder: 'e.g. llama3',
-			baseUrlRequired: true
-		}
-	];
+	// ── Provider catalog ──────────────────────────────────────────────────────
+	// Catalog providers (from server) plus a trailing "Custom / Self-hosted" entry
+	const CUSTOM_PROVIDER: LlmCatalogProvider = {
+		id: 'custom',
+		label: 'Custom / Self-hosted',
+		url: '',
+		requiresBaseUrl: true,
+		modelPlaceholder: 'e.g. llama3'
+	};
+	const ALL_PROVIDERS: LlmCatalogProvider[] = [...data.llmProviders, CUSTOM_PROVIDER];
+	const ALL_MODELS: LlmCatalogModel[] = data.llmModels;
 
 	// ── Add config dialog ──────────────────────────────────────────────────────
 	let addDialogOpen = $state(false);
@@ -93,20 +51,39 @@
 	// Form fields
 	let formProvider = $state('openai');
 	let formName = $state('');
-	let formModel = $state('gpt-4o');
+	let formModel = $state('');
 	let formApiKey = $state('');
 	let formBaseUrl = $state('');
 	let formIsDefault = $state(false);
+	let formIsEmbeddingModel = $state(false);
 	let isSaving = $state(false);
 	let saveError = $state('');
 
 	let selectedPreset = $derived(
-		PROVIDER_PRESETS.find((p) => p.id === formProvider) ?? PROVIDER_PRESETS[0]
+		ALL_PROVIDERS.find((p) => p.id === formProvider) ?? ALL_PROVIDERS[0]
+	);
+
+	/** Catalog models available for the currently selected provider + embedding toggle */
+	const catalogModels = $derived(
+		ALL_MODELS.filter(
+			(m) => m.providerId === formProvider && m.isEmbeddingModel === formIsEmbeddingModel
+		)
 	);
 
 	// ── Provider combobox state ────────────────────────────────────────────────
 	let providerPopoverOpen = $state(false);
 	let providerTriggerRef = $state<HTMLButtonElement>(null!);
+
+	// ── Model combobox state ───────────────────────────────────────────────────
+	let modelPopoverOpen = $state(false);
+	let modelTriggerRef = $state<HTMLButtonElement>(null!);
+
+	/** Display label for the model combobox trigger */
+	const modelTriggerLabel = $derived(
+		formModel
+			? (catalogModels.find((m) => m.id === formModel)?.name ?? formModel)
+			: (selectedPreset?.modelPlaceholder ?? 'Select or type a model…')
+	);
 
 	function selectProvider(id: string) {
 		formProvider = id;
@@ -115,14 +92,25 @@
 		handleProviderChange();
 	}
 
+	function selectCatalogModel(id: string) {
+		formModel = id;
+		modelPopoverOpen = false;
+		tick().then(() => modelTriggerRef?.focus());
+	}
+
 	function openAddDialog() {
 		editingConfig = null;
 		formProvider = 'openai';
 		formName = '';
-		formModel = 'gpt-4o';
+		// Pre-select the first available chat model for OpenAI
+		const firstOpenAiModel = ALL_MODELS.find(
+			(m) => m.providerId === 'openai' && !m.isEmbeddingModel
+		);
+		formModel = firstOpenAiModel?.id ?? '';
 		formApiKey = '';
 		formBaseUrl = '';
 		formIsDefault = configs.length === 0; // auto-default when first
+		formIsEmbeddingModel = false;
 		saveError = '';
 		addDialogOpen = true;
 	}
@@ -135,16 +123,21 @@
 		formApiKey = ''; // never pre-fill secrets
 		formBaseUrl = '';
 		formIsDefault = config.isDefault;
+		formIsEmbeddingModel = config.isEmbeddingModel;
 		saveError = '';
 		addDialogOpen = true;
 	}
 
-	/** When the provider preset changes, update the default model suggestion */
+	/**
+	 * When provider changes, reset formModel to the first catalog model for that
+	 * provider (respecting the current embedding toggle), or clear it for custom.
+	 */
 	function handleProviderChange() {
-		const preset = PROVIDER_PRESETS.find((p) => p.id === formProvider);
-		if (preset && !editingConfig) {
-			formModel = preset.defaultModel;
-		}
+		if (editingConfig) return;
+		const first = ALL_MODELS.find(
+			(m) => m.providerId === formProvider && m.isEmbeddingModel === formIsEmbeddingModel
+		);
+		formModel = first?.id ?? '';
 	}
 
 	function closeAddDialog() {
@@ -172,7 +165,8 @@
 					ownerId: user.id,
 					name: formName,
 					model: formModel,
-					isDefault: formIsDefault
+					isDefault: formIsDefault,
+					isEmbeddingModel: formIsEmbeddingModel
 				};
 				// Only include data when the user actually typed a key
 				if (formApiKey.trim() !== '') {
@@ -205,6 +199,7 @@
 					name: formName,
 					model: formModel,
 					isDefault: formIsDefault,
+					isEmbeddingModel: formIsEmbeddingModel,
 					data: {
 						apiKey: formApiKey.trim(),
 						...(formBaseUrl.trim() ? { baseUrl: formBaseUrl.trim() } : {})
@@ -308,7 +303,7 @@
 	}
 
 	function providerLabel(provider: string): string {
-		return PROVIDER_PRESETS.find((p) => p.id === provider)?.label ?? provider;
+		return ALL_PROVIDERS.find((p) => p.id === provider)?.label ?? provider;
 	}
 
 	function formatDate(iso: string | Date): string {
@@ -407,13 +402,13 @@
 								</Button>
 							{/snippet}
 						</Popover.Trigger>
-						<Popover.Content class="w- w-max p-0" align="start">
+						<Popover.Content class="w-max p-0" align="start">
 							<Command.Root>
 								<Command.Input placeholder="Search providers…" />
 								<Command.List>
 									<Command.Empty>No provider found.</Command.Empty>
 									<Command.Group>
-										{#each PROVIDER_PRESETS as preset (preset.id)}
+										{#each ALL_PROVIDERS as preset (preset.id)}
 											<Command.Item value={preset.id} onSelect={() => selectProvider(preset.id)}>
 												<CheckIcon
 													class={cn(
@@ -445,16 +440,73 @@
 				<p class="text-xs text-muted-foreground">A label to identify this configuration.</p>
 			</div>
 
-			<!-- Model identifier -->
+			<!-- Model — combobox picker when catalog models exist, otherwise plain text input -->
 			<div class="space-y-1.5">
 				<Label for="model">Model</Label>
-				<Input
-					id="model"
-					type="text"
-					bind:value={formModel}
-					required
-					placeholder={selectedPreset?.modelPlaceholder ?? 'Model identifier'}
-				/>
+				{#if catalogModels.length > 0}
+					<Popover.Root bind:open={modelPopoverOpen}>
+						<Popover.Trigger bind:ref={modelTriggerRef}>
+							{#snippet child({ props }: { props: Record<string, unknown> })}
+								<Button
+									{...props}
+									id="model"
+									variant="outline"
+									role="combobox"
+									aria-expanded={modelPopoverOpen}
+									class="w-full justify-between font-normal"
+								>
+									<span class="truncate">{modelTriggerLabel}</span>
+									<ChevronsUpDownIcon class="ml-2 size-4 shrink-0 opacity-50" />
+								</Button>
+							{/snippet}
+						</Popover.Trigger>
+						<Popover.Content class="w-[var(--bits-popover-anchor-width)] p-0" align="start">
+							<Command.Root>
+								<Command.Input placeholder="Search models…" />
+								<Command.List class="max-h-60">
+									<Command.Empty>No model found.</Command.Empty>
+									<Command.Group>
+										{#each catalogModels as m (m.id)}
+											<Command.Item value={m.id} onSelect={() => selectCatalogModel(m.id)}>
+												<CheckIcon
+													class={cn(
+														'mr-2 size-4 shrink-0',
+														formModel !== m.id && 'text-transparent'
+													)}
+												/>
+												<span class="flex-1 truncate">{m.name}</span>
+												{#if m.contextLength}
+													<span class="ml-2 shrink-0 text-xs text-muted-foreground">
+														{Math.round(m.contextLength / 1000)}k ctx
+													</span>
+												{/if}
+											</Command.Item>
+										{/each}
+									</Command.Group>
+								</Command.List>
+							</Command.Root>
+						</Popover.Content>
+					</Popover.Root>
+					<!-- Always allow manual override -->
+					<Input
+						type="text"
+						bind:value={formModel}
+						required
+						placeholder={selectedPreset?.modelPlaceholder ?? 'or type a model ID…'}
+						class="mt-1.5"
+					/>
+					<p class="text-xs text-muted-foreground">
+						Pick from the list above or type a model ID directly.
+					</p>
+				{:else}
+					<Input
+						id="model"
+						type="text"
+						bind:value={formModel}
+						required
+						placeholder={selectedPreset?.modelPlaceholder ?? 'Model identifier'}
+					/>
+				{/if}
 			</div>
 
 			<!-- API key -->
@@ -472,15 +524,15 @@
 				/>
 			</div>
 
-			<!-- Base URL — always shown for 'custom', optional for others -->
-			{#if formProvider === 'custom' || editingConfig?.provider === 'custom'}
+			<!-- Base URL — always shown for 'custom' (requiresBaseUrl), optional for others -->
+			{#if selectedPreset?.requiresBaseUrl || editingConfig?.provider === 'custom'}
 				<div class="space-y-1.5">
 					<Label for="baseUrl">Base URL</Label>
 					<Input
 						id="baseUrl"
 						type="url"
 						bind:value={formBaseUrl}
-						required={formProvider === 'custom' && !editingConfig}
+						required={selectedPreset?.requiresBaseUrl && !editingConfig}
 						placeholder="https://your-endpoint/v1"
 					/>
 					<p class="text-xs text-muted-foreground">
@@ -489,18 +541,40 @@
 				</div>
 			{/if}
 
-			<!-- Set as default toggle -->
+			<!-- Embedding model toggle -->
 			<div class="flex items-center gap-2.5">
 				<input
-					id="isDefault"
+					id="isEmbeddingModel"
 					type="checkbox"
-					bind:checked={formIsDefault}
+					bind:checked={formIsEmbeddingModel}
+					onchange={handleProviderChange}
 					class="size-4 rounded border-border accent-primary"
 				/>
-				<Label for="isDefault" class="cursor-pointer font-normal">
-					Set as default for this account
+				<Label for="isEmbeddingModel" class="cursor-pointer font-normal">
+					This is an embedding model
 				</Label>
 			</div>
+			{#if formIsEmbeddingModel}
+				<p class="text-xs text-muted-foreground">
+					Embedding models generate vector representations for agent memory search — they cannot be
+					used for chat or completion.
+				</p>
+			{/if}
+
+			<!-- Set as default toggle — only meaningful for chat models -->
+			{#if !formIsEmbeddingModel}
+				<div class="flex items-center gap-2.5">
+					<input
+						id="isDefault"
+						type="checkbox"
+						bind:checked={formIsDefault}
+						class="size-4 rounded border-border accent-primary"
+					/>
+					<Label for="isDefault" class="cursor-pointer font-normal">
+						Set as default for this account
+					</Label>
+				</div>
+			{/if}
 
 			<Dialog.Footer class="pt-2">
 				<Button type="button" variant="outline" onclick={closeAddDialog} disabled={isSaving}>
@@ -565,7 +639,12 @@
 						<div class="min-w-0 flex-1">
 							<div class="flex flex-wrap items-center gap-2">
 								<p class="truncate text-sm font-medium text-foreground">{config.name}</p>
-								{#if config.isDefault}
+								{#if config.isEmbeddingModel}
+									<Badge variant="secondary" class="shrink-0 gap-1 text-xs">
+										<BrainCircuitIcon class="size-3" />
+										Embedding
+									</Badge>
+								{:else if config.isDefault}
 									<Badge class="shrink-0 gap-1 text-xs">
 										<StarIcon class="size-3" />
 										Default
@@ -583,7 +662,7 @@
 
 						<!-- Right: actions -->
 						<div class="flex shrink-0 items-center gap-1">
-							{#if !config.isDefault}
+							{#if !config.isDefault && !config.isEmbeddingModel}
 								<Button
 									variant="ghost"
 									size="sm"

@@ -91,7 +91,7 @@ export function createLlmProvidersRouter(authService: AuthService): Router {
 	 * Body: { ownerId, provider, name, model, isDefault?, data: { apiKey, baseUrl? } }
 	 */
 	router.post('/', auth, async (req: Request, res: Response) => {
-		const { ownerId, provider, name, model, isDefault, data } =
+		const { ownerId, provider, name, model, isDefault, isEmbeddingModel, data } =
 			req.body as CreateLlmProviderRequestBody;
 
 		if (!ownerId || !provider || !name || !model || !data?.apiKey) {
@@ -109,6 +109,7 @@ export function createLlmProvidersRouter(authService: AuthService): Router {
 			name,
 			model,
 			isDefault: isDefault ?? false,
+			isEmbeddingModel: isEmbeddingModel ?? false,
 			data: { apiKey: data.apiKey, baseUrl: data.baseUrl },
 		};
 
@@ -124,7 +125,8 @@ export function createLlmProvidersRouter(authService: AuthService): Router {
 	 * Returns 404 if the record does not exist or does not belong to the given owner.
 	 */
 	router.put('/:id', auth, async (req: Request, res: Response) => {
-		const { ownerId, name, model, isDefault, data } = req.body as UpdateLlmProviderRequestBody;
+		const { ownerId, name, model, isDefault, isEmbeddingModel, data } =
+			req.body as UpdateLlmProviderRequestBody;
 
 		if (!ownerId) {
 			const body: LlmProviderResponse = { success: false, error: 'ownerId is required' };
@@ -136,17 +138,18 @@ export function createLlmProvidersRouter(authService: AuthService): Router {
 			name === undefined &&
 			model === undefined &&
 			isDefault === undefined &&
+			isEmbeddingModel === undefined &&
 			data === undefined
 		) {
 			const body: LlmProviderResponse = {
 				success: false,
-				error: 'At least one of name, model, isDefault, or data is required',
+				error: 'At least one of name, model, isDefault, isEmbeddingModel, or data is required',
 			};
 			res.status(400).json(body);
 			return;
 		}
 
-		const input: UpdateLlmProviderConfigInput = { name, model, isDefault };
+		const input: UpdateLlmProviderConfigInput = { name, model, isDefault, isEmbeddingModel };
 
 		// Only include data if apiKey is provided (required field in LlmProviderSecretData)
 		if (data?.apiKey !== undefined) {

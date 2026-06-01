@@ -6,3 +6,5 @@ export * from './llmProvider.js';
 export * from './iam.js';
 export * from './user.js';
 export * from './auth.js';
+export * from './agent.js';
+export * from './llmCatalog.js';

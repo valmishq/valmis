@@ -5,3 +5,6 @@ export * from './users.js';
 export * from './roles.js';
 export * from './userRoles.js';
 export * from './apiKeys.js';
+export * from './agents.js';
+export * from './agentCredentials.js';
+export * from './agentMemory.js';

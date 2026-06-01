@@ -14,6 +14,11 @@ export const llmProviderConfigs = pgTable(
 		model: varchar('model', { length: 255 }).notNull(),
 		/** Whether this is the default config the agent uses for this owner */
 		isDefault: boolean('is_default').default(false).notNull(),
+		/**
+		 * Whether this config is an embedding model (true) or a chat/completion model (false).
+		 * Embedding models are used for vector memory; chat models are used for conversation.
+		 */
+		isEmbeddingModel: boolean('is_embedding_model').default(false).notNull(),
 		/** Encrypted JSON payload: { apiKey, baseUrl? } */
 		data: text('data').notNull(),
 		createdAt: timestamp('created_at').defaultNow().notNull(),

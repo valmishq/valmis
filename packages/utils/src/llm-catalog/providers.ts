@@ -1,0 +1,148 @@
+import type { LlmCatalogProvider } from '@repo/types';
+
+/**
+ * Static catalog of the top 20 LLM providers.
+ * `id` must match the prefix segment of each provider's model IDs.
+ */
+export const LLM_PROVIDERS: LlmCatalogProvider[] = [
+	{
+		id: 'openai',
+		label: 'OpenAI',
+		url: 'https://openai.com',
+		requiresBaseUrl: false,
+		modelPlaceholder: 'e.g. gpt-4o',
+	},
+	{
+		id: 'anthropic',
+		label: 'Anthropic',
+		url: 'https://anthropic.com',
+		requiresBaseUrl: false,
+		modelPlaceholder: 'e.g. claude-sonnet-4',
+	},
+	{
+		id: 'google',
+		label: 'Google',
+		url: 'https://ai.google.dev',
+		requiresBaseUrl: false,
+		modelPlaceholder: 'e.g. gemini-2.5-pro',
+	},
+	{
+		id: 'mistralai',
+		label: 'Mistral AI',
+		url: 'https://mistral.ai',
+		requiresBaseUrl: false,
+		modelPlaceholder: 'e.g. mistral-large-latest',
+	},
+	{
+		id: 'deepseek',
+		label: 'DeepSeek',
+		url: 'https://www.deepseek.com',
+		requiresBaseUrl: false,
+		modelPlaceholder: 'e.g. deepseek-r1',
+	},
+	{
+		id: 'qwen',
+		label: 'Qwen (Alibaba)',
+		url: 'https://qwenlm.github.io',
+		requiresBaseUrl: false,
+		modelPlaceholder: 'e.g. qwen3-235b-a22b',
+	},
+	{
+		id: 'meta-llama',
+		label: 'Meta Llama',
+		url: 'https://llama.meta.com',
+		requiresBaseUrl: false,
+		modelPlaceholder: 'e.g. llama-4-maverick',
+	},
+	{
+		id: 'x-ai',
+		label: 'xAI',
+		url: 'https://x.ai',
+		requiresBaseUrl: false,
+		modelPlaceholder: 'e.g. grok-4.20',
+	},
+	{
+		id: 'moonshotai',
+		label: 'Moonshot AI',
+		url: 'https://moonshot.cn',
+		requiresBaseUrl: false,
+		modelPlaceholder: 'e.g. kimi-k2',
+	},
+	{
+		id: 'nvidia',
+		label: 'NVIDIA',
+		url: 'https://build.nvidia.com',
+		requiresBaseUrl: false,
+		modelPlaceholder: 'e.g. nemotron-3-super-120b-a12b',
+	},
+	{
+		id: 'cohere',
+		label: 'Cohere',
+		url: 'https://cohere.com',
+		requiresBaseUrl: false,
+		modelPlaceholder: 'e.g. command-a-03-2025',
+	},
+	{
+		id: 'perplexity',
+		label: 'Perplexity',
+		url: 'https://perplexity.ai',
+		requiresBaseUrl: false,
+		modelPlaceholder: 'e.g. sonar-pro',
+	},
+	{
+		id: 'amazon',
+		label: 'Amazon',
+		url: 'https://aws.amazon.com/bedrock',
+		requiresBaseUrl: false,
+		modelPlaceholder: 'e.g. nova-premier-v1',
+	},
+	{
+		id: 'microsoft',
+		label: 'Microsoft',
+		url: 'https://azure.microsoft.com/en-us/products/ai-services',
+		requiresBaseUrl: false,
+		modelPlaceholder: 'e.g. phi-4-mini-instruct',
+	},
+	{
+		id: 'z-ai',
+		label: 'Z.ai (GLM)',
+		url: 'https://z.ai',
+		requiresBaseUrl: false,
+		modelPlaceholder: 'e.g. glm-5.1',
+	},
+	{
+		id: 'minimax',
+		label: 'MiniMax',
+		url: 'https://www.minimaxi.com',
+		requiresBaseUrl: false,
+		modelPlaceholder: 'e.g. minimax-m3',
+	},
+	{
+		id: 'bytedance-seed',
+		label: 'ByteDance Seed',
+		url: 'https://seed.bytetech.com',
+		requiresBaseUrl: false,
+		modelPlaceholder: 'e.g. seed-2.0-lite',
+	},
+	{
+		id: 'ibm-granite',
+		label: 'IBM Granite',
+		url: 'https://www.ibm.com/granite',
+		requiresBaseUrl: false,
+		modelPlaceholder: 'e.g. granite-4.1-8b',
+	},
+	{
+		id: 'arcee-ai',
+		label: 'Arcee AI',
+		url: 'https://arcee.ai',
+		requiresBaseUrl: false,
+		modelPlaceholder: 'e.g. virtuoso-large',
+	},
+	{
+		id: 'nousresearch',
+		label: 'Nous Research',
+		url: 'https://nousresearch.com',
+		requiresBaseUrl: false,
+		modelPlaceholder: 'e.g. hermes-4-405b',
+	},
+];

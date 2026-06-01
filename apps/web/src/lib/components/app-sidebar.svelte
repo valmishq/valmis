@@ -27,6 +27,7 @@
 	/** Navigation items for the main menu */
 	const navItems = [
 		{ title: 'Home', url: '/app', icon: HouseIcon },
+		{ title: 'Agents', url: '/app/agents', icon: BotIcon },
 		{ title: 'LLM Providers', url: '/app/llm-providers', icon: CpuIcon },
 		{ title: 'Credentials', url: '/app/credentials', icon: ShieldIcon },
 		{ title: 'API Keys', url: '/app/api-keys', icon: KeyIcon }

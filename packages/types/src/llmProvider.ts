@@ -10,6 +10,11 @@ export interface LlmProviderConfig {
 	model: string;
 	/** Whether this is the default config used by the agent for this owner */
 	isDefault: boolean;
+	/**
+	 * Whether this config is an embedding model.
+	 * True = used for vector memory embeddings; false = used for chat/completion.
+	 */
+	isEmbeddingModel: boolean;
 	createdAt: Date;
 	updatedAt: Date;
 }
@@ -29,6 +34,7 @@ export interface CreateLlmProviderConfigInput {
 	name: string;
 	model: string;
 	isDefault?: boolean;
+	isEmbeddingModel?: boolean;
 	data: LlmProviderSecretData;
 }
 
@@ -37,6 +43,7 @@ export interface UpdateLlmProviderConfigInput {
 	name?: string;
 	model?: string;
 	isDefault?: boolean;
+	isEmbeddingModel?: boolean;
 	data?: LlmProviderSecretData;
 }
 
@@ -49,6 +56,7 @@ export interface CreateLlmProviderRequestBody {
 	name: string;
 	model: string;
 	isDefault?: boolean;
+	isEmbeddingModel?: boolean;
 	data: { apiKey: string; baseUrl?: string };
 }
 
@@ -58,5 +66,6 @@ export interface UpdateLlmProviderRequestBody {
 	name?: string;
 	model?: string;
 	isDefault?: boolean;
+	isEmbeddingModel?: boolean;
 	data?: { apiKey: string; baseUrl?: string };
 }

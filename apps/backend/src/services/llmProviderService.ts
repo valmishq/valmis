@@ -38,6 +38,7 @@ export class LlmProviderService {
 				name: llmProviderConfigs.name,
 				model: llmProviderConfigs.model,
 				isDefault: llmProviderConfigs.isDefault,
+				isEmbeddingModel: llmProviderConfigs.isEmbeddingModel,
 				createdAt: llmProviderConfigs.createdAt,
 				updatedAt: llmProviderConfigs.updatedAt,
 			})
@@ -60,6 +61,7 @@ export class LlmProviderService {
 				name: llmProviderConfigs.name,
 				model: llmProviderConfigs.model,
 				isDefault: llmProviderConfigs.isDefault,
+				isEmbeddingModel: llmProviderConfigs.isEmbeddingModel,
 				createdAt: llmProviderConfigs.createdAt,
 				updatedAt: llmProviderConfigs.updatedAt,
 			})
@@ -96,6 +98,7 @@ export class LlmProviderService {
 		const now = new Date();
 		const encryptedData = this.encryption.encrypt(JSON.stringify(input.data));
 		const isDefault = input.isDefault ?? false;
+		const isEmbeddingModel = input.isEmbeddingModel ?? false;
 
 		if (isDefault) {
 			await this.clearDefaultForOwner(input.ownerId);
@@ -108,6 +111,7 @@ export class LlmProviderService {
 			name: input.name,
 			model: input.model,
 			isDefault,
+			isEmbeddingModel,
 			data: encryptedData,
 			createdAt: now,
 			updatedAt: now,
@@ -120,6 +124,7 @@ export class LlmProviderService {
 			name: input.name,
 			model: input.model,
 			isDefault,
+			isEmbeddingModel,
 			createdAt: now,
 			updatedAt: now,
 		};
@@ -144,12 +149,14 @@ export class LlmProviderService {
 			name: string;
 			model: string;
 			isDefault: boolean;
+			isEmbeddingModel: boolean;
 			data: string;
 			updatedAt: Date;
 		}> = { updatedAt: new Date() };
 
 		if (input.name !== undefined) updates.name = input.name;
 		if (input.model !== undefined) updates.model = input.model;
+		if (input.isEmbeddingModel !== undefined) updates.isEmbeddingModel = input.isEmbeddingModel;
 		if (input.data !== undefined) {
 			updates.data = this.encryption.encrypt(JSON.stringify(input.data));
 		}

@@ -1,9 +1,11 @@
 import type { PageServerLoad } from './$types';
 import { api } from '$lib/server/api';
 import type { LlmProviderConfig } from '@repo/types';
+import { LLM_PROVIDERS, LLM_MODELS } from '@repo/utils';
 
 /**
- * Load the current user's LLM provider configs for SSR.
+ * Load the current user's LLM provider configs and the static catalog for SSR.
+ * The catalog is passed as page data so the browser bundle never imports @repo/utils.
  */
 export const load: PageServerLoad = async (event) => {
 	const ownerId = event.locals.user?.id;
@@ -17,5 +19,5 @@ export const load: PageServerLoad = async (event) => {
 		}
 	}
 
-	return { configs };
+	return { configs, llmProviders: LLM_PROVIDERS, llmModels: LLM_MODELS };
 };

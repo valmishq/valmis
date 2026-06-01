@@ -1,0 +1,303 @@
+import { Router } from 'express';
+import type { Request, Response } from 'express';
+import { AgentService } from '../services/AgentService.js';
+import { requireAuth } from '../middleware/auth.js';
+import { logger } from '../config/logger.js';
+import type { AuthService } from '../services/AuthService.js';
+import type {
+	AgentsListResponse,
+	AgentResponse,
+	AgentDeleteResponse,
+	AgentMemoryListResponse,
+	AgentMemoryDeleteResponse,
+	CreateAgentRequestBody,
+	UpdateAgentRequestBody,
+	OwnerIdRequestBody,
+} from '@repo/types';
+
+const agentService = new AgentService();
+
+/**
+ * Factory — creates the agents router with an injected AuthService instance.
+ *
+ * Routes:
+ *   GET    /v1/agents                       — list agents for an owner
+ *   GET    /v1/agents/:id                   — get a single agent
+ *   POST   /v1/agents                       — create a new agent
+ *   PUT    /v1/agents/:id                   — update an agent
+ *   DELETE /v1/agents/:id                   — delete an agent
+ *   GET    /v1/agents/:id/memory            — list memory entries
+ *   DELETE /v1/agents/:id/memory/:memoryId  — delete a memory entry
+ */
+export function createAgentsRouter(authService: AuthService): Router {
+	const router = Router();
+	const auth = requireAuth(authService);
+
+	/**
+	 * GET /v1/agents
+	 * List all agents for a given owner.
+	 * Requires `ownerId` query parameter.
+	 */
+	router.get('/', auth, async (req: Request, res: Response) => {
+		const ownerId = req.query.ownerId as string | undefined;
+		if (!ownerId) {
+			const body: AgentsListResponse = {
+				success: false,
+				error: 'ownerId query parameter is required',
+			};
+			res.status(400).json(body);
+			return;
+		}
+
+		const list = await agentService.listByOwner(ownerId);
+		const body: AgentsListResponse = { success: true, data: list };
+		res.json(body);
+	});
+
+	/**
+	 * GET /v1/agents/:id
+	 * Get a single agent by ID with ownership check.
+	 * Requires `ownerId` query parameter.
+	 */
+	router.get('/:id', auth, async (req: Request, res: Response) => {
+		const id = req.params.id as string;
+		const ownerId = req.query.ownerId as string | undefined;
+		if (!ownerId) {
+			const body: AgentResponse = {
+				success: false,
+				error: 'ownerId query parameter is required',
+			};
+			res.status(400).json(body);
+			return;
+		}
+
+		const agent = await agentService.getById(id, ownerId);
+		if (!agent) {
+			const body: AgentResponse = { success: false, error: 'Agent not found' };
+			res.status(404).json(body);
+			return;
+		}
+		const body: AgentResponse = { success: true, data: agent };
+		res.json(body);
+	});
+
+	/**
+	 * POST /v1/agents
+	 * Create a new agent.
+	 * Body: { ownerId, name, description?, systemInstruction?, avatarUrl?, credentialIds? }
+	 */
+	router.post('/', auth, async (req: Request, res: Response) => {
+		const {
+			ownerId,
+			name,
+			description,
+			systemInstruction,
+			avatarUrl,
+			credentialIds,
+			modelConfigId,
+			embeddingModelConfigId,
+			embeddingDim,
+		} = req.body as CreateAgentRequestBody;
+
+		if (!ownerId || !name) {
+			const body: AgentResponse = {
+				success: false,
+				error: 'ownerId and name are required',
+			};
+			res.status(400).json(body);
+			return;
+		}
+
+		try {
+			const agent = await agentService.create({
+				ownerId,
+				name,
+				description,
+				systemInstruction,
+				avatarUrl,
+				credentialIds,
+				modelConfigId,
+				embeddingModelConfigId,
+				embeddingDim,
+			});
+			const body: AgentResponse = { success: true, data: agent };
+			res.status(201).json(body);
+		} catch (err) {
+			logger.error({ err }, 'Failed to create agent');
+			const body: AgentResponse = { success: false, error: 'Failed to create agent' };
+			res.status(500).json(body);
+		}
+	});
+
+	/**
+	 * PUT /v1/agents/:id
+	 * Update an existing agent.
+	 * Body: { ownerId, name?, description?, systemInstruction?, avatarUrl?, credentialIds? }
+	 */
+	router.put('/:id', auth, async (req: Request, res: Response) => {
+		const {
+			ownerId,
+			name,
+			description,
+			systemInstruction,
+			avatarUrl,
+			credentialIds,
+			modelConfigId,
+			embeddingModelConfigId,
+			embeddingDim,
+		} = req.body as UpdateAgentRequestBody;
+
+		if (!ownerId) {
+			const body: AgentResponse = { success: false, error: 'ownerId is required' };
+			res.status(400).json(body);
+			return;
+		}
+
+		if (
+			name === undefined &&
+			description === undefined &&
+			systemInstruction === undefined &&
+			avatarUrl === undefined &&
+			credentialIds === undefined &&
+			modelConfigId === undefined &&
+			embeddingModelConfigId === undefined &&
+			embeddingDim === undefined
+		) {
+			const body: AgentResponse = {
+				success: false,
+				error: 'At least one field to update is required',
+			};
+			res.status(400).json(body);
+			return;
+		}
+
+		try {
+			const updateId = req.params.id as string;
+			const updated = await agentService.update(updateId, ownerId, {
+				name,
+				description,
+				systemInstruction,
+				avatarUrl,
+				credentialIds,
+				modelConfigId,
+				embeddingModelConfigId,
+				embeddingDim,
+			});
+
+			if (!updated) {
+				const body: AgentResponse = { success: false, error: 'Agent not found' };
+				res.status(404).json(body);
+				return;
+			}
+
+			const body: AgentResponse = { success: true, data: updated };
+			res.json(body);
+		} catch (err) {
+			logger.error({ err }, 'Failed to update agent');
+			const body: AgentResponse = { success: false, error: 'Failed to update agent' };
+			res.status(500).json(body);
+		}
+	});
+
+	/**
+	 * DELETE /v1/agents/:id
+	 * Delete an agent.
+	 * Body: { ownerId }
+	 */
+	router.delete('/:id', auth, async (req: Request, res: Response) => {
+		const deleteId = req.params.id as string;
+		const { ownerId } = req.body as OwnerIdRequestBody;
+
+		if (!ownerId) {
+			const body: AgentDeleteResponse = { success: false, error: 'ownerId is required' };
+			res.status(400).json(body);
+			return;
+		}
+
+		const deleted = await agentService.delete(deleteId, ownerId);
+		if (!deleted) {
+			const body: AgentDeleteResponse = { success: false, error: 'Agent not found' };
+			res.status(404).json(body);
+			return;
+		}
+		const body: AgentDeleteResponse = { success: true, data: { deleted: true } };
+		res.json(body);
+	});
+
+	// ─── Memory Routes ────────────────────────────────────────────────────────
+
+	/**
+	 * GET /v1/agents/:id/memory
+	 * List memory entries for an agent (paginated).
+	 * Query: ownerId (required), limit? (default 50), offset? (default 0)
+	 */
+	router.get('/:id/memory', auth, async (req: Request, res: Response) => {
+		const agentId = req.params.id as string;
+		const ownerId = req.query.ownerId as string | undefined;
+		if (!ownerId) {
+			const body: AgentMemoryListResponse = {
+				success: false,
+				error: 'ownerId query parameter is required',
+			};
+			res.status(400).json(body);
+			return;
+		}
+
+		// Verify ownership first
+		const agent = await agentService.getById(agentId, ownerId);
+		if (!agent) {
+			const body: AgentMemoryListResponse = { success: false, error: 'Agent not found' };
+			res.status(404).json(body);
+			return;
+		}
+
+		const limit = Math.min(parseInt((req.query.limit as string) ?? '50', 10), 100);
+		const offset = parseInt((req.query.offset as string) ?? '0', 10);
+		const entries = await agentService.listMemory(agentId, limit, offset);
+		const body: AgentMemoryListResponse = { success: true, data: entries };
+		res.json(body);
+	});
+
+	/**
+	 * DELETE /v1/agents/:id/memory/:memoryId
+	 * Delete a specific memory entry.
+	 * Body: { ownerId }
+	 */
+	router.delete('/:id/memory/:memoryId', auth, async (req: Request, res: Response) => {
+		const agentId = req.params.id as string;
+		const memoryId = req.params.memoryId as string;
+		const { ownerId } = req.body as OwnerIdRequestBody;
+
+		if (!ownerId) {
+			const body: AgentMemoryDeleteResponse = {
+				success: false,
+				error: 'ownerId is required',
+			};
+			res.status(400).json(body);
+			return;
+		}
+
+		// Verify ownership first
+		const agent = await agentService.getById(agentId, ownerId);
+		if (!agent) {
+			const body: AgentMemoryDeleteResponse = { success: false, error: 'Agent not found' };
+			res.status(404).json(body);
+			return;
+		}
+
+		const deleted = await agentService.deleteMemory(memoryId, agentId);
+		if (!deleted) {
+			const body: AgentMemoryDeleteResponse = {
+				success: false,
+				error: 'Memory entry not found',
+			};
+			res.status(404).json(body);
+			return;
+		}
+
+		const body: AgentMemoryDeleteResponse = { success: true, data: { deleted: true } };
+		res.json(body);
+	});
+
+	return router;
+}

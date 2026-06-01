@@ -17,6 +17,7 @@
 	"dependencies": {
 		"@iconify/svelte": "^5.2.1",
 		"@repo/types": "workspace:*",
+		"@repo/utils": "workspace:*",
 		"jose": "^6.2.3"
 	},
 	"devDependencies": {

@@ -97,6 +97,9 @@ importers:
       '@repo/types':
         specifier: workspace:*
         version: link:../../packages/types
+      '@repo/utils':
+        specifier: workspace:*
+        version: link:../../packages/utils
       jose:
         specifier: ^6.2.3
         version: 6.2.3
