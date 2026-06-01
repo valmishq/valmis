@@ -4,6 +4,7 @@ import { AgentService } from '../services/AgentService.js';
 import { requireAuth } from '../middleware/auth.js';
 import { logger } from '../config/logger.js';
 import type { AuthService } from '../services/AuthService.js';
+import { createAgentSkillsRouter } from './skills.js';
 import type {
 	AgentsListResponse,
 	AgentResponse,
@@ -223,6 +224,10 @@ export function createAgentsRouter(authService: AuthService): Router {
 		const body: AgentDeleteResponse = { success: true, data: { deleted: true } };
 		res.json(body);
 	});
+
+	// ─── Skills Sub-Router ────────────────────────────────────────────────────
+	// Mounted at /:id/skills — mergeParams is set in createAgentSkillsRouter
+	router.use('/:id/skills', createAgentSkillsRouter(authService));
 
 	// ─── Memory Routes ────────────────────────────────────────────────────────
 

@@ -8,3 +8,10 @@ export {
 export { credentialDefinitionSchema } from './integrations/schema.js';
 
 export { LLM_PROVIDERS, LLM_MODELS } from './llm-catalog/index.js';
+
+export {
+	loadSkillCatalog,
+	getSkillInstructions,
+	getSkillCatalogEntry,
+	clearSkillCatalogCache,
+} from './skills/registry.js';

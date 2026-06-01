@@ -1,6 +1,10 @@
 <script lang="ts">
+	import { enhance } from '$app/forms';
 	import { goto } from '$app/navigation';
+	import { page } from '$app/stores';
 	import { api } from '$lib/api.client.js';
+	import { authStore } from '$lib/stores/auth.store.js';
+	import { get } from 'svelte/store';
 	import { setAlert } from '$lib/components/custom/alert/alert-state.svelte.js';
 	import * as Card from '$lib/components/ui/card/index.js';
 	import * as Popover from '$lib/components/ui/popover/index.js';
@@ -10,23 +14,52 @@
 	import { Label } from '$lib/components/ui/label/index.js';
 	import { Separator } from '$lib/components/ui/separator/index.js';
 	import PageHeader from '$lib/components/page-header.svelte';
-	import { authStore } from '$lib/stores/auth.store.js';
-	import { get } from 'svelte/store';
+	import AgentSkillsPanel from '$lib/components/custom/agent-skills-panel.svelte';
+	import AgentCredentialsPanel from '$lib/components/custom/agent-credentials-panel.svelte';
 	import ChevronLeftIcon from '@lucide/svelte/icons/chevron-left';
-	import ShieldIcon from '@lucide/svelte/icons/shield';
-	import type { PageData } from './$types';
-	import type { CredentialMetadata, CredentialDefinition, LlmProviderConfig } from '@repo/types';
+	import TrashIcon from '@lucide/svelte/icons/trash-2';
+	import BrainIcon from '@lucide/svelte/icons/brain';
+	import type { PageData, ActionData } from './$types';
+	import type {
+		CredentialMetadata,
+		CredentialDefinition,
+		LlmProviderConfig,
+		AgentMemoryEntry,
+		AgentEvolvedSkill
+	} from '@repo/types';
 	import { EMOJI_PRESETS } from '$lib/components/custom/agent-emojis.js';
 
-	let { data }: { data: PageData } = $props();
+	let { data, form }: { data: PageData; form: ActionData } = $props();
 
-	let credentials = $state<CredentialMetadata[]>([]);
-	let definitions = $state<CredentialDefinition[]>([]);
-	let llmConfigs = $state<LlmProviderConfig[]>([]);
+	const isEditMode = $derived(data.isEditMode);
+	const agent = $derived(data.agent);
+
+	// ── Supporting data ───────────────────────────────────────────────────────
+	let credentials = $state<CredentialMetadata[]>(data.credentials);
+	let definitions = $state<CredentialDefinition[]>(data.definitions);
+	let llmConfigs = $state<LlmProviderConfig[]>(data.llmConfigs);
+	let memory = $state<AgentMemoryEntry[]>(data.memory ?? []);
+
 	$effect(() => {
 		credentials = data.credentials;
 		definitions = data.definitions;
 		llmConfigs = data.llmConfigs;
+		memory = data.memory ?? [];
+	});
+
+	// Show success alert after redirect from form action
+	$effect(() => {
+		if ($page.url.searchParams.get('saved') === 'true') {
+			setAlert({
+				type: 'success',
+				title: isEditMode ? 'Agent updated' : 'Agent created',
+				message: isEditMode
+					? `"${agent?.name}" has been saved.`
+					: 'Your new agent has been created.',
+				duration: 5000,
+				show: true
+			});
+		}
 	});
 
 	/** Chat/completion models only */
@@ -35,21 +68,26 @@
 	const embeddingModels = $derived(llmConfigs.filter((c) => c.isEmbeddingModel));
 
 	// ── Form state ────────────────────────────────────────────────────────────
-	let name = $state('');
-	let description = $state('');
-	let systemInstruction = $state('');
-	let avatarEmoji = $state('🤖');
+	let name = $state(agent?.name ?? '');
+	let description = $state(agent?.description ?? '');
+	let systemInstruction = $state(agent?.systemInstruction ?? '');
+	let avatarEmoji = $state(agent?.avatarUrl ?? '🤖');
 	let emojiPickerOpen = $state(false);
-	let selectedCredentialIds = $state<Set<string>>(new Set());
-	/** Default to the first available chat/embedding model once data loads */
-	let selectedModelConfigId = $state<string>('');
-	let selectedEmbeddingModelConfigId = $state<string>('');
+	let selectedCredentialIds = $state<Set<string>>(new Set(agent?.credentialIds ?? []));
+	let selectedModelConfigId = $state<string>(agent?.modelConfigId ?? '');
+	let selectedEmbeddingModelConfigId = $state<string>(agent?.embeddingModelConfigId ?? '');
+	/** Skill selections — same pattern as credential checkboxes */
+	let selectedSkillNames = $state<Set<string>>(new Set(data.assignedSkillNames ?? []));
+
+	// Auto-select first model on create mode when configs load
 	$effect(() => {
-		if (!selectedModelConfigId && chatModels.length > 0) {
-			selectedModelConfigId = chatModels[0].id;
-		}
-		if (!selectedEmbeddingModelConfigId && embeddingModels.length > 0) {
-			selectedEmbeddingModelConfigId = embeddingModels[0].id;
+		if (!isEditMode) {
+			if (!selectedModelConfigId && chatModels.length > 0) {
+				selectedModelConfigId = chatModels[0].id;
+			}
+			if (!selectedEmbeddingModelConfigId && embeddingModels.length > 0) {
+				selectedEmbeddingModelConfigId = embeddingModels[0].id;
+			}
 		}
 	});
 
@@ -64,6 +102,7 @@
 			? `${embeddingModels.find((c) => c.id === selectedEmbeddingModelConfigId)!.name} (${embeddingModels.find((c) => c.id === selectedEmbeddingModelConfigId)!.model})`
 			: 'Select an embedding model'
 	);
+
 	let isSaving = $state(false);
 
 	function selectEmoji(emoji: string) {
@@ -71,99 +110,85 @@
 		emojiPickerOpen = false;
 	}
 
-	function toggleCredential(id: string) {
-		const next = new Set(selectedCredentialIds);
-		if (next.has(id)) {
-			next.delete(id);
-		} else {
-			next.add(id);
-		}
-		selectedCredentialIds = next;
-	}
+	// ── Memory deletion (edit mode only) ──────────────────────────────────────
+	let deletingMemoryId = $state<string | null>(null);
 
-	/** Get the icon URL for a credential type from definitions */
-	function getCredentialIcon(type: string): string | null {
-		return definitions.find((d) => d.id === type)?.icon ?? null;
-	}
-
-	async function handleSubmit(e: SubmitEvent) {
-		e.preventDefault();
-		isSaving = true;
-
+	async function handleDeleteMemory(entryId: string) {
+		if (!agent) return;
 		const { user } = get(authStore);
-		if (!user) {
-			setAlert({
-				type: 'error',
-				title: 'Not authenticated',
-				message: 'You must be signed in to create an agent.',
-				duration: 5000,
-				show: true
-			});
-			isSaving = false;
-			return;
-		}
+		if (!user) return;
 
+		deletingMemoryId = entryId;
 		try {
-			const res = await api('/agents', {
-				method: 'POST',
-				body: JSON.stringify({
-					ownerId: user.id,
-					name,
-					description: description || undefined,
-					systemInstruction: systemInstruction || undefined,
-					avatarUrl: avatarEmoji,
-					credentialIds: [...selectedCredentialIds],
-					modelConfigId: selectedModelConfigId || undefined,
-					embeddingModelConfigId: selectedEmbeddingModelConfigId || undefined
-				})
+			const res = await api(`/agents/${agent.id}/memory/${entryId}`, {
+				method: 'DELETE',
+				body: JSON.stringify({ ownerId: user.id })
 			});
-
-			if (!res.ok) {
-				const body = await res.json();
+			if (res.ok) {
+				memory = memory.filter((m) => m.id !== entryId);
+			} else {
 				setAlert({
 					type: 'error',
-					title: 'Failed to create agent',
-					message: body.error ?? 'An unexpected error occurred.',
+					title: 'Failed to delete memory',
+					message: 'Could not delete the memory entry.',
 					duration: 5000,
 					show: true
 				});
-				return;
 			}
-
-			setAlert({
-				type: 'success',
-				title: 'Agent created',
-				message: `"${name}" has been created successfully.`,
-				duration: 5000,
-				show: true
-			});
-			goto('/app/agents');
 		} catch {
 			setAlert({
 				type: 'error',
-				title: 'Failed to create agent',
+				title: 'Failed to delete memory',
 				message: 'An unexpected error occurred.',
 				duration: 5000,
 				show: true
 			});
 		} finally {
-			isSaving = false;
+			deletingMemoryId = null;
 		}
 	}
+
+	function formatDate(iso: string | Date): string {
+		return new Date(iso).toLocaleDateString(undefined, {
+			year: 'numeric',
+			month: 'short',
+			day: 'numeric',
+			hour: '2-digit',
+			minute: '2-digit'
+		});
+	}
+
+	/**
+	 * Evolved skills pre-loaded from server for edit mode.
+	 * Keyed by skill name for O(1) lookup in the panel component.
+	 * Currently empty — future: load from server via +page.server.ts.
+	 */
+	const evolvedSkills: Record<string, AgentEvolvedSkill> = {};
 </script>
 
 <svelte:head>
-	<title>New Agent — OpenAgent Dashboard</title>
-	<meta
-		name="description"
-		content="Create a new AI agent with custom instructions, personality, and access to your service credentials."
-	/>
-	<meta name="keywords" content="create agent, new AI agent, custom persona, OpenAgent" />
+	{#if isEditMode && agent}
+		<title>{agent.name} — Edit Agent — OpenAgent Dashboard</title>
+		<meta
+			name="description"
+			content="Edit the configuration of your AI agent: update instructions, credentials, and review memory."
+		/>
+		<meta name="keywords" content="edit agent, agent settings, AI agent configuration, OpenAgent" />
+	{:else}
+		<title>New Agent — OpenAgent Dashboard</title>
+		<meta
+			name="description"
+			content="Create a new AI agent with custom instructions, personality, and access to your service credentials."
+		/>
+		<meta name="keywords" content="create agent, new AI agent, custom persona, OpenAgent" />
+	{/if}
 </svelte:head>
 
 <PageHeader
-	title="New Agent"
-	description="Configure a new AI agent with its own persona and capabilities."
+	title={isEditMode && agent ? agent.name : 'New Agent'}
+	description={isEditMode
+		? 'Edit agent configuration, credentials, and memory.'
+		: 'Configure a new AI agent with its own persona and capabilities.'}
 >
 	{#snippet actions()}
 		<Button variant="outline" onclick={() => goto('/app/agents')} class="gap-2">
@@ -173,15 +198,52 @@
 	{/snippet}
 </PageHeader>
 
-<form onsubmit={handleSubmit} class="space-y-6">
-	<!-- ── Identity Section ────────────────────────────────────────────────── -->
+<!-- Server-side form action handles both create and edit -->
+<form
+	method="POST"
+	action="?/save"
+	use:enhance={() => {
+		isSaving = true;
+		return async ({ result, update }) => {
+			isSaving = false;
+			if (result.type === 'failure') {
+				setAlert({
+					type: 'error',
+					title: isEditMode ? 'Failed to save changes' : 'Failed to create agent',
+					message: (result.data as { error?: string })?.error ?? 'An unexpected error occurred.',
+					duration: 5000,
+					show: true
+				});
+				// Don't call update() — keep form values intact
+			} else {
+				await update();
+			}
+		};
+	}}
+	class="space-y-6"
+>
+	<!-- Hidden fields for form action -->
+	{#if isEditMode && agent}
+		<input type="hidden" name="agentId" value={agent.id} />
+	{/if}
+	<input type="hidden" name="avatarUrl" value={avatarEmoji} />
+	<!-- Credential IDs: one hidden input per selected credential -->
+	{#each [...selectedCredentialIds] as credId (credId)}
+		<input type="hidden" name="credentialIds" value={credId} />
+	{/each}
+	<!-- Skill names: one hidden input per selected skill -->
+	{#each [...selectedSkillNames] as skillName (skillName)}
+		<input type="hidden" name="skillNames" value={skillName} />
+	{/each}
+
+	<!-- ── Identity ──────────────────────────────────────────────────────────── -->
 	<Card.Root>
 		<Card.Header>
 			<Card.Title class="text-sm font-medium">Identity</Card.Title>
-			<Card.Description class="text-xs">Give your agent a name and personality.</Card.Description>
+			<Card.Description class="text-xs">Give your agent a name and avatar.</Card.Description>
 		</Card.Header>
 		<Card.Content class="space-y-4">
-			<!-- Avatar emoji picker — click the avatar tile to open the picker -->
+			<!-- Avatar emoji picker -->
 			<div class="space-y-1.5">
 				<Label>Avatar</Label>
 				<Popover.Root bind:open={emojiPickerOpen}>
@@ -223,6 +285,7 @@
 				<Label for="agent-name">Name</Label>
 				<Input
 					id="agent-name"
+					name="name"
 					type="text"
 					bind:value={name}
 					required
@@ -235,6 +298,7 @@
 				<Label for="agent-description">Description (optional)</Label>
 				<Input
 					id="agent-description"
+					name="description"
 					type="text"
 					bind:value={description}
 					placeholder="A brief description of what this agent does"
@@ -243,7 +307,7 @@
 		</Card.Content>
 	</Card.Root>
 
-	<!-- ── System Instruction Section ──────────────────────────────────────── -->
+	<!-- ── System Instruction ────────────────────────────────────────────────── -->
 	<Card.Root>
 		<Card.Header>
 			<Card.Title class="text-sm font-medium">System Instruction</Card.Title>
@@ -256,19 +320,17 @@
 				<Label for="system-instruction">Instruction</Label>
 				<textarea
 					id="system-instruction"
+					name="systemInstruction"
 					bind:value={systemInstruction}
 					placeholder="You are a helpful assistant that..."
 					rows={6}
 					class="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-none"
 				></textarea>
-				<p class="text-xs text-muted-foreground">
-					This instruction is sent as the system message every time the agent responds.
-				</p>
 			</div>
 		</Card.Content>
 	</Card.Root>
 
-	<!-- ── Model Section ────────────────────────────────────────────────────── -->
+	<!-- ── Models ────────────────────────────────────────────────────────────── -->
 	<Card.Root>
 		<Card.Header>
 			<Card.Title class="text-sm font-medium">Models</Card.Title>
@@ -292,9 +354,7 @@
 					</p>
 				{:else}
 					<Select.Root type="single" name="modelConfigId" bind:value={selectedModelConfigId}>
-						<Select.Trigger class="w-full">
-							{chatModelTriggerLabel}
-						</Select.Trigger>
+						<Select.Trigger class="w-full">{chatModelTriggerLabel}</Select.Trigger>
 						<Select.Content>
 							{#each chatModels as cfg (cfg.id)}
 								<Select.Item value={cfg.id} label="{cfg.name} ({cfg.model})">
@@ -323,9 +383,7 @@
 						name="embeddingModelConfigId"
 						bind:value={selectedEmbeddingModelConfigId}
 					>
-						<Select.Trigger class="w-full">
-							{embeddingModelTriggerLabel}
-						</Select.Trigger>
+						<Select.Trigger class="w-full">{embeddingModelTriggerLabel}</Select.Trigger>
 						<Select.Content>
 							{#each embeddingModels as cfg (cfg.id)}
 								<Select.Item value={cfg.id} label="{cfg.name} ({cfg.model})">
@@ -335,71 +393,18 @@
 						</Select.Content>
 					</Select.Root>
 					<p class="text-xs text-muted-foreground">
-						Used to generate vector embeddings for memory. Changing this model will require clearing
-						existing memory.
+						Used to generate vector embeddings for memory. Changing this model requires clearing
+						existing memory entries.
 					</p>
 				{/if}
 			</div>
 		</Card.Content>
 	</Card.Root>
 
-	<!-- ── Credentials Section ─────────────────────────────────────────────── -->
-	<Card.Root>
-		<Card.Header>
-			<Card.Title class="text-sm font-medium">Credentials</Card.Title>
-			<Card.Description class="text-xs">
-				Select which credentials this agent can access. Only selected credentials will be available
-				to the agent at runtime.
-			</Card.Description>
-		</Card.Header>
-		<Card.Content>
-			{#if credentials.length === 0}
-				<p class="py-4 text-center text-sm text-muted-foreground">
-					No credentials configured yet.
-					<a href="/app/credentials" class="underline underline-offset-2 hover:text-foreground">
-						Add credentials
-					</a>
-					first.
-				</p>
-			{:else}
-				<div class="space-y-2">
-					{#each credentials as cred (cred.id)}
-						{@const icon = getCredentialIcon(cred.type)}
-						<label
-							class="flex cursor-pointer items-center gap-3 rounded-md border border-border px-3 py-2.5 transition-colors hover:bg-muted/50 {selectedCredentialIds.has(
-								cred.id
-							)
-								? 'border-primary bg-primary/5'
-								: ''}"
-						>
-							<input
-								type="checkbox"
-								checked={selectedCredentialIds.has(cred.id)}
-								onchange={() => toggleCredential(cred.id)}
-								class="size-4 rounded border-border accent-primary"
-							/>
-							<!-- Credential service icon or fallback -->
-							<div
-								class="flex size-6 shrink-0 items-center justify-center rounded bg-muted text-muted-foreground"
-							>
-								{#if icon}
-									<img src={icon} alt={cred.type} class="size-4 object-contain" />
-								{:else}
-									<ShieldIcon class="size-3.5" />
-								{/if}
-							</div>
-							<div class="min-w-0 flex-1">
-								<p class="truncate text-sm font-medium text-foreground">{cred.name}</p>
-								<p class="text-xs text-muted-foreground">{cred.type}</p>
-							</div>
-						</label>
-					{/each}
-				</div>
-			{/if}
-		</Card.Content>
-	</Card.Root>
+	<!-- ── Credentials ───────────────────────────────────────────────────────── -->
+	<AgentCredentialsPanel bind:selectedCredentialIds {credentials} {definitions} />
 
-	<!-- ── Knowledge Base Section (stub) ───────────────────────────────────── -->
+	<!-- ── Knowledge Base (stub) ─────────────────────────────────────────────── -->
 	<Card.Root>
 		<Card.Header>
 			<Card.Title class="text-sm font-medium">Knowledge Base</Card.Title>
@@ -412,27 +417,76 @@
 		</Card.Content>
 	</Card.Root>
 
-	<!-- ── Skills Section (stub) ───────────────────────────────────────────── -->
-	<Card.Root>
-		<Card.Header>
-			<Card.Title class="text-sm font-medium">Skills</Card.Title>
-			<Card.Description class="text-xs">
-				Enable specific capabilities for this agent.
-			</Card.Description>
-		</Card.Header>
-		<Card.Content>
-			<p class="py-4 text-center text-sm text-muted-foreground">Coming soon</p>
-		</Card.Content>
-	</Card.Root>
+	<!-- ── Skills ────────────────────────────────────────────────────────────── -->
+	<!--
+		Checkboxes in the component update `selectedSkillNames` (a Set).
+		Hidden inputs above serialise the set into repeated `skillNames` form fields.
+		The form action's two-step logic (create/update agent → diff + sync skills) does the rest.
+	-->
+	<AgentSkillsPanel
+		bind:selectedSkillNames
+		agentId={isEditMode ? agent?.id : null}
+		{evolvedSkills}
+	/>
 
-	<!-- ── Submit ──────────────────────────────────────────────────────────── -->
+	<!-- ── Memory (edit mode only) ───────────────────────────────────────────── -->
+	{#if isEditMode}
+		<Card.Root>
+			<Card.Header>
+				<Card.Title class="text-sm font-medium">Memory</Card.Title>
+				<Card.Description class="text-xs">
+					Long-term memory entries stored by this agent. Searchable at runtime via vector
+					similarity.
+				</Card.Description>
+			</Card.Header>
+			<Card.Content>
+				{#if memory.length === 0}
+					<div class="flex flex-col items-center gap-2 py-6">
+						<BrainIcon class="size-5 text-muted-foreground" />
+						<p class="text-sm text-muted-foreground">No memory entries yet.</p>
+						<p class="text-xs text-muted-foreground">
+							Memory is populated by the agent during conversations.
+						</p>
+					</div>
+				{:else}
+					<div class="space-y-2">
+						{#each memory as entry (entry.id)}
+							<div class="flex items-start gap-3 rounded-md border border-border px-3 py-2.5">
+								<div class="min-w-0 flex-1">
+									<p class="text-sm text-foreground">{entry.content}</p>
+									<p class="mt-1 text-xs text-muted-foreground">{formatDate(entry.createdAt)}</p>
+								</div>
+								<Button
+									type="button"
+									variant="ghost"
+									size="sm"
+									onclick={() => handleDeleteMemory(entry.id)}
+									disabled={deletingMemoryId === entry.id}
+									class="shrink-0 text-destructive hover:bg-destructive/10 hover:text-destructive"
+									title="Delete memory entry"
+								>
+									<TrashIcon class="size-3.5" />
+								</Button>
+							</div>
+						{/each}
+					</div>
+				{/if}
+			</Card.Content>
+		</Card.Root>
+	{/if}
+
+	<!-- ── Submit ────────────────────────────────────────────────────────────── -->
 	<Separator />
 	<div class="flex justify-end gap-3">
 		<Button type="button" variant="outline" onclick={() => goto('/app/agents')} disabled={isSaving}>
 			Cancel
 		</Button>
-		<Button type="submit" disabled={isSaving || !name}>
-			{isSaving ? 'Creating…' : 'Create agent'}
+		<Button type="submit" disabled={isSaving || (!isEditMode && !name)}>
+			{#if isSaving}
+				{isEditMode ? 'Saving…' : 'Creating…'}
+			{:else}
+				{isEditMode ? 'Save changes' : 'Create agent'}
+			{/if}
 		</Button>
 	</div>
 </form>

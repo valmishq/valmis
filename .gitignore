@@ -14,9 +14,6 @@ build
 .env.local
 .env.*.local
 
-# Drizzle — generated migration files (commit these if you want migration history)
-drizzle/
-
 # OS
 .DS_Store
 Thumbs.db

@@ -217,7 +217,7 @@
 							<Button
 								variant="ghost"
 								size="sm"
-								onclick={() => goto(`/app/agents/${agent.id}`)}
+								onclick={() => goto(`/app/agents/new?id=${agent.id}&editmode=true`)}
 								class="text-muted-foreground hover:text-foreground"
 								title="Edit agent"
 							>

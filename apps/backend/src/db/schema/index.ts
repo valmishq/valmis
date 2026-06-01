@@ -8,3 +8,6 @@ export * from './apiKeys.js';
 export * from './agents.js';
 export * from './agentCredentials.js';
 export * from './agentMemory.js';
+export * from './agentSkills.js';
+export * from './agentEvolvedSkills.js';
+export * from './agentExecutionTraces.js';
