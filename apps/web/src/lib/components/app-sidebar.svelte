@@ -8,13 +8,16 @@
 	import { Switch } from '$lib/components/ui/switch/index.js';
 	import { Label } from '$lib/components/ui/label/index.js';
 	import * as Tooltip from '$lib/components/ui/tooltip/index.js';
+	import * as DropdownMenu from '$lib/components/ui/dropdown-menu/index.js';
 	import HouseIcon from '@lucide/svelte/icons/house';
-	import KeyIcon from '@lucide/svelte/icons/key';
 	import BotIcon from '@lucide/svelte/icons/bot';
 	import ShieldIcon from '@lucide/svelte/icons/shield';
 	import CpuIcon from '@lucide/svelte/icons/cpu';
+	import UserIcon from '@lucide/svelte/icons/user';
+	import KeyIcon from '@lucide/svelte/icons/key';
 	import LogOutIcon from '@lucide/svelte/icons/log-out';
 	import MoonIcon from '@lucide/svelte/icons/moon';
+	import ChevronsUpDownIcon from '@lucide/svelte/icons/chevrons-up-down';
 	import type { User } from '@repo/types';
 
 	let { user }: { user: User } = $props();
@@ -24,13 +27,29 @@
 	const sidebar = useSidebar();
 	let isExpanded = $derived(sidebar.state === 'expanded');
 
-	/** Navigation items for the main menu */
+	/** On mobile the sidebar is a sheet overlay — close it after navigation. */
+	function closeMobileIfNeeded() {
+		if (sidebar.isMobile) {
+			sidebar.setOpenMobile(false);
+		}
+	}
+
+	/** Compute display name from first/last name or fall back to email prefix */
+	let displayName = $derived(
+		user.first_name || user.last_name
+			? [user.first_name, user.last_name].filter(Boolean).join(' ')
+			: user.email.split('@')[0]
+	);
+
+	/** Single capital letter for the avatar */
+	let avatarInitial = $derived(displayName.charAt(0).toUpperCase());
+
+	/** Main navigation items */
 	const navItems = [
 		{ title: 'Home', url: '/app', icon: HouseIcon },
 		{ title: 'Agents', url: '/app/agents', icon: BotIcon },
 		{ title: 'LLM Providers', url: '/app/llm-providers', icon: CpuIcon },
-		{ title: 'Credentials', url: '/app/credentials', icon: ShieldIcon },
-		{ title: 'API Keys', url: '/app/api-keys', icon: KeyIcon }
+		{ title: 'Credentials', url: '/app/credentials', icon: ShieldIcon }
 	];
 
 	function isActive(url: string): boolean {
@@ -38,6 +57,7 @@
 	}
 
 	async function handleLogout() {
+		closeMobileIfNeeded();
 		authStore.logout();
 		goto('/signin');
 	}
@@ -73,7 +93,7 @@
 						<Sidebar.MenuItem>
 							<Sidebar.MenuButton isActive={isActive(item.url)} tooltipContent={item.title}>
 								{#snippet child({ props })}
-									<a href={item.url} {...props}>
+									<a href={item.url} {...props} onclick={closeMobileIfNeeded}>
 										<item.icon />
 										<span>{item.title}</span>
 									</a>
@@ -86,7 +106,7 @@
 		</Sidebar.Group>
 	</Sidebar.Content>
 
-	<!-- Footer: dark mode toggle + user info + sign out -->
+	<!-- Footer: dark mode toggle + account dropdown -->
 	<Sidebar.Footer>
 		<Sidebar.Menu>
 			<!-- Dark mode toggle: full row when expanded, switch-only when collapsed -->
@@ -121,12 +141,87 @@
 				{/if}
 			</Sidebar.MenuItem>
 
-			<!-- Sign out -->
+			<!-- Account dropdown -->
 			<Sidebar.MenuItem>
-				<Sidebar.MenuButton tooltipContent="Sign out" onclick={handleLogout}>
-					<LogOutIcon />
-					<span class="truncate">{user.email}</span>
-				</Sidebar.MenuButton>
+				<DropdownMenu.Root>
+					<DropdownMenu.Trigger>
+						{#snippet child({ props })}
+							<Sidebar.MenuButton
+								size="lg"
+								class="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
+								tooltipContent={user.email}
+								{...props}
+							>
+								<!-- Avatar circle with initial -->
+								<div
+									class="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary text-xs font-semibold text-primary-foreground"
+								>
+									{avatarInitial}
+								</div>
+								<div class="flex min-w-0 flex-1 flex-col text-left leading-tight">
+									<span class="truncate text-sm font-medium">{displayName}</span>
+									<span class="truncate text-xs text-muted-foreground">{user.email}</span>
+								</div>
+								<ChevronsUpDownIcon class="ml-auto size-4 shrink-0 text-muted-foreground" />
+							</Sidebar.MenuButton>
+						{/snippet}
+					</DropdownMenu.Trigger>
+
+					<DropdownMenu.Content
+						class="w-[--bits-dropdown-menu-anchor-width] min-w-56 rounded-lg"
+						side={isExpanded ? 'top' : 'right'}
+						align="end"
+						sideOffset={4}
+					>
+						<!-- Account info header -->
+						<DropdownMenu.Label class="p-0 font-normal">
+							<div class="flex items-center gap-2 px-1 py-1.5 text-left text-sm">
+								<div
+									class="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary text-xs font-semibold text-primary-foreground"
+								>
+									{avatarInitial}
+								</div>
+								<div class="flex min-w-0 flex-col">
+									<span class="truncate font-medium">{displayName}</span>
+									<span class="truncate text-xs text-muted-foreground">{user.email}</span>
+								</div>
+							</div>
+						</DropdownMenu.Label>
+
+						<DropdownMenu.Separator />
+
+						<DropdownMenu.Group>
+							<DropdownMenu.Item
+								onSelect={() => {
+									closeMobileIfNeeded();
+									goto('/app/account/profile');
+								}}
+							>
+								<UserIcon class="mr-2 size-4" />
+								Profile
+							</DropdownMenu.Item>
+							<DropdownMenu.Item
+								onSelect={() => {
+									closeMobileIfNeeded();
+									goto('/app/account/api-keys');
+								}}
+							>
+								<KeyIcon class="mr-2 size-4" />
+								API Keys
+							</DropdownMenu.Item>
+						</DropdownMenu.Group>
+
+						<DropdownMenu.Separator />
+
+						<DropdownMenu.Item
+							onSelect={handleLogout}
+							class="text-destructive focus:text-destructive"
+						>
+							<LogOutIcon class="mr-2 size-4" />
+							Log out
+						</DropdownMenu.Item>
+					</DropdownMenu.Content>
+				</DropdownMenu.Root>
 			</Sidebar.MenuItem>
 		</Sidebar.Menu>
 	</Sidebar.Footer>
