@@ -41,8 +41,9 @@
 		requiresBaseUrl: true,
 		modelPlaceholder: 'e.g. llama3'
 	};
-	const ALL_PROVIDERS: LlmCatalogProvider[] = [...data.llmProviders, CUSTOM_PROVIDER];
-	const ALL_MODELS: LlmCatalogModel[] = data.llmModels;
+	// $derived so these re-compute if data changes (e.g. invalidation / navigation)
+	const ALL_PROVIDERS: LlmCatalogProvider[] = $derived([...data.llmProviders, CUSTOM_PROVIDER]);
+	const ALL_MODELS: LlmCatalogModel[] = $derived(data.llmModels);
 
 	// ── Add config dialog ──────────────────────────────────────────────────────
 	let addDialogOpen = $state(false);

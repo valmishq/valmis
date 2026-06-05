@@ -7,7 +7,12 @@ import type { SkillCatalogEntry } from '@repo/types';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const SKILLS_DIR = path.resolve(__dirname);
+// Resolve the skills directory relative to the package root (packages/utils/).
+// Go up 2 levels from src/skills/ (or dist/skills/) to reach packages/utils/,
+// then descend into src/skills/ where the SKILL.md files live.
+// tsc does not copy .md files, so we always point at the src/ tree regardless of
+// whether the compiled dist/ or the source src/ version of this file is running.
+const SKILLS_DIR = path.resolve(__dirname, '../../src/skills');
 
 /** In-memory cache of all parsed skill catalog entries */
 let catalogCache: SkillCatalogEntry[] | null = null;

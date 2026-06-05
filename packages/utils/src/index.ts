@@ -1,4 +1,8 @@
-// @repo/utils — shared utility functions
+// @repo/utils — shared utility functions (Node.js only — uses node:fs)
+export { logger } from './logger.js';
+
+export { resolveProviderApi, PROVIDER_TO_PI_API } from './llm-provider-api-map.js';
+
 export {
 	loadCredentialDefinitions,
 	getCredentialDefinition,
@@ -6,8 +10,6 @@ export {
 } from './integrations/registry.js';
 
 export { credentialDefinitionSchema } from './integrations/schema.js';
-
-export { LLM_PROVIDERS, LLM_MODELS } from './llm-catalog/index.js';
 
 export {
 	loadSkillCatalog,

@@ -1,0 +1,197 @@
+import { jwtVerify, SignJWT } from 'jose';
+import type { ProxyRequest, ProxyResponse, SandboxTokenPayload, HitlRequest } from '@repo/types';
+import { CredentialResolverService } from './CredentialResolverService.js';
+import { agentStreamBus } from './AgentStreamBus.js';
+import { logger } from '../config/logger.js';
+
+/**
+ * TTL for a pending HITL request.
+ * If the human does not respond within this window the sandbox receives a timeout error.
+ */
+const HITL_TIMEOUT_MS = 30 * 60 * 1000;
+
+/** Internal state for one pending HITL interaction */
+interface HitlPending {
+	resolve: (response: string) => void;
+	reject: (err: Error) => void;
+	timer: ReturnType<typeof setTimeout>;
+}
+
+/**
+ * Validates PROXY_TOKENs issued to agent sandboxes and executes credential proxy requests.
+ * Also manages in-process Human-in-the-Loop (HITL) blocking interactions.
+ *
+ * Security model:
+ *   - Every sandbox receives a short-lived JWT (PROXY_TOKEN) at container spawn time.
+ *   - The token is scoped to one agent, one thread, and one set of allowed credential IDs.
+ *   - This service validates the token and enforces that the requested credentialId is
+ *     in the token's allowlist before calling CredentialResolverService.
+ *   - Raw credential values never leave the host process — the sandbox only receives
+ *     the API response body.
+ *
+ * HITL design:
+ *   - The sandbox calls POST /v1/runtime/internal/hitl/request with { prompt, options? }.
+ *   - The route handler calls submitHitlRequest() which stores a Promise resolver keyed by
+ *     threadId and emits a `hitl_request` SSE event so the browser can unlock the input.
+ *   - The route handler then awaits the returned promise (long HTTP connection).
+ *   - When the user sends their next message, the message route handler checks for a pending
+ *     HITL via resolveHitlRequest() and resolves it instead of spawning a new child process.
+ */
+export class AgentProxyService {
+	private readonly credentialResolver: CredentialResolverService;
+	private readonly proxyTokenSecret: Uint8Array;
+
+	/** Keyed by threadId — at most one pending HITL per thread at any time */
+	private readonly pendingHitl = new Map<string, HitlPending>();
+
+	constructor(credentialResolver: CredentialResolverService, proxyTokenSecret: string) {
+		this.credentialResolver = credentialResolver;
+		this.proxyTokenSecret = new TextEncoder().encode(proxyTokenSecret);
+	}
+
+	/**
+	 * Issue a PROXY_TOKEN for a container spawn.
+	 * TTL: 15 minutes — sufficient for a typical agent task.
+	 */
+	async issueProxyToken(payload: Omit<SandboxTokenPayload, 'iat' | 'exp'>): Promise<string> {
+		return new SignJWT({
+			agentId: payload.agentId,
+			ownerId: payload.ownerId,
+			threadId: payload.threadId,
+			credentialIds: payload.credentialIds,
+		})
+			.setProtectedHeader({ alg: 'HS256' })
+			.setIssuedAt()
+			.setExpirationTime('15m')
+			.sign(this.proxyTokenSecret);
+	}
+
+	/**
+	 * Validate a PROXY_TOKEN and return its decoded payload.
+	 * Throws if the token is invalid, expired, or malformed.
+	 */
+	async verifyProxyToken(token: string): Promise<SandboxTokenPayload> {
+		const { payload } = await jwtVerify(token, this.proxyTokenSecret);
+		return payload as unknown as SandboxTokenPayload;
+	}
+
+	// ─── HITL ──────────────────────────────────────────────────────────────
+
+	/**
+	 * Submit a HITL request on behalf of a sandbox.
+	 *
+	 * Emits a `hitl_request` SSE event to the browser so the UI can display the
+	 * prompt and unlock the chat input. Returns a promise that resolves when
+	 * resolveHitlRequest() is called (i.e. when the human sends their reply).
+	 *
+	 * Rejects automatically after HITL_TIMEOUT_MS if the human does not respond.
+	 */
+	submitHitlRequest(threadId: string, request: HitlRequest): Promise<string> {
+		// Reject any previously pending HITL for this thread (shouldn't happen normally)
+		if (this.pendingHitl.has(threadId)) {
+			const existing = this.pendingHitl.get(threadId)!;
+			clearTimeout(existing.timer);
+			existing.reject(new Error('Superseded by a new HITL request'));
+			this.pendingHitl.delete(threadId);
+		}
+
+		logger.info(
+			{ threadId, prompt: request.prompt },
+			'[hitl] sandbox submitted HITL request — waiting for human response',
+		);
+
+		// Emit SSE event so the browser unlocks the chat input and shows the prompt
+		agentStreamBus.emit(threadId, {
+			type: 'hitl_request',
+			prompt: request.prompt,
+			options: request.options,
+		});
+
+		return new Promise<string>((resolve, reject) => {
+			const timer = setTimeout(() => {
+				this.pendingHitl.delete(threadId);
+				logger.warn({ threadId }, '[hitl] HITL request timed out — no human response');
+				reject(new Error('HITL request timed out — no human response within the allowed window'));
+			}, HITL_TIMEOUT_MS);
+
+			this.pendingHitl.set(threadId, { resolve, reject, timer });
+		});
+	}
+
+	/**
+	 * Check whether a thread has a pending HITL request awaiting a human response.
+	 * Used by the message route handler before deciding whether to spawn a child process.
+	 */
+	hasPendingHitl(threadId: string): boolean {
+		return this.pendingHitl.has(threadId);
+	}
+
+	/**
+	 * Resolve a pending HITL request with the human's response text.
+	 * The promise returned by submitHitlRequest() will resolve with this value,
+	 * unblocking the long-polling HTTP connection held by the child process.
+	 *
+	 * Returns true if a pending request was found and resolved, false otherwise.
+	 */
+	resolveHitlRequest(threadId: string, response: string): boolean {
+		const pending = this.pendingHitl.get(threadId);
+		if (!pending) return false;
+
+		clearTimeout(pending.timer);
+		this.pendingHitl.delete(threadId);
+
+		logger.info({ threadId }, '[hitl] HITL request resolved by human response');
+		pending.resolve(response);
+		return true;
+	}
+
+	// ─── Credential Proxy ─────────────────────────────────────────────────
+
+	/**
+	 * Execute a credential proxy request on behalf of a sandbox.
+	 *
+	 * Steps:
+	 *   1. Verify PROXY_TOKEN
+	 *   2. Enforce that credentialId is in the token's allowed list
+	 *   3. Delegate to CredentialResolverService.executeWithCredential()
+	 *   4. Return response (status, headers, body) — never the raw credential
+	 */
+	async executeProxyRequest(proxyToken: string, request: ProxyRequest): Promise<ProxyResponse> {
+		// Step 1 — validate token
+		const tokenPayload = await this.verifyProxyToken(proxyToken);
+
+		// Step 2 — enforce credential allowlist
+		if (!tokenPayload.credentialIds.includes(request.credentialId)) {
+			throw new Error(
+				`Credential ${request.credentialId} is not authorized for this sandbox session`,
+			);
+		}
+
+		logger.info(
+			{ agentId: tokenPayload.agentId, credentialId: request.credentialId, url: request.url },
+			'[proxy] executing credential proxy request',
+		);
+
+		// Step 3 — execute via resolver (handles OAuth2 refresh, header injection, etc.)
+		const response = await this.credentialResolver.executeWithCredential(
+			request.credentialId,
+			tokenPayload.ownerId,
+			{
+				method: request.method,
+				url: request.url,
+				headers: request.headers,
+				qs: request.qs,
+				body: request.body,
+			},
+		);
+
+		// Step 4 — collect response
+		const body = await response.text();
+		const headers: Record<string, string> = {};
+		response.headers.forEach((value, key) => {
+			headers[key] = value;
+		});
+
+		return { status: response.status, headers, body };
+	}
+}

@@ -1,7 +1,10 @@
 import { eq, and, inArray, sql } from 'drizzle-orm';
+import { rmSync } from 'fs';
+import { resolve } from 'path';
 import { db } from '../db/index.js';
 import { agents, agentCredentials, agentMemory } from '../db/schema/index.js';
 import type { Agent, AgentMemoryEntry } from '@repo/types';
+import { logger } from '../config/logger.js';
 
 // ─── Input Types ──────────────────────────────────────────────────────────────
 
@@ -192,12 +195,28 @@ export class AgentService {
 		return this.getById(id, ownerId);
 	}
 
-	/** Delete an agent (cascades to credentials junction and memory) */
+	/** Delete an agent (cascades to credentials junction and memory) and removes the workspace */
 	async delete(id: string, ownerId: string): Promise<boolean> {
 		const result = await db
 			.delete(agents)
 			.where(and(eq(agents.id, id), eq(agents.ownerId, ownerId)));
-		return (result.rowCount ?? 0) > 0;
+
+		const deleted = (result.rowCount ?? 0) > 0;
+
+		if (deleted) {
+			// Clean up the per-agent persistent workspace directory.
+			// Non-fatal — the workspace may not exist yet if the agent never ran.
+			const workspacesBasePath =
+				process.env.AGENT_WORKSPACES_PATH ?? resolve(process.cwd(), '.agent-workspaces');
+			const workspacePath = `${workspacesBasePath}/${id}`;
+			try {
+				rmSync(workspacePath, { recursive: true, force: true });
+			} catch (err) {
+				logger.warn({ err, agentId: id }, '[agent] failed to remove workspace directory');
+			}
+		}
+
+		return deleted;
 	}
 
 	// ─── Memory Operations ────────────────────────────────────────────────────

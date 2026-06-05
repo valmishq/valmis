@@ -1,12 +1,2 @@
-import pino from 'pino';
-
-export const logger = pino({
-	level: process.env.LOG_LEVEL || 'info',
-	redact: ['password'],
-	transport: {
-		target: 'pino-pretty',
-		options: {
-			colorize: true,
-		},
-	},
-});
+// Re-export the shared logger from @repo/utils so all backend code imports from here.
+export { logger } from '@repo/utils';

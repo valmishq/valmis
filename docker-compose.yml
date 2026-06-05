@@ -1,0 +1,62 @@
+# Docker Compose for production/staging deployment.
+#
+# Architecture: single "app" container runs both frontend (port 3000) and backend (port 4000).
+#   - Only port 3000 is exposed to the internet.
+#   - Port 4000 is bound to the Docker network only (not published externally).
+#   - Agent turns run as Node.js child processes spawned by the backend (no Docker-in-Docker).
+#   - The agent-runtime compiled output is included in the container image at build time.
+#
+# Quick start:
+#   cp .env.example .env
+#   # fill in .env values, then:
+#   docker compose up -d
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      # Only the frontend is exposed to the internet
+      - '${FRONTEND_PORT:-3000}:3000'
+      # Port 4000 (backend) is NOT published — only reachable within the Docker network
+    env_file: .env
+    environment:
+      # Agent-runtime entry is at a fixed path inside the image (set in Dockerfile)
+      AGENT_RUNTIME_ENTRY: /repo/apps/agent-runtime/dist/index.js
+      # Per-agent workspace storage — must be a named volume or bind mount for persistence
+      AGENT_WORKSPACES_PATH: /opt/agent-workspaces
+    volumes:
+      # Persist per-agent workspaces across container restarts
+      - agent_workspaces:/opt/agent-workspaces
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  postgres:
+    # pgvector/pgvector includes the pgvector extension required for the vector column type
+    image: pgvector/pgvector:pg17
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-agent-int}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      # Expose to host for local DB access/migrations — remove in production if not needed
+      - '5432:5432'
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-agent-int}']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  postgres_data:
+  agent_workspaces:
+
+networks:
+  default:
+    name: openagentintegration_default

@@ -1,0 +1,14 @@
+{
+	"name": "@repo/models",
+	"version": "1.0.0",
+	"private": true,
+	"exports": {
+		".": "./src/index.ts"
+	},
+	"devDependencies": {
+		"@repo/tsconfig": "workspace:*"
+	},
+	"dependencies": {
+		"@repo/types": "workspace:*"
+	}
+}

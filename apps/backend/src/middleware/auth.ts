@@ -63,11 +63,25 @@ export function requireAuth(authService: AuthService) {
 			return;
 		}
 
-		// --- JWT path ---
+		// --- JWT path (Authorization header) ---
 		const authHeader = req.headers.authorization;
 		if (authHeader?.startsWith('Bearer ')) {
 			const token = authHeader.slice(7);
 			const payload = await authService.verifyToken(token);
+			if (!payload) {
+				res.status(401).json({ success: false, error: 'Invalid or expired token' });
+				return;
+			}
+			req.user = payload;
+			next();
+			return;
+		}
+
+		// --- JWT path (query param) — for EventSource which cannot send custom headers ---
+		// Only accepted on GET requests to limit the exposure surface.
+		const queryToken = req.method === 'GET' ? (req.query.token as string | undefined) : undefined;
+		if (queryToken) {
+			const payload = await authService.verifyToken(queryToken);
 			if (!payload) {
 				res.status(401).json({ success: false, error: 'Invalid or expired token' });
 				return;

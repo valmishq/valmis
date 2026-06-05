@@ -1,4 +1,5 @@
 import express from 'express';
+import { logger } from './config/logger.js';
 import { corsMiddleware } from './middleware/cors.js';
 import { rateLimiter } from './middleware/auth.js';
 import { healthRouter } from './routes/health.js';
@@ -11,18 +12,59 @@ import { createApiKeysRouter } from './routes/apiKeys.js';
 import { createIamRouter } from './routes/iam.js';
 import { createAgentsRouter } from './routes/agents.js';
 import { createSkillsRouter } from './routes/skills.js';
+import { createRuntimeRouter } from './routes/runtime.js';
+import { createWebhooksRouter } from './routes/webhooks.js';
 import { UserService } from './services/UserService.js';
 import { AuthService } from './services/AuthService.js';
+import { EncryptionService } from './services/EncryptionService.js';
+import { CredentialService } from './services/CredentialService.js';
+import { CredentialResolverService } from './services/CredentialResolverService.js';
+import { AgentService } from './services/AgentService.js';
+import { LlmProviderService } from './services/llmProviderService.js';
+import { AgentSessionService } from './services/AgentSessionService.js';
+import { agentStreamBus } from './services/AgentStreamBus.js';
+import { AgentProxyService } from './services/AgentProxyService.js';
+import { AgentLlmProxyService } from './services/AgentLlmProxyService.js';
+import { AgentRuntimeService } from './services/AgentRuntimeService.js';
+import { TriggerService } from './services/TriggerService.js';
 
 // --- Validate required environment variables at startup ---
-const { JWT_SECRET, JWT_EXPIRES_IN } = process.env;
+const { JWT_SECRET, JWT_EXPIRES_IN, PROXY_TOKEN_SECRET } = process.env;
 if (!JWT_SECRET || !JWT_EXPIRES_IN) {
 	throw new Error('Missing required env vars: JWT_SECRET and JWT_EXPIRES_IN must be set');
+}
+if (!PROXY_TOKEN_SECRET) {
+	throw new Error('Missing required env var: PROXY_TOKEN_SECRET must be set');
 }
 
 // --- Instantiate shared services ---
 const userService = new UserService();
 const authService = new AuthService(userService, JWT_SECRET, JWT_EXPIRES_IN);
+
+// --- Instantiate runtime services ---
+// EncryptionService reads CREDENTIAL_ENCRYPTION_KEY from env and throws if missing
+const encryptionService = new EncryptionService();
+const credentialService = new CredentialService(encryptionService);
+const credentialResolverService = new CredentialResolverService(credentialService);
+const agentService = new AgentService();
+const llmProviderService = new LlmProviderService(encryptionService);
+const sessionService = new AgentSessionService();
+const proxyService = new AgentProxyService(credentialResolverService, PROXY_TOKEN_SECRET);
+const llmProxyService = new AgentLlmProxyService(
+	proxyService,
+	agentService,
+	llmProviderService,
+	encryptionService,
+	agentStreamBus,
+	sessionService,
+);
+const runtimeService = new AgentRuntimeService(
+	sessionService,
+	proxyService,
+	agentService,
+	llmProviderService,
+);
+const triggerService = new TriggerService(runtimeService, sessionService);
 
 const app = express();
 const PORT = process.env.BACKEND_PORT ?? 4000;
@@ -35,7 +77,8 @@ app.set('trust proxy', parseInt(process.env.TRUST_PROXY_HOPS ?? '0', 10));
 
 // --- Global middleware ---
 app.use(corsMiddleware);
-app.use(express.json());
+// Limit JSON bodies to 1 MB to prevent large-payload abuse from the agent proxy routes
+app.use(express.json({ limit: '1mb' }));
 app.use(express.urlencoded({ extended: true }));
 
 // Rate limiter — applied globally with public endpoint exclusions
@@ -46,6 +89,9 @@ app.use((req, res, next) => {
 		/^\/v1\/health$/,
 		// OAuth2 callback must remain public — the provider redirects here without a token
 		/^\/v1\/oauth2\/callback$/,
+		// Webhook endpoints are called by external services at arbitrary frequency;
+		// IP-based rate limiting would drop legitimate high-volume events.
+		/^\/v1\/webhooks\//,
 	];
 	if (excluded.some((p) => p.test(req.path))) return next();
 	return rateLimiter(req, res, next);
@@ -62,9 +108,25 @@ app.use('/v1/api-keys', createApiKeysRouter(authService));
 app.use('/v1/iam', createIamRouter(authService));
 app.use('/v1/agents', createAgentsRouter(authService));
 app.use('/v1/skills', createSkillsRouter(authService));
+// Runtime routes — user-facing + sandbox-internal (PROXY_TOKEN auth)
+app.use(
+	'/v1/runtime',
+	createRuntimeRouter(
+		authService,
+		sessionService,
+		runtimeService,
+		proxyService,
+		llmProxyService,
+		triggerService,
+	),
+);
+// Webhook routes — public, HMAC-verified
+app.use('/v1/webhooks', createWebhooksRouter(triggerService));
 
-app.listen(PORT, () => {
-	console.log(`[backend] Server running at http://localhost:${PORT}`);
+app.listen(PORT, async () => {
+	logger.info({ port: PORT }, '[backend] server running');
+	// Load and schedule all enabled cron triggers on startup
+	await triggerService.loadAll();
 });
 
 export default app;

@@ -1,7 +1,7 @@
 import type { PageServerLoad } from './$types';
 import { api } from '$lib/server/api';
 import type { LlmProviderConfig } from '@repo/types';
-import { LLM_PROVIDERS, LLM_MODELS } from '@repo/utils';
+import { LLM_PROVIDERS, LLM_MODELS } from '@repo/models';
 
 /**
  * Load the current user's LLM provider configs and the static catalog for SSR.

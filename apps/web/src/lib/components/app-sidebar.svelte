@@ -11,6 +11,7 @@
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu/index.js';
 	import HouseIcon from '@lucide/svelte/icons/house';
 	import BotIcon from '@lucide/svelte/icons/bot';
+	import MessageSquareIcon from '@lucide/svelte/icons/message-square';
 	import ShieldIcon from '@lucide/svelte/icons/shield';
 	import CpuIcon from '@lucide/svelte/icons/cpu';
 	import UserIcon from '@lucide/svelte/icons/user';
@@ -47,6 +48,7 @@
 	/** Main navigation items */
 	const navItems = [
 		{ title: 'Home', url: '/app', icon: HouseIcon },
+		{ title: 'Chat', url: '/app/chat', icon: MessageSquareIcon },
 		{ title: 'Agents', url: '/app/agents', icon: BotIcon },
 		{ title: 'LLM Providers', url: '/app/llm-providers', icon: CpuIcon },
 		{ title: 'Credentials', url: '/app/credentials', icon: ShieldIcon }

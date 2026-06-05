@@ -1,0 +1,23 @@
+{
+	"name": "@repo/agent-runtime",
+	"version": "0.0.1",
+	"private": true,
+	"type": "module",
+	"scripts": {
+		"build": "tsc --project tsconfig.json",
+		"dev": "tsc --project tsconfig.json --watch",
+		"typecheck": "tsc --noEmit",
+		"lint": "tsc --noEmit"
+	},
+	"dependencies": {
+		"@earendil-works/pi-agent-core": "^0.78.0",
+		"@earendil-works/pi-ai": "^0.78.0",
+		"@repo/types": "workspace:*",
+		"@repo/utils": "workspace:*"
+	},
+	"devDependencies": {
+		"@repo/tsconfig": "workspace:*",
+		"@types/node": "^25.9.1",
+		"tsx": "^4.22.3"
+	}
+}

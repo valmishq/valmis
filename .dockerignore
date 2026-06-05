@@ -1,0 +1,38 @@
+# Dependencies — reinstalled inside the image
+**/node_modules
+
+# Build outputs — compiled inside the image
+**/dist
+**/.svelte-kit
+**/build
+
+# Turbo cache
+.turbo
+
+# Local dev files — .env IS included so the builder stage can bake SvelteKit
+# static private vars at build time. It does NOT get copied to the runner stage.
+# *.local files (e.g. .env.local) are excluded.
+*.local
+
+# Git
+.git
+.gitignore
+
+# Docs and dev notes
+.dev
+README.md
+
+# Test files
+**/*.test.ts
+**/*.spec.ts
+
+# Editor
+.vscode
+.idea
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Agent workspaces (live on host, not in image)
+agent-workspaces

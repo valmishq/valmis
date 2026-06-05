@@ -1,0 +1,69 @@
+import { logger } from '@repo/utils';
+import { ProxyClient } from './proxy-client.js';
+import { runAgent } from './agent-runner.js';
+
+/**
+ * Agent runtime entrypoint.
+ *
+ * This process runs as a Node.js child process spawned by AgentRuntimeService.
+ * It receives its context from environment variables injected at spawn time:
+ *
+ *   AGENT_ID       — ID of the agent to run
+ *   THREAD_ID      — ID of the conversation thread
+ *   PROXY_TOKEN    — Short-lived JWT for authenticating with the host backend
+ *   PROXY_HOST     — URL of the host backend (e.g. http://localhost:4000)
+ *   RUNTIME_CONFIG — JSON-encoded AgentRuntimeConfig (avoids a round-trip on startup)
+ *   WORKSPACE_ROOT — Absolute path to this agent's persistent workspace directory
+ *
+ * Security guarantees:
+ *   - No LLM API keys in this process. LLM calls go through PROXY_HOST.
+ *   - No credential values in this process. API calls go through PROXY_HOST.
+ *   - PROXY_TOKEN is scoped to this agent/thread and expires in 15 minutes.
+ *   - File access is restricted to WORKSPACE_ROOT by resolveWorkspacePath().
+ *
+ * The process exits with code 0 on success, 1 on error.
+ * AgentRuntimeService updates the thread status based on the exit code.
+ */
+async function main(): Promise<void> {
+	const agentId = process.env.AGENT_ID;
+	const threadId = process.env.THREAD_ID;
+	const proxyToken = process.env.PROXY_TOKEN;
+	const proxyHost = process.env.PROXY_HOST;
+	const workspaceRoot = process.env.WORKSPACE_ROOT;
+
+	if (!agentId || !threadId || !proxyToken || !proxyHost) {
+		logger.error(
+			'[agent-runtime] Missing required env vars: AGENT_ID, THREAD_ID, PROXY_TOKEN, PROXY_HOST',
+		);
+		process.exit(1);
+	}
+
+	logger.info({ agentId, threadId, proxyHost, workspaceRoot }, '[agent-runtime] starting');
+
+	const proxyClient = new ProxyClient(proxyHost, proxyToken, threadId);
+
+	try {
+		const config = await proxyClient.loadConfig();
+
+		logger.debug(
+			{
+				agentId,
+				threadId,
+				provider: config.modelProvider,
+				model: config.modelId,
+				triggerType: config.triggerType,
+			},
+			'[agent-runtime] config loaded',
+		);
+
+		await runAgent(config, proxyClient);
+
+		logger.info({ agentId, threadId }, '[agent-runtime] completed');
+		process.exit(0);
+	} catch (err) {
+		logger.error({ err, agentId, threadId }, '[agent-runtime] fatal error');
+		process.exit(1);
+	}
+}
+
+main();

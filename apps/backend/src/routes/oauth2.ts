@@ -418,7 +418,7 @@ export function createOAuth2Router(authService: AuthService): Router {
 					const identity = (await identityRes.json()) as Record<string, unknown>;
 					const value = definition.testRequest.accountIdentifierKey
 						.split('.')
-						.reduce<unknown>((obj, key) => {
+						.reduce<unknown>((obj: unknown, key: string) => {
 							if (obj !== null && typeof obj === 'object') {
 								return (obj as Record<string, unknown>)[key];
 							}

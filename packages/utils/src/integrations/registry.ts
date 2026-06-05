@@ -8,7 +8,12 @@ import { credentialDefinitionSchema } from './schema.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const DEFINITIONS_DIR = path.resolve(__dirname, 'definitions');
+// Resolve the definitions directory relative to the package root (packages/utils/).
+// Go up 2 levels from src/integrations/ (or dist/integrations/) to reach packages/utils/,
+// then descend into src/integrations/definitions/ where the YAML files live.
+// tsc does not copy .yaml files, so we always point at the src/ tree regardless of
+// whether the compiled dist/ or the source src/ version of this file is running.
+const DEFINITIONS_DIR = path.resolve(__dirname, '../../src/integrations/definitions');
 
 /** In-memory cache of all parsed and validated credential definitions */
 let definitionsCache: CredentialDefinition[] | null = null;
