@@ -1,0 +1,27 @@
+id: discord-bot
+name: Discord (Bot)
+type: bearerToken
+icon: /logos/discord.svg
+description: >
+  Connect to the Discord API using a Bot Token.
+  Send messages, manage channels, roles, and interact with servers as a bot.
+documentationUrl: https://discord.com/developers/docs/intro
+properties:
+  - name: token
+    displayName: Bot Token
+    type: secret
+    required: true
+    description: >
+      Go to https://discord.com/developers/applications, open your app,
+      select Bot from the left menu, then reset and copy the token.
+
+# Discord Bot tokens use "Bot " prefix (not "Bearer ")
+requestMapping:
+  headers:
+    Authorization: 'Bot {{properties.token}}'
+
+# GET /users/@me returns the current bot's user object
+testRequest:
+  method: GET
+  url: 'https://discord.com/api/v10/users/@me'
+  accountIdentifierKey: username

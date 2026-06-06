@@ -1,0 +1,26 @@
+id: calendly-token
+name: Calendly (Access token)
+type: bearerToken
+icon: /logos/calendly.svg
+description: >
+  Connect to the Calendly API using a Personal Access Token.
+  Use this to read scheduling data, event types, and invitees from your Calendly account.
+documentationUrl: https://developer.calendly.com/api-docs/
+properties:
+  - name: token
+    displayName: Personal Access Token
+    type: secret
+    required: true
+    description: >
+      Generate a token at https://calendly.com/integrations/api_webhooks.
+      Go to Integrations & apps → API & Webhooks → Generate new token.
+
+requestMapping:
+  headers:
+    Authorization: 'Bearer {{properties.token}}'
+
+# /users/me returns the current user; the user URI and email are nested under "resource"
+testRequest:
+  method: GET
+  url: 'https://api.calendly.com/users/me'
+  accountIdentifierKey: resource.email

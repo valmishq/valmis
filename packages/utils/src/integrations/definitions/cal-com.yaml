@@ -1,0 +1,26 @@
+id: cal-com
+name: Cal.com
+type: bearerToken
+icon: /logos/cal-com.svg
+description: >
+  Connect to the Cal.com API v2 using an API key.
+  Manage schedules, event types, bookings, and availability programmatically.
+documentationUrl: https://cal.com/docs/api-reference/v2/introduction
+properties:
+  - name: apiKey
+    displayName: API Key
+    type: secret
+    required: true
+    description: >
+      Find your API key at Settings → Security → API Keys.
+      Test mode keys start with "cal_" and live mode keys start with "cal_live_".
+
+requestMapping:
+  headers:
+    Authorization: 'Bearer {{properties.apiKey}}'
+
+# GET /me returns the current user's profile
+testRequest:
+  method: GET
+  url: 'https://api.cal.com/v2/me'
+  accountIdentifierKey: data.email
