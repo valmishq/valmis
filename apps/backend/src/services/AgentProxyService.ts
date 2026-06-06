@@ -1,8 +1,11 @@
 import { jwtVerify, SignJWT } from 'jose';
+import { eq, and } from 'drizzle-orm';
 import type { ProxyRequest, ProxyResponse, SandboxTokenPayload, HitlRequest } from '@repo/types';
 import { CredentialResolverService } from './CredentialResolverService.js';
 import { agentStreamBus } from './AgentStreamBus.js';
 import { logger } from '../config/logger.js';
+import { db } from '../db/index.js';
+import { agentCredentials } from '../db/schema/agentCredentials.js';
 
 /**
  * TTL for a pending HITL request.
@@ -26,6 +29,8 @@ interface HitlPending {
  *   - The token is scoped to one agent, one thread, and one set of allowed credential IDs.
  *   - This service validates the token and enforces that the requested credentialId is
  *     in the token's allowlist before calling CredentialResolverService.
+ *   - A live DB check against agent_credentials ensures that credentials revoked (unlinked)
+ *     after the token was issued are immediately blocked — not just at next spawn.
  *   - Raw credential values never leave the host process — the sandbox only receives
  *     the API response body.
  *
@@ -178,10 +183,14 @@ export class AgentProxyService {
 	 *   1. Verify PROXY_TOKEN
 	 *   2. Sanitize caller-supplied header names (strip LLM-generated surrounding quotes)
 	 *   3. If credentialId is non-empty, enforce it is in the token's allowed list
-	 *      and delegate to CredentialResolverService.executeWithCredential()
-	 *   4. If credentialId is empty, execute the request directly without
-	 *      injecting any authentication (for public APIs)
-	 *   5. Return response (status, headers, body) — never the raw credential
+	 *   4. Live DB check: verify the (agentId, credentialId) junction row still exists —
+	 *      blocks credentials unlinked mid-session even though the PROXY_TOKEN is still valid
+	 *   5. Delegate to CredentialResolverService.executeWithCredential()
+	 *   6. If credentialId is empty, execute the request directly without auth injection
+	 *   7. Return response (status, headers, body) — never the raw credential
+	 *
+	 * On revocation (step 4), throws an Error whose message surfaces to the agent as a
+	 * tool result text block, allowing the LLM to reason about the access denial.
 	 */
 	async executeProxyRequest(proxyToken: string, request: ProxyRequest): Promise<ProxyResponse> {
 		// Step 1 — validate token
@@ -225,10 +234,36 @@ export class AgentProxyService {
 			return { status: response.status, headers, body };
 		}
 
-		// Step 3b — authenticated path: enforce credential allowlist
+		// Step 3b — authenticated path: enforce credential allowlist (token-time snapshot)
 		if (!tokenPayload.credentialIds.includes(request.credentialId)) {
 			throw new Error(
 				`Credential ${request.credentialId} is not authorized for this sandbox session`,
+			);
+		}
+
+		// Step 4 — live revocation check: verify the junction row still exists in DB.
+		// The PROXY_TOKEN allowlist is a snapshot from spawn time; the user may have
+		// unlinked the credential from the agent after the token was issued. This check
+		// ensures revocation is effective immediately rather than at next spawn.
+		// The error message is propagated back to the agent as a tool result text block.
+		const junction = await db
+			.select({ agentId: agentCredentials.agentId })
+			.from(agentCredentials)
+			.where(
+				and(
+					eq(agentCredentials.agentId, tokenPayload.agentId),
+					eq(agentCredentials.credentialId, request.credentialId),
+				),
+			)
+			.limit(1);
+
+		if (junction.length === 0) {
+			logger.warn(
+				{ agentId: tokenPayload.agentId, credentialId: request.credentialId },
+				'[proxy] credential access denied — junction row removed (revoked mid-session)',
+			);
+			throw new Error(
+				`Credential ${request.credentialId} has been revoked — it is no longer linked to this agent`,
 			);
 		}
 

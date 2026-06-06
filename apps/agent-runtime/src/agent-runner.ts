@@ -224,6 +224,14 @@ export async function runAgent(
 				if (c.scopes) {
 					line += `  scopes: "${c.scopes}"`;
 				}
+				// Non-secret properties (e.g. baseUrl, host, port) — critical for the agent to
+				// know how to construct API request URLs for self-hosted services like Home Assistant.
+				if (c.properties && Object.keys(c.properties).length > 0) {
+					const propsStr = Object.entries(c.properties)
+						.map(([k, v]) => `${k}="${v}"`)
+						.join('  ');
+					line += `  properties: ${propsStr}`;
+				}
 				return line;
 			})
 			.join('\n');

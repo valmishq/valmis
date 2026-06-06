@@ -1,0 +1,37 @@
+id: pushover
+name: Pushover
+type: apiKey
+icon: /logos/pushover.svg
+description: >
+  Connect to the Pushover API using an Application API Key and a User Key.
+  Use Pushover to send push notifications to iOS, Android, and desktop devices.
+documentationUrl: https://pushover.net/api
+properties:
+  - name: apiKey
+    displayName: API Key (Application Token)
+    type: secret
+    required: true
+    description: >
+      Your Pushover Application API Key (token). Register an application at
+      https://pushover.net/apps/build to generate one.
+      Tokens are 30 characters long and begin with a letter.
+  - name: userKey
+    displayName: User Key
+    type: secret
+    required: true
+    description: >
+      Your Pushover User Key (or Group Key). Find it on your Pushover dashboard
+      at https://pushover.net/. This identifies who receives the notifications.
+      User and group keys are 30 characters long.
+
+# Pushover requires both token (app key) and user (user/group key) on every request
+requestMapping:
+  qs:
+    token: '{{properties.apiKey}}'
+    user: '{{properties.userKey}}'
+
+# validate.json verifies both the application token and the user/group key
+testRequest:
+  method: POST
+  url: https://api.pushover.net/1/users/validate.json
+  accountIdentifierKey: request

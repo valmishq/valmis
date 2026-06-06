@@ -1,0 +1,33 @@
+id: homeAssistant
+name: Home Assistant
+type: apiKey
+icon: /logos/home-assistant.svg
+description: >
+  Connect to your local or remote Home Assistant instance using a Long-Lived Access Token.
+  The token is sent as a Bearer token on every request. Supports both HTTP and HTTPS.
+documentationUrl: https://developers.home-assistant.io/docs/api/rest/
+properties:
+  - name: accessToken
+    displayName: Access Token
+    type: secret
+    required: true
+    description: >
+      Long-Lived Access Token generated from your Home Assistant user profile.
+      Go to your profile page → Long-Lived Access Tokens → Create Token.
+  - name: baseUrl
+    displayName: Base URL
+    type: string
+    required: true
+    description: >
+      Full base URL of your Home Assistant instance including protocol and port.
+      Example: http://192.168.1.10:8123 or https://homeassistant.local:8123.
+      For HTTPS without a custom port, use https://your.host (no trailing slash).
+
+requestMapping:
+  headers:
+    Authorization: 'Bearer {{properties.accessToken}}'
+
+testRequest:
+  method: GET
+  url: '{{properties.baseUrl}}/api/config'
+  accountIdentifierKey: 'location_name'

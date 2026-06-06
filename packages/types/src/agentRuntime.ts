@@ -198,6 +198,13 @@ export interface CredentialMeta {
 	 * Absent for non-OAuth2 credentials or OAuth2 credentials with no declared scope.
 	 */
 	scopes?: string;
+	/**
+	 * Non-secret credential properties (string/number/boolean fields, never `secret`-typed).
+	 * Contains values like `baseUrl`, `host`, `port` that the agent needs to construct
+	 * API request URLs. Secret-typed fields (API keys, tokens, passwords) are never included.
+	 * Only present when the credential definition has non-secret properties.
+	 */
+	properties?: Record<string, string>;
 }
 
 /**

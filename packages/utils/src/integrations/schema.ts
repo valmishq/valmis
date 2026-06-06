@@ -50,7 +50,12 @@ const oauth2ConfigSchema = z.object({
 
 const testRequestSchema = z.object({
 	method: z.enum(['GET', 'POST']),
-	url: z.string().url(),
+	/**
+	 * The URL to send the test request to. Supports {{properties.keyName}} interpolation,
+	 * so integrations like Home Assistant can use dynamic host/port values from credential data.
+	 * Validated as a plain string (not URL) to allow template expressions.
+	 */
+	url: z.string().min(1),
 	/**
 	 * Dot-notation key path into the JSON response body whose value will be
 	 * stored as `connectedAccount` on the credential after a successful OAuth2

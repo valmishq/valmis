@@ -117,32 +117,6 @@
 			? 'opacity-100'
 			: 'opacity-0 max-md:opacity-100'}"
 	>
-		<!-- Header row -->
-		<div class="flex h-14 shrink-0 items-center gap-1 border-b border-border/60 px-2">
-			<Button
-				variant="ghost"
-				size="icon"
-				class="size-8 text-muted-foreground hover:text-foreground"
-				onclick={() => goto('/app/chat')}
-				title="All agents"
-			>
-				<ArrowLeftIcon class="size-4" />
-				<span class="sr-only">All agents</span>
-			</Button>
-			<span class="min-w-0 flex-1 truncate text-xs text-muted-foreground">All agents</span>
-			<!-- Close button — mobile only -->
-			<Button
-				variant="ghost"
-				size="icon"
-				class="size-8 text-muted-foreground hover:text-foreground md:hidden"
-				onclick={() => (open = false)}
-				title="Close"
-			>
-				<XIcon class="size-4" />
-				<span class="sr-only">Close sidebar</span>
-			</Button>
-		</div>
-
 		<!-- Agent identity -->
 		<div class="flex items-center gap-3 px-4 py-3">
 			<AgentAvatar avatarUrl={agent.avatarUrl} name={agent.name} size="md" />

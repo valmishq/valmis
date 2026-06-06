@@ -307,7 +307,7 @@ export class CredentialResolverService {
 	/**
 	 * Replaces all {{properties.keyName}} occurrences in a template string.
 	 */
-	private interpolateTemplate(template: string, data: Record<string, unknown>): string {
+	interpolateTemplate(template: string, data: Record<string, unknown>): string {
 		return template.replace(/\{\{properties\.(\w+)\}\}/g, (_match, propertyName: string) => {
 			const value = data[propertyName];
 			return value !== undefined ? String(value) : '';

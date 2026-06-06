@@ -332,10 +332,20 @@ export class AgentRuntimeService {
 			const allCredentials = await this.credentialService.listByOwner(ownerId);
 			for (const cred of allCredentials) {
 				if (agent.credentialIds.includes(cred.id)) {
+					// Decrypt once — reused for both scope resolution and non-secret property extraction
+					let data: Record<string, unknown> | null = null;
+					try {
+						data = await this.credentialService.getDecryptedData(cred.id, ownerId);
+					} catch (err) {
+						logger.warn(
+							{ credId: cred.id, err },
+							'[runtime] failed to decrypt credential data for runtime config',
+						);
+					}
+
 					let scopes: string | undefined;
 					try {
 						// First: read the actual stored value from the encrypted data blob.
-						const data = await this.credentialService.getDecryptedData(cred.id, ownerId);
 						if (data && typeof data.scope === 'string' && data.scope.trim().length > 0) {
 							scopes = data.scope.trim();
 						} else {
@@ -354,11 +364,36 @@ export class AgentRuntimeService {
 						);
 					}
 
+					// Collect non-secret properties (string/number/boolean typed fields).
+					// These give the agent context it needs to construct URLs (e.g. baseUrl for
+					// Home Assistant). Secret-typed fields are never included.
+					let properties: Record<string, string> | undefined;
+					try {
+						const definition = getCredentialDefinition(cred.type);
+						if (definition && data) {
+							const nonSecretProps: Record<string, string> = {};
+							for (const prop of definition.properties) {
+								if (prop.type !== 'secret' && data[prop.name] !== undefined) {
+									nonSecretProps[prop.name] = String(data[prop.name]);
+								}
+							}
+							if (Object.keys(nonSecretProps).length > 0) {
+								properties = nonSecretProps;
+							}
+						}
+					} catch (propErr) {
+						logger.warn(
+							{ credId: cred.id, err: propErr },
+							'[runtime] failed to resolve non-secret properties for credential',
+						);
+					}
+
 					credentials.push({
 						id: cred.id,
 						name: cred.name,
 						integration: cred.type,
 						...(scopes !== undefined ? { scopes } : {}),
+						...(properties !== undefined ? { properties } : {}),
 					});
 				}
 			}

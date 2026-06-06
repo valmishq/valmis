@@ -311,9 +311,26 @@ export function createCredentialsRouter(authService: AuthService): Router {
 			return;
 		}
 
+		// Resolve {{properties.keyName}} placeholders in the test URL.
+		// Required for integrations like Home Assistant where host/port come from
+		// credential properties rather than a fixed URL in the YAML definition.
+		const credentialData = await credentialService.getDecryptedData(testId, ownerId);
+		if (!credentialData) {
+			const body: CredentialTestResponse = {
+				success: false,
+				error: 'Failed to decrypt credential data',
+			};
+			res.status(500).json(body);
+			return;
+		}
+		const resolvedTestUrl = resolverService.interpolateTemplate(
+			definition.testRequest.url,
+			credentialData,
+		);
+
 		// Execute via resolver — handles proactive/reactive OAuth2 token refresh
 		const testResponse = await resolverService.executeWithCredential(testId, ownerId, {
-			url: definition.testRequest.url,
+			url: resolvedTestUrl,
 			method: definition.testRequest.method,
 		});
 

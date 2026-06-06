@@ -1,0 +1,36 @@
+id: stripe
+name: Stripe
+type: bearerToken
+description: >
+  Connect to the Stripe API using a Secret Key. Supports both live mode (sk_live_*)
+  and test mode (sk_test_*) keys. Store each mode's key in a separate credential.
+documentationUrl: https://docs.stripe.com/api
+icon: /logos/stripe.svg
+properties:
+  - name: secretKey
+    displayName: Secret Key
+    type: secret
+    required: true
+    description: >
+      Your Stripe Secret Key. Live keys begin with sk_live_ and test keys begin with sk_test_.
+      Find or create keys at https://dashboard.stripe.com/apikeys (live) or
+      https://dashboard.stripe.com/test/apikeys (test).
+      Never use Publishable keys (pk_*) here.
+  - name: webhookSigningSecret
+    displayName: Webhook Signing Secret
+    type: secret
+    required: false
+    description: >
+      The endpoint secret used to verify the signature of incoming Stripe webhook events.
+      Find it under Developers → Webhooks → select your endpoint → Signing secret.
+      Required only if you process Stripe webhook events.
+
+requestMapping:
+  headers:
+    Authorization: 'Bearer {{properties.secretKey}}'
+
+# /v1/account returns the connected account details including email and display name
+testRequest:
+  method: GET
+  url: https://api.stripe.com/v1/account
+  accountIdentifierKey: email
