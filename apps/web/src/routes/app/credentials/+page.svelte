@@ -239,6 +239,8 @@
 					duration: 5000,
 					show: true
 				});
+				// Refresh so connectedAccount from the test response is reflected immediately
+				await refreshCredentials();
 			} else {
 				setAlert({
 					type: 'error',
@@ -641,7 +643,7 @@
 						<!-- Actions: wraps on mobile, row on desktop -->
 						<div class="flex flex-wrap items-center gap-1.5 sm:shrink-0 sm:flex-nowrap">
 							{#if isOAuth2(cred.type)}
-								<!-- Connected account label -->
+								<!-- OAuth2: show authorized account + connect/re-authorize button -->
 								{#if cred.isAuthorized}
 									<div class="flex items-center gap-1.5">
 										<CheckCircleIcon class="size-3 shrink-0 text-green-500" />
@@ -650,7 +652,6 @@
 										</span>
 									</div>
 								{/if}
-								<!-- Authorize / Re-authorize -->
 								<Button
 									variant="outline"
 									size="xs"
@@ -666,6 +667,14 @@
 										{cred.isAuthorized ? 'Re-authorize' : 'Connect account'}
 									{/if}
 								</Button>
+							{:else if cred.connectedAccount}
+								<!-- Non-OAuth2: show account identifier populated by a previous test -->
+								<div class="flex items-center gap-1.5">
+									<CheckCircleIcon class="size-3 shrink-0 text-green-500" />
+									<span class="max-w-40 truncate text-xs text-muted-foreground">
+										{cred.connectedAccount}
+									</span>
+								</div>
 							{/if}
 
 							{#if hasTestRequest(cred.type)}

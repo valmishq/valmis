@@ -20,3 +20,4 @@ requestMapping:
 testRequest:
   method: GET
   url: https://api.notion.com/v1/users/me
+  accountIdentifierKey: name

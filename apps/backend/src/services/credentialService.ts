@@ -1,4 +1,4 @@
-import { eq, and } from 'drizzle-orm';
+import { eq, and, desc } from 'drizzle-orm';
 import { v4 as uuidv4 } from 'uuid';
 import { db } from '../db/index.js';
 import { credentials } from '../db/schema/index.js';
@@ -105,7 +105,12 @@ export class CredentialService {
 		this.encryption = encryption;
 	}
 
-	/** List all credentials for an owner, including isAuthorized and connectedAccount for OAuth2 */
+	/**
+	 * List all credentials for an owner.
+	 * `isAuthorized` is derived from the presence of an OAuth2 access token.
+	 * `connectedAccount` is read from the encrypted data blob for all auth types —
+	 * it is set by the test endpoint whenever accountIdentifierKey resolves to a value.
+	 */
 	async listByOwner(ownerId: string): Promise<CredentialMetadata[]> {
 		const rows = await db
 			.select({
@@ -118,7 +123,8 @@ export class CredentialService {
 				updatedAt: credentials.updatedAt,
 			})
 			.from(credentials)
-			.where(eq(credentials.ownerId, ownerId));
+			.where(eq(credentials.ownerId, ownerId))
+			.orderBy(desc(credentials.createdAt));
 
 		return rows.map((row) => {
 			const { data: encryptedData, ...meta } = row;

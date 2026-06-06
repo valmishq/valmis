@@ -73,10 +73,14 @@ export interface TestRequest {
  * Shape of a credential record without the encrypted data payload.
  * Shared between the backend service and API response types.
  *
- * `isAuthorized` is populated for OAuth2 credentials and is true when an access
- * token has been obtained (i.e. the user has completed the authorization flow).
- * `connectedAccount` holds the email or display name of the authorized account,
- * fetched from the provider's identity endpoint at authorization time.
+ * `isAuthorized` is true for OAuth2 credentials when an access token has been
+ * obtained (i.e. the user completed the authorization flow).
+ *
+ * `connectedAccount` holds a human-readable identifier for the authenticated
+ * account (e.g. email, username). For OAuth2 it is populated at authorization
+ * time; for other auth types (apiKey, bearerToken, etc.) it is populated when
+ * the credential is successfully tested and the definition has an
+ * `accountIdentifierKey` in its testRequest.
  */
 export interface CredentialMetadata {
 	id: string;
@@ -87,7 +91,7 @@ export interface CredentialMetadata {
 	updatedAt: Date;
 	/** OAuth2 only — true when an access token is present */
 	isAuthorized?: boolean;
-	/** OAuth2 only — email or display name of the connected account */
+	/** Human-readable account identifier stored after a successful test or OAuth2 authorization */
 	connectedAccount?: string;
 }
 
