@@ -318,6 +318,24 @@ export function createCredentialsRouter(authService: AuthService): Router {
 		});
 
 		if (!testResponse.ok) {
+			// Log the full response body so developers can diagnose auth failures
+			// without having to set up network inspection tools.
+			let responseText = '';
+			try {
+				responseText = await testResponse.text();
+			} catch {
+				// ignore read errors
+			}
+			logger.warn(
+				{
+					credentialId: testId,
+					credentialType: metadata.type,
+					testUrl: definition.testRequest.url,
+					status: testResponse.status,
+					responseBody: responseText,
+				},
+				'Credential test request failed',
+			);
 			const body: CredentialTestResponse = {
 				success: false,
 				error: `Test request failed with status ${testResponse.status}`,

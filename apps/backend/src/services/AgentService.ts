@@ -3,7 +3,7 @@ import { rmSync } from 'fs';
 import { resolve } from 'path';
 import { db } from '../db/index.js';
 import { agents, agentCredentials, agentMemory } from '../db/schema/index.js';
-import type { Agent, AgentMemoryEntry } from '@repo/types';
+import type { Agent, AgentMemoryEntry, MemoryType } from '@repo/types';
 import { logger } from '../config/logger.js';
 
 // ─── Input Types ──────────────────────────────────────────────────────────────
@@ -35,7 +35,20 @@ export interface AddMemoryInput {
 	agentId: string;
 	content: string;
 	embedding: number[];
+	memoryType: MemoryType;
+	/** Optional thread scope — for 'working' memory entries */
+	threadId?: string;
 	metadata?: Record<string, unknown>;
+}
+
+export interface SearchMemoryInput {
+	agentId: string;
+	queryEmbedding: number[];
+	/** Optional filter by memory type */
+	memoryType?: MemoryType;
+	/** Optional thread scope filter */
+	threadId?: string;
+	limit?: number;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -55,6 +68,18 @@ function rowToAgent(row: typeof agents.$inferSelect, credentialIds: string[]): A
 		embeddingDim: row.embeddingDim ?? undefined,
 		createdAt: row.createdAt,
 		updatedAt: row.updatedAt,
+	};
+}
+
+function rowToMemoryEntry(row: typeof agentMemory.$inferSelect): AgentMemoryEntry {
+	return {
+		id: row.id,
+		agentId: row.agentId,
+		threadId: row.threadId ?? undefined,
+		memoryType: row.memoryType as MemoryType,
+		content: row.content,
+		metadata: (row.metadata as Record<string, unknown>) ?? undefined,
+		createdAt: row.createdAt,
 	};
 }
 
@@ -221,25 +246,24 @@ export class AgentService {
 
 	// ─── Memory Operations ────────────────────────────────────────────────────
 
-	/** Add a memory entry with its embedding vector */
+	/**
+	 * Add a memory entry with its embedding vector.
+	 * The embedding must already be computed by the caller (AgentMemoryService).
+	 */
 	async addMemory(input: AddMemoryInput): Promise<AgentMemoryEntry> {
 		const [row] = await db
 			.insert(agentMemory)
 			.values({
 				agentId: input.agentId,
+				threadId: input.threadId ?? null,
+				memoryType: input.memoryType,
 				content: input.content,
 				embedding: input.embedding,
 				metadata: input.metadata ?? null,
 			})
 			.returning();
 
-		return {
-			id: row.id,
-			agentId: row.agentId,
-			content: row.content,
-			metadata: (row.metadata as Record<string, unknown>) ?? undefined,
-			createdAt: row.createdAt,
-		};
+		return rowToMemoryEntry(row);
 	}
 
 	/** List memory entries for an agent (most recent first) */
@@ -248,6 +272,8 @@ export class AgentService {
 			.select({
 				id: agentMemory.id,
 				agentId: agentMemory.agentId,
+				threadId: agentMemory.threadId,
+				memoryType: agentMemory.memoryType,
 				content: agentMemory.content,
 				metadata: agentMemory.metadata,
 				createdAt: agentMemory.createdAt,
@@ -261,6 +287,8 @@ export class AgentService {
 		return rows.map((row) => ({
 			id: row.id,
 			agentId: row.agentId,
+			threadId: row.threadId ?? undefined,
+			memoryType: row.memoryType as MemoryType,
 			content: row.content,
 			metadata: (row.metadata as Record<string, unknown>) ?? undefined,
 			createdAt: row.createdAt,
@@ -270,29 +298,41 @@ export class AgentService {
 	/**
 	 * Search memory by vector similarity (cosine distance).
 	 * Returns the closest entries to the query embedding.
+	 * Optional filters: memoryType, threadId.
 	 */
-	async searchMemory(
-		agentId: string,
-		queryEmbedding: number[],
-		limit = 10,
-	): Promise<AgentMemoryEntry[]> {
+	async searchMemory(input: SearchMemoryInput): Promise<AgentMemoryEntry[]> {
+		const { agentId, queryEmbedding, memoryType, threadId, limit = 10 } = input;
 		const vectorStr = `[${queryEmbedding.join(',')}]`;
+
+		// Build WHERE conditions — agentId is always required, type and thread are optional
+		const conditions = [eq(agentMemory.agentId, agentId)];
+		if (memoryType) {
+			conditions.push(eq(agentMemory.memoryType, memoryType));
+		}
+		if (threadId) {
+			conditions.push(eq(agentMemory.threadId, threadId));
+		}
+
 		const rows = await db
 			.select({
 				id: agentMemory.id,
 				agentId: agentMemory.agentId,
+				threadId: agentMemory.threadId,
+				memoryType: agentMemory.memoryType,
 				content: agentMemory.content,
 				metadata: agentMemory.metadata,
 				createdAt: agentMemory.createdAt,
 			})
 			.from(agentMemory)
-			.where(eq(agentMemory.agentId, agentId))
+			.where(and(...conditions))
 			.orderBy(sql`${agentMemory.embedding} <=> ${vectorStr}::vector`)
 			.limit(limit);
 
 		return rows.map((row) => ({
 			id: row.id,
 			agentId: row.agentId,
+			threadId: row.threadId ?? undefined,
+			memoryType: row.memoryType as MemoryType,
 			content: row.content,
 			metadata: (row.metadata as Record<string, unknown>) ?? undefined,
 			createdAt: row.createdAt,

@@ -1,10 +1,12 @@
 import { Router } from 'express';
+import express from 'express';
 import type { Request, Response } from 'express';
 import { requireAuth } from '../middleware/auth.js';
 import { AgentSessionService } from '../services/AgentSessionService.js';
 import { AgentRuntimeService } from '../services/AgentRuntimeService.js';
 import { AgentProxyService } from '../services/AgentProxyService.js';
 import { AgentLlmProxyService } from '../services/AgentLlmProxyService.js';
+import { AgentMemoryService } from '../services/AgentMemoryService.js';
 import { TriggerService } from '../services/TriggerService.js';
 import { agentStreamBus } from '../services/AgentStreamBus.js';
 import { logger } from '../config/logger.js';
@@ -24,7 +26,33 @@ import type {
 	LlmProxyRequest,
 	SandboxTokenPayload,
 	HitlRequest,
+	MemoryWriteRequest,
+	MemorySearchRequest,
+	ContentBlock,
 } from '@repo/types';
+
+/**
+ * Normalises a tool result ContentBlock[] into a single displayable string for the browser.
+ *
+ * Rules:
+ *   - Only text blocks are included (image blocks carry base64 data, not useful in a small UI strip).
+ *   - Each text value is truncated to TOOL_RESULT_MAX_CHARS and marked "[truncated]" when cut.
+ *   - If there is no text output at all, returns a fallback placeholder.
+ */
+const TOOL_RESULT_MAX_CHARS = 1000;
+
+function formatToolResult(blocks: ContentBlock[]): string {
+	const textParts = blocks
+		.filter((b): b is Extract<ContentBlock, { type: 'text' }> => b.type === 'text')
+		.map((b) => {
+			if (b.text.length > TOOL_RESULT_MAX_CHARS) {
+				return b.text.slice(0, TOOL_RESULT_MAX_CHARS) + '… [truncated]';
+			}
+			return b.text;
+		});
+
+	return textParts.length > 0 ? textParts.join('\n') : '(no text output)';
+}
 
 /**
  * Runtime router — two sets of routes:
@@ -64,6 +92,7 @@ export function createRuntimeRouter(
 	proxyService: AgentProxyService,
 	llmProxyService: AgentLlmProxyService,
 	triggerService: TriggerService,
+	memoryService: AgentMemoryService,
 ): Router {
 	const router = Router();
 	const auth = requireAuth(authService);
@@ -126,49 +155,78 @@ export function createRuntimeRouter(
 	 * Sandbox appends a tool_result message to the thread.
 	 * Only 'tool_result' role is accepted — other roles are rejected to prevent
 	 * the sandbox from injecting user or assistant messages into history.
+	 *
+	 * A higher JSON body limit (10 MB) is applied here because tool results can
+	 * include large API response bodies (e.g. a Google Sheets export). The global
+	 * 1 MB limit in index.ts is intentionally kept tight for all other routes.
 	 */
-	router.post('/internal/thread/:threadId/messages', async (req: Request, res: Response) => {
-		const { threadId } = req.params as { threadId: string };
-		const sandboxToken = (req as Request & { sandboxToken: SandboxTokenPayload }).sandboxToken;
+	router.post(
+		'/internal/thread/:threadId/messages',
+		express.json({ limit: '10mb' }),
+		async (req: Request, res: Response) => {
+			const { threadId } = req.params as { threadId: string };
+			const sandboxToken = (req as Request & { sandboxToken: SandboxTokenPayload }).sandboxToken;
 
-		if (sandboxToken.threadId !== threadId) {
-			res.status(403).json({ success: false, error: 'Thread ID mismatch' });
-			return;
-		}
+			if (sandboxToken.threadId !== threadId) {
+				res.status(403).json({ success: false, error: 'Thread ID mismatch' });
+				return;
+			}
 
-		const { role, content, toolCallId, toolName, tokenUsage } = req.body as {
-			role: string;
-			content: unknown[];
-			toolCallId?: string;
-			toolName?: string;
-			tokenUsage?: unknown;
-		};
+			const { role, content, toolCallId, toolName, tokenUsage } = req.body as {
+				role: string;
+				content: unknown[];
+				toolCallId?: string;
+				toolName?: string;
+				tokenUsage?: unknown;
+			};
 
-		// Enforce that sandboxes may only append tool_result messages.
-		// Any other role would corrupt conversation history.
-		if (role !== 'tool_result') {
-			res.status(400).json({
-				success: false,
-				error: 'Only tool_result messages may be appended by the sandbox',
-			});
-			return;
-		}
+			// Enforce that sandboxes may only append tool_result messages.
+			// Any other role would corrupt conversation history.
+			if (role !== 'tool_result') {
+				res.status(400).json({
+					success: false,
+					error: 'Only tool_result messages may be appended by the sandbox',
+				});
+				return;
+			}
 
-		try {
-			const message = await sessionService.appendMessage({
-				threadId,
-				role,
-				content: content as Parameters<typeof sessionService.appendMessage>[0]['content'],
-				toolCallId,
-				toolName,
-				tokenUsage: tokenUsage as Parameters<typeof sessionService.appendMessage>[0]['tokenUsage'],
-			});
-			res.status(201).json({ success: true, data: message });
-		} catch (err) {
-			logger.error({ err, threadId }, '[runtime] failed to append internal message');
-			res.status(500).json({ success: false, error: 'Failed to append message' });
-		}
-	});
+			try {
+				const message = await sessionService.appendMessage({
+					threadId,
+					role,
+					content: content as Parameters<typeof sessionService.appendMessage>[0]['content'],
+					toolCallId,
+					toolName,
+					tokenUsage: tokenUsage as Parameters<
+						typeof sessionService.appendMessage
+					>[0]['tokenUsage'],
+				});
+
+				// Emit tool_call_end SSE so the browser can display the result inside
+				// the ToolCallIndicator that was opened by the earlier tool_call_delta event.
+				// The result string is normalised (text only, truncated to 250 chars) before
+				// being sent to avoid flooding the SSE stream with large payloads.
+				if (toolCallId) {
+					const resultText = formatToolResult(
+						content as Parameters<typeof sessionService.appendMessage>[0]['content'],
+					);
+					agentStreamBus.emit(sandboxToken.threadId, {
+						type: 'tool_call_end',
+						// messageId is not used by the frontend handler for tool_call_end;
+						// the result is keyed purely by toolCallId.
+						messageId: '',
+						toolCallId,
+						result: resultText,
+					});
+				}
+
+				res.status(201).json({ success: true, data: message });
+			} catch (err) {
+				logger.error({ err, threadId }, '[runtime] failed to append internal message');
+				res.status(500).json({ success: false, error: 'Failed to append message' });
+			}
+		},
+	);
 
 	/**
 	 * POST /v1/runtime/internal/proxy
@@ -679,6 +737,66 @@ export function createRuntimeRouter(
 		} catch (err) {
 			const message = err instanceof Error ? err.message : 'Failed to fire trigger';
 			logger.warn({ err, triggerId }, '[runtime] failed to fire manual trigger');
+			res.status(400).json({ success: false, error: message });
+		}
+	});
+
+	// ─── Memory internal endpoints (PROXY_TOKEN auth) ─────────────────────────
+
+	/**
+	 * POST /v1/runtime/internal/memory/write
+	 * Sandbox writes a memory entry for the current agent.
+	 * The host embeds the content and persists it to the DB.
+	 * agentId is taken from the PROXY_TOKEN — the sandbox cannot write to another agent's memory.
+	 */
+	router.post('/internal/memory/write', async (req: Request, res: Response) => {
+		const sandboxToken = (req as Request & { sandboxToken: SandboxTokenPayload }).sandboxToken;
+		const body = req.body as MemoryWriteRequest;
+
+		if (!body.content || !body.memoryType) {
+			res.status(400).json({ success: false, error: 'content and memoryType are required' });
+			return;
+		}
+
+		try {
+			const entry = await memoryService.writeMemory(
+				sandboxToken.agentId,
+				sandboxToken.ownerId,
+				body,
+			);
+			res.status(201).json({ success: true, data: entry });
+		} catch (err) {
+			const message = err instanceof Error ? err.message : 'Memory write failed';
+			logger.error({ err, agentId: sandboxToken.agentId }, '[runtime] memory write failed');
+			res.status(400).json({ success: false, error: message });
+		}
+	});
+
+	/**
+	 * POST /v1/runtime/internal/memory/search
+	 * Sandbox searches the current agent's memory by semantic similarity.
+	 * The host embeds the query and returns the nearest entries (cosine distance).
+	 * agentId is taken from the PROXY_TOKEN — cannot search another agent's memory.
+	 */
+	router.post('/internal/memory/search', async (req: Request, res: Response) => {
+		const sandboxToken = (req as Request & { sandboxToken: SandboxTokenPayload }).sandboxToken;
+		const body = req.body as MemorySearchRequest;
+
+		if (!body.query) {
+			res.status(400).json({ success: false, error: 'query is required' });
+			return;
+		}
+
+		try {
+			const results = await memoryService.searchMemory(
+				sandboxToken.agentId,
+				sandboxToken.ownerId,
+				body,
+			);
+			res.json({ success: true, data: results });
+		} catch (err) {
+			const message = err instanceof Error ? err.message : 'Memory search failed';
+			logger.error({ err, agentId: sandboxToken.agentId }, '[runtime] memory search failed');
 			res.status(400).json({ success: false, error: message });
 		}
 	});

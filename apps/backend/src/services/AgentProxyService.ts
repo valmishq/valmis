@@ -152,15 +152,52 @@ export class AgentProxyService {
 	 *
 	 * Steps:
 	 *   1. Verify PROXY_TOKEN
-	 *   2. Enforce that credentialId is in the token's allowed list
-	 *   3. Delegate to CredentialResolverService.executeWithCredential()
+	 *   2. If credentialId is non-empty, enforce it is in the token's allowed list
+	 *      and delegate to CredentialResolverService.executeWithCredential()
+	 *   3. If credentialId is empty, execute the request directly without
+	 *      injecting any authentication (for public APIs)
 	 *   4. Return response (status, headers, body) — never the raw credential
 	 */
 	async executeProxyRequest(proxyToken: string, request: ProxyRequest): Promise<ProxyResponse> {
 		// Step 1 — validate token
 		const tokenPayload = await this.verifyProxyToken(proxyToken);
 
-		// Step 2 — enforce credential allowlist
+		// Step 2a — unauthenticated path: empty credentialId means no auth injection
+		if (!request.credentialId) {
+			logger.info(
+				{ agentId: tokenPayload.agentId, url: request.url },
+				'[proxy] executing unauthenticated proxy request (no credential)',
+			);
+
+			// Build URL with any caller-supplied query string params
+			let targetUrl = request.url;
+			if (request.qs && Object.keys(request.qs).length > 0) {
+				const urlObj = new URL(request.url);
+				for (const [key, value] of Object.entries(request.qs)) {
+					urlObj.searchParams.set(key, value);
+				}
+				targetUrl = urlObj.toString();
+			}
+
+			const fetchOptions: RequestInit = {
+				method: request.method,
+				headers: request.headers,
+			};
+			if (request.body) {
+				fetchOptions.body = request.body;
+			}
+
+			const response = await fetch(targetUrl, fetchOptions);
+			const body = await response.text();
+			const headers: Record<string, string> = {};
+			response.headers.forEach((value, key) => {
+				headers[key] = value;
+			});
+
+			return { status: response.status, headers, body };
+		}
+
+		// Step 2b — authenticated path: enforce credential allowlist
 		if (!tokenPayload.credentialIds.includes(request.credentialId)) {
 			throw new Error(
 				`Credential ${request.credentialId} is not authorized for this sandbox session`,
@@ -169,7 +206,7 @@ export class AgentProxyService {
 
 		logger.info(
 			{ agentId: tokenPayload.agentId, credentialId: request.credentialId, url: request.url },
-			'[proxy] executing credential proxy request',
+			'[proxy] executing authenticated credential proxy request',
 		);
 
 		// Step 3 — execute via resolver (handles OAuth2 refresh, header injection, etc.)

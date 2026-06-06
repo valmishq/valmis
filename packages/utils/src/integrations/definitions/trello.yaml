@@ -1,0 +1,36 @@
+id: trello
+name: Trello
+type: custom
+icon: /logos/trello.svg
+description: >
+  Connect to the Trello REST API using an API Key and API Token.
+  Both are generated from the Trello Power-Up Admin Portal.
+documentationUrl: https://developer.atlassian.com/cloud/trello/rest/
+properties:
+  - name: apiKey
+    displayName: API Key
+    type: secret
+    required: true
+    description: >
+      Your Trello API Key. Generate one at https://trello.com/power-ups/admin
+      by creating a Power-Up and clicking "Generate a new API Key".
+  - name: apiToken
+    displayName: API Token
+    type: secret
+    required: true
+    description: >
+      Your Trello API Token. On the API Key page, click the "Token" link next
+      to your API key and grant the requested permissions.
+
+# Trello authenticates via query string parameters: ?key=...&token=...
+# This applies to every API request automatically via the resolver.
+requestMapping:
+  qs:
+    key: '{{properties.apiKey}}'
+    token: '{{properties.apiToken}}'
+
+# Verify credentials and capture the Trello username as the connected account.
+testRequest:
+  method: GET
+  url: 'https://api.trello.com/1/members/me'
+  accountIdentifierKey: username

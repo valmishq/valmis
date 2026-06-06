@@ -118,6 +118,10 @@
 		margin-bottom: 1em;
 	}
 
+	/* a links */
+	.chat-markdown :global(a) {
+		text-decoration: underline;
+	}
 	/* Remove top margin from the very first block */
 	.chat-markdown :global(> *:first-child) {
 		margin-top: 0;

@@ -1,0 +1,38 @@
+id: airtable-oauth2
+name: Airtable (OAuth2)
+type: oauth2
+icon: /logos/airtable.svg
+description: >
+  Connect to Airtable via OAuth2. Allows users to grant access to their own Airtable
+  bases without sharing a personal token.
+documentationUrl: https://airtable.com/developers/web/api/oauth-reference
+properties:
+  - name: clientId
+    displayName: Client ID
+    type: string
+    required: true
+    description: Client ID from your Airtable OAuth integration registration
+  - name: clientSecret
+    displayName: Client Secret
+    type: secret
+    required: true
+    description: Client Secret from your Airtable OAuth integration registration
+
+oauth2:
+  authorizationUrl: 'https://airtable.com/oauth2/v1/authorize'
+  accessTokenUrl: 'https://airtable.com/oauth2/v1/token'
+  clientIdProperty: clientId
+  clientSecretProperty: clientSecret
+  # Airtable requires Basic auth (base64 clientId:clientSecret) for token exchange
+  authStyle: inHeader
+  scope: 'user.email:read data.records:read data.records:write schema.bases:read'
+  usePkce: true
+
+requestMapping:
+  headers:
+    Authorization: 'Bearer {{properties.accessToken}}'
+
+testRequest:
+  method: GET
+  url: 'https://api.airtable.com/v0/meta/whoami'
+  accountIdentifierKey: id

@@ -1,0 +1,35 @@
+id: gmail
+name: Gmail (OAuth2)
+type: oauth2
+icon: /logos/gmail.svg
+description: Connect to Gmail via Google OAuth2 with full access to read, send, compose, and manage emails.
+documentationUrl: https://developers.google.com/gmail/api/guides
+
+properties:
+  - name: clientId
+    displayName: Client ID
+    type: string
+    required: true
+    description: OAuth2 Client ID from Google Cloud Console
+  - name: clientSecret
+    displayName: Client Secret
+    type: secret
+    required: true
+    description: OAuth2 Client Secret from Google Cloud Console
+
+oauth2:
+  authorizationUrl: 'https://accounts.google.com/o/oauth2/v2/auth'
+  accessTokenUrl: 'https://oauth2.googleapis.com/token'
+  clientIdProperty: clientId
+  clientSecretProperty: clientSecret
+  authStyle: inBody
+  scope: 'openid email https://mail.google.com/ https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/gmail.send https://www.googleapis.com/auth/gmail.compose https://www.googleapis.com/auth/gmail.insert https://www.googleapis.com/auth/gmail.labels https://www.googleapis.com/auth/gmail.modify'
+
+requestMapping:
+  headers:
+    Authorization: 'Bearer {{properties.accessToken}}'
+
+testRequest:
+  method: GET
+  url: 'https://www.googleapis.com/oauth2/v3/userinfo'
+  accountIdentifierKey: email

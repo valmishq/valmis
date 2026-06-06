@@ -20,7 +20,8 @@ export function createWriteFileTool(ctx: ToolContext): AgentTool {
 		label: 'Write File',
 		description:
 			"Write content to a file in the agent's persistent workspace. " +
-			'Creates parent directories if needed. Overwrites if file already exists.',
+			'Creates parent directories if needed. Overwrites if file already exists.' +
+			'Make sure you organize your workspace into folders to make it tidy. Categorize files into folders based on their category, add subfolders if necessary. Read file list before writing so you know what folders you have. Do not overuse folders.',
 		parameters: Type.Object({
 			path: Type.String({
 				description: 'Relative path to the file, e.g. "output/result.json"',

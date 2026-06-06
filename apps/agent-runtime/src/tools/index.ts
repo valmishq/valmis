@@ -6,6 +6,8 @@ import { createListFilesTool } from './list-files.js';
 import { createRunTerminalTool } from './run-terminal.js';
 import { createAskHumanTool } from './ask-human.js';
 import { createRunCodeTool } from './run-code.js';
+import { createMemoryWriteTool } from './memory-write.js';
+import { createMemorySearchTool } from './memory-search.js';
 
 export type { ToolContext } from './types.js';
 export { resolveWorkspacePath } from './types.js';
@@ -19,6 +21,10 @@ export { resolveWorkspacePath } from './types.js';
  *
  * All tools receive the same ToolContext — if a new tool needs extra
  * dependencies, add them to the ToolContext interface in `types.ts`.
+ *
+ * Memory tools (memory_write, memory_search) are always included.
+ * They silently fail if the agent has no embedding model configured —
+ * the host returns a 400 with a descriptive error that becomes a tool result.
  */
 export function createAgentTools(ctx: Parameters<typeof createCallApiTool>[0]): AgentTool[] {
 	return [
@@ -29,5 +35,7 @@ export function createAgentTools(ctx: Parameters<typeof createCallApiTool>[0]): 
 		createRunTerminalTool(ctx),
 		createAskHumanTool(ctx),
 		createRunCodeTool(ctx),
+		createMemoryWriteTool(ctx),
+		createMemorySearchTool(ctx),
 	];
 }

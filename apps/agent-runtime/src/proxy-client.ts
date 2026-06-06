@@ -7,6 +7,10 @@ import type {
 	ContentBlock,
 	HitlRequest,
 	HitlResponse,
+	MemoryWriteRequest,
+	MemorySearchRequest,
+	AgentMemoryEntry,
+	AgentMemorySearchResult,
 } from '@repo/types';
 
 /**
@@ -21,6 +25,8 @@ import type {
  *   POST /v1/runtime/internal/llm/stream           — LLM completion proxy
  *   GET  /v1/runtime/internal/thread/:id/messages  — load conversation history
  *   POST /v1/runtime/internal/thread/:id/messages  — append a message
+ *   POST /v1/runtime/internal/memory/write         — write a memory entry (host embeds + stores)
+ *   POST /v1/runtime/internal/memory/search        — search memory by semantic similarity
  */
 export class ProxyClient {
 	private readonly baseUrl: string;
@@ -165,6 +171,62 @@ export class ProxyClient {
 		}
 		return json.data;
 	}
+
+	// ─── Memory ───────────────────────────────────────────────────────────────
+
+	/**
+	 * Write a memory entry for this agent.
+	 *
+	 * The host embeds the content using the agent's configured embedding model
+	 * and persists the entry to the agent_memory table. The sandbox never calls
+	 * the embedding API directly — no API keys are available here.
+	 *
+	 * agentId is derived from the PROXY_TOKEN on the host; the sandbox cannot
+	 * write to another agent's memory.
+	 */
+	async memoryWrite(request: MemoryWriteRequest): Promise<AgentMemoryEntry> {
+		const res = await fetch(`${this.baseUrl}/v1/runtime/internal/memory/write`, {
+			method: 'POST',
+			headers: this.authHeaders(),
+			body: JSON.stringify(request),
+		});
+
+		const json = (await res.json()) as {
+			success: boolean;
+			data?: AgentMemoryEntry;
+			error?: string;
+		};
+		if (!json.success || !json.data) {
+			throw new Error(`Memory write failed: ${json.error ?? 'unknown error'}`);
+		}
+		return json.data;
+	}
+
+	/**
+	 * Search this agent's memory by semantic similarity.
+	 *
+	 * The host embeds the query text and returns the nearest memory entries
+	 * ranked by cosine similarity. The sandbox cannot access another agent's memory.
+	 */
+	async memorySearch(request: MemorySearchRequest): Promise<AgentMemorySearchResult[]> {
+		const res = await fetch(`${this.baseUrl}/v1/runtime/internal/memory/search`, {
+			method: 'POST',
+			headers: this.authHeaders(),
+			body: JSON.stringify(request),
+		});
+
+		const json = (await res.json()) as {
+			success: boolean;
+			data?: AgentMemorySearchResult[];
+			error?: string;
+		};
+		if (!json.success || !json.data) {
+			throw new Error(`Memory search failed: ${json.error ?? 'unknown error'}`);
+		}
+		return json.data;
+	}
+
+	// ─── Config ───────────────────────────────────────────────────────────────
 
 	/** Load agent runtime config from the host */
 	async loadConfig(): Promise<AgentRuntimeConfig> {

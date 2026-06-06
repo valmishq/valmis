@@ -1,0 +1,25 @@
+id: airtable-pat
+name: Airtable (Personal Access Token)
+type: bearerToken
+icon: /logos/airtable.svg
+description: >
+  Connect to Airtable using a Personal Access Token (PAT). Recommended over OAuth2
+  for server-side integrations where a single account's access is sufficient.
+documentationUrl: https://airtable.com/developers/web/api/authentication
+properties:
+  - name: token
+    displayName: Personal Access Token
+    type: secret
+    required: true
+    description: >
+      Create a PAT at https://airtable.com/create/tokens.
+      Recommended scopes: data.records:read, data.records:write, schema.bases:read.
+
+requestMapping:
+  headers:
+    Authorization: 'Bearer {{properties.token}}'
+
+testRequest:
+  method: GET
+  url: 'https://api.airtable.com/v0/meta/whoami'
+  accountIdentifierKey: id

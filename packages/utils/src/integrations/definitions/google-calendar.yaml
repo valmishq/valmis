@@ -1,0 +1,35 @@
+id: google-calendar
+name: Google Calendar (OAuth2)
+type: oauth2
+icon: /logos/google-calendar.svg
+description: Connect to Google Calendar via Google OAuth2 to read, create, update, and delete events and calendars.
+documentationUrl: https://developers.google.com/calendar/api/guides/overview
+
+properties:
+  - name: clientId
+    displayName: Client ID
+    type: string
+    required: true
+    description: OAuth2 Client ID from Google Cloud Console
+  - name: clientSecret
+    displayName: Client Secret
+    type: secret
+    required: true
+    description: OAuth2 Client Secret from Google Cloud Console
+
+oauth2:
+  authorizationUrl: 'https://accounts.google.com/o/oauth2/v2/auth'
+  accessTokenUrl: 'https://oauth2.googleapis.com/token'
+  clientIdProperty: clientId
+  clientSecretProperty: clientSecret
+  authStyle: inBody
+  scope: 'openid email https://www.googleapis.com/auth/calendar https://www.googleapis.com/auth/calendar.events'
+
+requestMapping:
+  headers:
+    Authorization: 'Bearer {{properties.accessToken}}'
+
+testRequest:
+  method: GET
+  url: 'https://www.googleapis.com/oauth2/v3/userinfo'
+  accountIdentifierKey: email

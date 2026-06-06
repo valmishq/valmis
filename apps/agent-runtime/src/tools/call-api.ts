@@ -8,10 +8,18 @@ import type { ToolContext } from './types.js';
 const DEFAULT_MAX_BODY_BYTES = 1_048_576;
 
 /**
- * call_api — Make an authenticated HTTP request using a connected credential.
+ * call_api — Make an HTTP request to an external service.
  *
- * The host backend resolves the credential, executes the HTTP request, and
- * returns the response body.  Raw credential values never enter this process.
+ * credentialId is OPTIONAL:
+ *   - For authenticated APIs: provide the correct credentialId from the
+ *     Available Credentials list. The host will inject the auth headers.
+ *   - For public APIs that need no authentication: pass an empty string ""
+ *     as credentialId. The request will be forwarded without any credential
+ *     injection.
+ *
+ * IMPORTANT: Never attach a credential to a request unless you are certain
+ * that credential belongs to the target service. Using a mismatched credential
+ * risks leaking secrets to unintended third-party services.
  */
 export function createCallApiTool(ctx: ToolContext): AgentTool {
 	const maxBodyBytes = ctx.callApiMaxBodyBytes ?? DEFAULT_MAX_BODY_BYTES;
@@ -20,10 +28,21 @@ export function createCallApiTool(ctx: ToolContext): AgentTool {
 		name: 'call_api',
 		label: 'Call External API',
 		description:
-			"Make an authenticated HTTP request to an external service using one of the agent's " +
-			'connected credentials. The host handles credential injection.',
+			'Make an HTTP request to an external URL. ' +
+			'For authenticated APIs: provide the correct credentialId from the Available Credentials list — ' +
+			'the host will inject the correct auth headers automatically. ' +
+			'For public APIs that require NO authentication (e.g. open data endpoints): ' +
+			'pass an empty string "" as credentialId. ' +
+			'IMPORTANT: Never use a credential for a service it does not belong to. ' +
+			'Using a mismatched credential risks leaking secrets to third-party services.',
 		parameters: Type.Object({
-			credentialId: Type.String({ description: 'ID of the credential to use' }),
+			credentialId: Type.Optional(
+				Type.String({
+					description:
+						'ID of the credential to use for authenticated APIs. ' +
+						'Omit or leave empty for public APIs that need no authentication.',
+				}),
+			),
 			method: Type.Union([
 				Type.Literal('GET'),
 				Type.Literal('POST'),
@@ -38,7 +57,7 @@ export function createCallApiTool(ctx: ToolContext): AgentTool {
 		}),
 		execute: async (_toolCallId, params) => {
 			const p = params as {
-				credentialId: string;
+				credentialId?: string;
 				method: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH';
 				url: string;
 				headers?: Record<string, string>;
@@ -56,11 +75,16 @@ export function createCallApiTool(ctx: ToolContext): AgentTool {
 			}
 
 			logger.debug(
-				{ credentialId: p.credentialId, method: p.method, url: p.url },
+				{ credentialId: p.credentialId || '(none)', method: p.method, url: p.url },
 				'[agent-runner] call_api executing',
 			);
 
-			const response = await ctx.proxyClient.proxy(p);
+			// Pass empty string when no credential is needed — the proxy will
+			// skip credential injection and forward the request as-is.
+			const response = await ctx.proxyClient.proxy({
+				...p,
+				credentialId: p.credentialId ?? '',
+			});
 
 			logger.debug({ status: response.status }, '[agent-runner] call_api response');
 

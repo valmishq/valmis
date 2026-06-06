@@ -1,0 +1,54 @@
+id: slack
+name: Slack (OAuth2)
+type: oauth2
+icon: /logos/slack.svg
+description: Connect to Slack via OAuth2 to send messages, manage channels, and interact with workspaces as a bot.
+documentationUrl: https://api.slack.com/authentication/oauth-v2
+
+properties:
+  - name: clientId
+    displayName: Client ID
+    type: string
+    required: true
+    description: OAuth2 Client ID from your Slack App settings
+  - name: clientSecret
+    displayName: Client Secret
+    type: secret
+    required: true
+    description: OAuth2 Client Secret from your Slack App settings
+  - name: scope
+    displayName: Bot Token Scopes
+    type: string
+    required: true
+    description: Space-separated list of Slack bot OAuth scopes. See https://api.slack.com/scopes
+    default: >-
+      channels:read channels:history channels:join channels:write.invites
+      groups:read groups:history
+      im:read im:history im:write
+      mpim:read mpim:history mpim:write
+      chat:write chat:write.public
+      files:read files:write
+      users:read users:read.email
+      reactions:read reactions:write
+      pins:read pins:write
+      bookmarks:read bookmarks:write
+      team:read
+
+# Slack OAuth v2 (bot token flow). The OIDC endpoints only support openid/email/profile
+# and will reject all bot scopes with "invalid_scope". Use oauth.v2 endpoints instead.
+oauth2:
+  authorizationUrl: 'https://slack.com/oauth/v2/authorize'
+  accessTokenUrl: 'https://slack.com/api/oauth.v2.access'
+  clientIdProperty: clientId
+  clientSecretProperty: clientSecret
+  authStyle: inBody
+
+requestMapping:
+  headers:
+    Authorization: 'Bearer {{properties.accessToken}}'
+
+# auth.test verifies the bot token and returns the bot/app display name as `user`.
+testRequest:
+  method: GET
+  url: 'https://slack.com/api/auth.test'
+  accountIdentifierKey: user

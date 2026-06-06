@@ -1,13 +1,74 @@
 import { spawn } from 'child_process';
 import { mkdirSync, rmSync } from 'fs';
 import { resolve, join } from 'path';
-import type { AgentTriggerType, AgentRuntimeConfig, Agent } from '@repo/types';
+import type { AgentTriggerType, AgentRuntimeConfig, Agent, CredentialMeta } from '@repo/types';
+import { getCredentialDefinition } from '@repo/utils';
 import { AgentSessionService } from './AgentSessionService.js';
 import { AgentProxyService } from './AgentProxyService.js';
 import { AgentService } from './AgentService.js';
 import { LlmProviderService } from './llmProviderService.js';
+import { CredentialService } from './CredentialService.js';
 import { agentStreamBus } from './AgentStreamBus.js';
 import { logger } from '../config/logger.js';
+
+/**
+ * Extract a clean, user-facing error message from child process output.
+ *
+ * The child uses pino logger which emits newline-delimited JSON to stdout.
+ * Each line is a JSON object like:
+ *   {"level":50,"msg":"[agent-runtime] fatal error","err":{"message":"..."}}
+ *
+ * Strategy (in order):
+ *   1. Walk lines in reverse; parse as JSON and look for err.message in level≥40 entries.
+ *   2. Fall back to regex matching "Error: <message>" on plain-text lines (stderr).
+ *   3. Return the last non-empty line trimmed to 300 chars.
+ *   4. Generic fallback if output is empty.
+ */
+function extractUserErrorMessage(output: string): string {
+	if (!output.trim()) {
+		return 'Agent process exited with an error. Please try again.';
+	}
+
+	const lines = output.split('\n').filter((l) => l.trim().length > 0);
+
+	// Walk backwards so we get the most recent error first
+	for (let i = lines.length - 1; i >= 0; i--) {
+		const line = lines[i].trim();
+
+		// Try pino structured JSON first
+		if (line.startsWith('{')) {
+			try {
+				const entry = JSON.parse(line) as {
+					level?: number;
+					msg?: string;
+					err?: { message?: string };
+				};
+				// pino level 40=warn, 50=error — only surface errors/warns
+				if (entry.level !== undefined && entry.level >= 40) {
+					if (entry.err?.message) {
+						return entry.err.message.slice(0, 300);
+					}
+					if (entry.msg && !entry.msg.startsWith('[')) {
+						// Only use msg if it looks like a real error message, not a log prefix
+						return entry.msg.slice(0, 300);
+					}
+				}
+			} catch {
+				// not valid JSON — fall through to regex
+			}
+		}
+
+		// Plain-text "Error: <message>" lines (from stderr / uncaught exceptions)
+		const match = line.match(/(?:^|:\s*)Error:\s*(.+)/i);
+		if (match) {
+			return match[1].slice(0, 300);
+		}
+	}
+
+	// Last resort: return the last non-empty line
+	const lastLine = lines[lines.length - 1].trim();
+	return lastLine.slice(0, 300) || 'Agent process exited with an error. Please try again.';
+}
 
 /**
  * Manages agent execution by spawning a dedicated Node.js child process per turn.
@@ -54,6 +115,7 @@ export class AgentRuntimeService {
 		private readonly proxyService: AgentProxyService,
 		private readonly agentService: AgentService,
 		private readonly llmProviderService: LlmProviderService,
+		private readonly credentialService: CredentialService,
 	) {
 		// Resolve agent-runtime entry relative to the repo root by default.
 		// process.cwd() is apps/backend/ so we go up two levels to reach the monorepo root.
@@ -155,17 +217,29 @@ export class AgentRuntimeService {
 
 		logger.debug({ agentId, threadId, pid: child.pid }, '[runtime] child process started');
 
-		// Stream child stdout/stderr to logger
+		// Accumulate the last N chars of both stdout and stderr.
+		// The child process uses pino logger which writes structured JSON to stdout, not stderr.
+		// We capture both streams so extractUserErrorMessage can find the actual error regardless
+		// of which stream it appears on.
+		const OUTPUT_CAP = 4096;
+		let stdoutTail = '';
+		let stderrTail = '';
+
+		// Stream child stdout/stderr to logger and keep rolling tails for error extraction
 		child.stdout?.on('data', (data: Buffer) => {
-			logger.info({ agentId, threadId }, `[agent] ${data.toString().trim()}`);
+			const text = data.toString();
+			logger.info({ agentId, threadId }, `[agent] ${text.trim()}`);
+			stdoutTail = (stdoutTail + text).slice(-OUTPUT_CAP);
 		});
 		child.stderr?.on('data', (data: Buffer) => {
-			logger.warn({ agentId, threadId }, `[agent:stderr] ${data.toString().trim()}`);
+			const text = data.toString();
+			logger.warn({ agentId, threadId }, `[agent:stderr] ${text.trim()}`);
+			stderrTail = (stderrTail + text).slice(-OUTPUT_CAP);
 		});
 
 		// Update thread status based on exit code.
 		// On non-zero exit also emit an SSE error event so the browser can unlock the UI
-		// (without this the isStreaming flag stays true indefinitely after a crash).
+		// and see what went wrong (without this the isStreaming flag stays true indefinitely).
 		child.on('close', async (code) => {
 			const status = code === 0 ? 'completed' : 'error';
 			logger.info({ agentId, threadId, code, status }, '[runtime] agent process exited');
@@ -176,18 +250,18 @@ export class AgentRuntimeService {
 			}
 
 			if (code !== 0) {
-				// Notify the browser so it can unblock the input field
-				agentStreamBus.emit(threadId, {
-					type: 'error',
-					message: 'Agent process exited unexpectedly. Please try again.',
-				});
+				// Try stderr first (raw Node errors), then fall back to stdout (pino JSON logs).
+				// Pino logs are structured JSON; extractUserErrorMessage parses the "message" field.
+				const combinedOutput = stderrTail || stdoutTail;
+				const userMessage = extractUserErrorMessage(combinedOutput);
+				agentStreamBus.emit(threadId, { type: 'error', message: userMessage });
 			}
 			// Always emit 'done' so the SSE subscriber can clean up
 			agentStreamBus.emit(threadId, { type: 'done' });
 		});
 
-		child.on('error', async (err) => {
-			logger.error({ err, agentId, threadId }, '[runtime] failed to spawn agent process');
+		child.on('error', async (spawnErr) => {
+			logger.error({ err: spawnErr, agentId, threadId }, '[runtime] failed to spawn agent process');
 			try {
 				await this.sessionService.updateThreadStatus(threadId, 'error');
 			} catch (updateErr) {
@@ -195,7 +269,7 @@ export class AgentRuntimeService {
 			}
 			agentStreamBus.emit(threadId, {
 				type: 'error',
-				message: 'Failed to start agent process. Please try again.',
+				message: `Failed to start agent process: ${spawnErr.message}`,
 			});
 			agentStreamBus.emit(threadId, { type: 'done' });
 		});
@@ -243,14 +317,64 @@ export class AgentRuntimeService {
 			}
 		}
 
+		// Resolve credential metadata so the agent prompt can show name, integration,
+		// and OAuth2 scopes (when available). We fetch all credentials for this owner
+		// and filter to those on the agent.
+		//
+		// Scope resolution strategy (in priority order):
+		//   1. The "scope" property stored in the credential's encrypted data — this is
+		//      the value the user actually entered (e.g. Google Workspace lets users
+		//      customise the scopes). It lives in the decrypted data blob as `data.scope`.
+		//   2. The default scope declared in the definition's oauth2.scope field.
+		//   3. undefined — no scope info available; agent may attempt the call freely.
+		const credentials: CredentialMeta[] = [];
+		if (agent.credentialIds.length > 0) {
+			const allCredentials = await this.credentialService.listByOwner(ownerId);
+			for (const cred of allCredentials) {
+				if (agent.credentialIds.includes(cred.id)) {
+					let scopes: string | undefined;
+					try {
+						// First: read the actual stored value from the encrypted data blob.
+						const data = await this.credentialService.getDecryptedData(cred.id, ownerId);
+						if (data && typeof data.scope === 'string' && data.scope.trim().length > 0) {
+							scopes = data.scope.trim();
+						} else {
+							// Fallback: use the default scope from the YAML definition (oauth2.scope).
+							const definition = getCredentialDefinition(cred.type);
+							const defScope = definition?.oauth2?.scope;
+							if (typeof defScope === 'string' && defScope.trim().length > 0) {
+								scopes = defScope.trim();
+							}
+						}
+					} catch (err) {
+						// Non-fatal — agent will operate without scope info for this credential.
+						logger.warn(
+							{ credId: cred.id, err },
+							'[runtime] failed to resolve scopes for credential — omitting from prompt',
+						);
+					}
+
+					credentials.push({
+						id: cred.id,
+						name: cred.name,
+						integration: cred.type,
+						...(scopes !== undefined ? { scopes } : {}),
+					});
+				}
+			}
+		}
+
 		return {
 			agentId: agent.id,
+			ownerId,
 			threadId,
 			name: agent.name,
 			systemInstruction: agent.systemInstruction ?? '',
 			modelProvider,
 			modelId,
 			credentialIds: agent.credentialIds,
+			credentials,
+			embeddingModelConfigId: agent.embeddingModelConfigId,
 			triggerType,
 			triggerPayload,
 		};

@@ -2,6 +2,7 @@ import express from 'express';
 import { logger } from './config/logger.js';
 import { corsMiddleware } from './middleware/cors.js';
 import { rateLimiter } from './middleware/auth.js';
+import { errorHandler } from './middleware/errorHandler.js';
 import { healthRouter } from './routes/health.js';
 import { createCredentialsRouter } from './routes/credentials.js';
 import { createOAuth2Router } from './routes/oauth2.js';
@@ -20,6 +21,7 @@ import { EncryptionService } from './services/EncryptionService.js';
 import { CredentialService } from './services/CredentialService.js';
 import { CredentialResolverService } from './services/CredentialResolverService.js';
 import { AgentService } from './services/AgentService.js';
+import { AgentMemoryService } from './services/AgentMemoryService.js';
 import { LlmProviderService } from './services/llmProviderService.js';
 import { AgentSessionService } from './services/AgentSessionService.js';
 import { agentStreamBus } from './services/AgentStreamBus.js';
@@ -48,6 +50,11 @@ const credentialService = new CredentialService(encryptionService);
 const credentialResolverService = new CredentialResolverService(credentialService);
 const agentService = new AgentService();
 const llmProviderService = new LlmProviderService(encryptionService);
+const agentMemoryService = new AgentMemoryService(
+	agentService,
+	llmProviderService,
+	encryptionService,
+);
 const sessionService = new AgentSessionService();
 const proxyService = new AgentProxyService(credentialResolverService, PROXY_TOKEN_SECRET);
 const llmProxyService = new AgentLlmProxyService(
@@ -63,6 +70,7 @@ const runtimeService = new AgentRuntimeService(
 	proxyService,
 	agentService,
 	llmProviderService,
+	credentialService,
 );
 const triggerService = new TriggerService(runtimeService, sessionService);
 
@@ -77,8 +85,7 @@ app.set('trust proxy', parseInt(process.env.TRUST_PROXY_HOPS ?? '0', 10));
 
 // --- Global middleware ---
 app.use(corsMiddleware);
-// Limit JSON bodies to 1 MB to prevent large-payload abuse from the agent proxy routes
-app.use(express.json({ limit: '1mb' }));
+app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
 // Rate limiter — applied globally with public endpoint exclusions
@@ -118,10 +125,14 @@ app.use(
 		proxyService,
 		llmProxyService,
 		triggerService,
+		agentMemoryService,
 	),
 );
 // Webhook routes — public, HMAC-verified
 app.use('/v1/webhooks', createWebhooksRouter(triggerService));
+
+// Global error handler — must be registered last, after all routes
+app.use(errorHandler);
 
 app.listen(PORT, async () => {
 	logger.info({ port: PORT }, '[backend] server running');

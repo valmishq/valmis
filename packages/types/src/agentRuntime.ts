@@ -113,9 +113,15 @@ export interface AgentTrigger {
  * Credential proxy request — sent from the agent sandbox to the host.
  * The host resolves the credential and executes the HTTP call on behalf of
  * the sandbox, so raw credential values never enter the container.
+ *
+ * When `credentialId` is empty or omitted, the host executes the request
+ * directly without injecting any authentication. Use this for public APIs.
  */
 export interface ProxyRequest {
-	/** ID of the credential to use — must be in the agent's allowed credential list */
+	/**
+	 * ID of the credential to use. Must be in the agent's allowed credential list.
+	 * Pass an empty string or omit entirely for public APIs that need no auth.
+	 */
 	credentialId: string;
 	method: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH';
 	url: string;
@@ -170,11 +176,38 @@ export interface SandboxTokenPayload {
 }
 
 /**
+ * Minimal credential descriptor passed to the sandbox so the agent can
+ * identify which credential belongs to which service.
+ * Contains no secrets — only display metadata.
+ */
+export interface CredentialMeta {
+	/** UUID used as credentialId in call_api */
+	id: string;
+	/** Human-readable name the user gave this credential (e.g. "My GitHub Token") */
+	name: string;
+	/**
+	 * Integration definition ID — matches the YAML filename (e.g. "github",
+	 * "google-workspace", "openweathermap"). Tells the agent which service
+	 * this credential was created for.
+	 */
+	integration: string;
+	/**
+	 * OAuth2 scope string from the integration definition (space-separated scopes).
+	 * Only present for OAuth2 credentials that declare a scope in their YAML.
+	 * The agent must restrict API calls to operations covered by these scopes.
+	 * Absent for non-OAuth2 credentials or OAuth2 credentials with no declared scope.
+	 */
+	scopes?: string;
+}
+
+/**
  * Agent runtime config delivered to the sandbox on startup.
  * Contains everything the agent-runtime needs to operate — no secrets.
  */
 export interface AgentRuntimeConfig {
 	agentId: string;
+	/** Owner of this agent — required by host to scope memory embedding calls */
+	ownerId: string;
 	threadId: string;
 	name: string;
 	systemInstruction: string;
@@ -183,6 +216,17 @@ export interface AgentRuntimeConfig {
 	modelId: string;
 	/** IDs of credentials available to this agent (used when calling the proxy) */
 	credentialIds: string[];
+	/**
+	 * Rich credential metadata — includes name and integration for each credential.
+	 * Used by the system prompt so the agent knows which credential belongs to
+	 * which service. Replaces the UUID-only credentialIds list in the prompt.
+	 */
+	credentials: CredentialMeta[];
+	/**
+	 * LLM provider config ID used for memory embeddings.
+	 * Null/empty means memory tools are unavailable for this agent.
+	 */
+	embeddingModelConfigId?: string;
 	triggerType: AgentTriggerType;
 	triggerPayload?: Record<string, unknown>;
 }

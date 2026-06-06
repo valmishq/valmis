@@ -29,6 +29,51 @@
 	/** Mobile sidebar overlay open state */
 	let sidebarOpen = $state(false);
 
+	// ── History hydration helpers ──────────────────────────────────────────
+
+	/**
+	 * Build the toolResults map from persisted tool_result messages.
+	 * Called on initial load and on thread navigation so the ToolCallIndicator
+	 * shows results for historical messages after a page refresh.
+	 */
+	function buildToolResultsFromMessages(msgs: AgentMessage[]): Record<string, string> {
+		const map: Record<string, string> = {};
+		for (const msg of msgs) {
+			if (msg.role !== 'tool_result' || !msg.toolCallId) continue;
+			const text = msg.content
+				.filter((b): b is Extract<ContentBlock, { type: 'text' }> => b.type === 'text')
+				.map((b) => {
+					const MAX = 1000;
+					return b.text.length > MAX ? b.text.slice(0, MAX) + '… [truncated]' : b.text;
+				})
+				.join('\n');
+			map[msg.toolCallId] = text || '(no text output)';
+		}
+		return map;
+	}
+
+	/**
+	 * Build the toolCallArgs map from assistant messages' toolCall content blocks.
+	 * Called on initial load so the Arguments section shows for historical messages.
+	 */
+	function buildToolCallArgsFromMessages(
+		msgs: AgentMessage[]
+	): Record<string, { toolName: string; argsJson: string }> {
+		const map: Record<string, { toolName: string; argsJson: string }> = {};
+		for (const msg of msgs) {
+			if (msg.role !== 'assistant') continue;
+			for (const block of msg.content) {
+				if (block.type !== 'toolCall') continue;
+				if (Object.keys(block.arguments).length === 0) continue;
+				map[block.id] = {
+					toolName: block.name,
+					argsJson: JSON.stringify(block.arguments, null, 2)
+				};
+			}
+		}
+		return map;
+	}
+
 	/**
 	 * Re-sync all per-thread state when the active thread changes.
 	 * SvelteKit re-uses this component across sibling thread routes, so `data`
@@ -41,8 +86,8 @@
 
 		messages = data.messages;
 		threads = data.threads;
-		toolResults = {};
-		toolCallArgs = {};
+		toolResults = buildToolResultsFromMessages(data.messages);
+		toolCallArgs = buildToolCallArgsFromMessages(data.messages);
 		isStreaming = false;
 		streamingMessageId = null;
 		pendingHitl = null;
@@ -60,17 +105,17 @@
 
 	/**
 	 * Map of toolCallId → result string.
-	 * Populated by tool_call_end SSE events; passed to ChatMessage for ToolCallIndicator.
+	 * Seeded from DB tool_result messages on load; updated live by tool_call_end SSE events.
 	 */
-	let toolResults = $state<Record<string, string>>({});
+	let toolResults = $state<Record<string, string>>(buildToolResultsFromMessages(data.messages));
 
 	/**
 	 * Map of toolCallId → { toolName, argsJson }.
-	 * Populated by tool_call_delta SSE events — carries the real tool name and
-	 * the pretty-printed JSON arguments the LLM decided to pass.
-	 * Passed to ChatMessage so ToolCallIndicator can show the "thinking context".
+	 * Seeded from assistant message toolCall blocks on load; updated live by tool_call_delta events.
 	 */
-	let toolCallArgs = $state<Record<string, { toolName: string; argsJson: string }>>({});
+	let toolCallArgs = $state<Record<string, { toolName: string; argsJson: string }>>(
+		buildToolCallArgsFromMessages(data.messages)
+	);
 
 	/**
 	 * Pending HITL (Human-in-the-Loop) request from the agent.
@@ -285,6 +330,7 @@
 				isStreaming = false;
 				streamingMessageId = null;
 				pendingHitl = null;
+				// Show the error as a toast so it's hard to miss
 				setAlert({
 					type: 'error',
 					title: 'Agent error',
@@ -292,6 +338,15 @@
 					duration: 8000,
 					show: true
 				});
+				const errorMsg: AgentMessage = {
+					id: `error-${Date.now()}`,
+					threadId: data.thread.id,
+					role: 'assistant',
+					content: [{ type: 'text', text: `⚠️ ${event.message}` }],
+					createdAt: new Date()
+				};
+				messages = [...messages, errorMsg];
+				scrollToBottom();
 				break;
 			}
 		}
@@ -381,8 +436,9 @@
 				return;
 			}
 			const body = await res.json();
-			// SvelteKit will navigate and re-run the load function
-			window.location.href = `/app/chat/${data.agent.id}/${body.data.id}`;
+			// Navigate using SvelteKit's client-side router to avoid a full page reload
+			// (which would cause a dark-mode flash before the theme script in app.html fires).
+			await goto(`/app/chat/${data.agent.id}/${body.data.id}`);
 		} catch {
 			setAlert({
 				type: 'error',

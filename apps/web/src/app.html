@@ -4,6 +4,23 @@
 		<meta charset="utf-8" />
 		<meta name="viewport" content="width=device-width, initial-scale=1" />
 		<meta name="text-scale" content="scale" />
+		<!--
+			Apply the persisted theme class synchronously before any rendering.
+			This inline script runs before the browser paints anything, preventing
+			the "flash of light mode" when the user has dark mode enabled.
+			It mirrors the logic in theme.store.ts — reads localStorage first,
+			falls back to the OS preference.
+		-->
+		<script>
+			(function () {
+				try {
+					var stored = localStorage.getItem('theme');
+					var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+					var isDark = stored === 'dark' || (stored !== 'light' && prefersDark);
+					if (isDark) document.documentElement.classList.add('dark');
+				} catch (_) {}
+			})();
+		</script>
 		%sveltekit.head%
 	</head>
 	<body data-sveltekit-preload-data="hover">

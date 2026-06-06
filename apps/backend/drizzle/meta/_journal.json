@@ -36,6 +36,13 @@
       "when": 1780474404234,
       "tag": "0004_outstanding_doorman",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1780683706669,
+      "tag": "0005_colossal_banshee",
+      "breakpoints": true
     }
   ]
 }

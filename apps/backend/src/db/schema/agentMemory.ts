@@ -1,6 +1,24 @@
-import { pgTable, uuid, text, timestamp, index, jsonb } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, text, timestamp, index, jsonb, pgEnum } from 'drizzle-orm/pg-core';
 import { customType } from 'drizzle-orm/pg-core';
 import { agents } from './agents.js';
+import { agentThreads } from './agentThreads.js';
+
+/**
+ * Memory type classification — mirrors the four-layer memory model.
+ *
+ * - episodic:   Raw records of what happened (conversation logs, task outcomes)
+ * - semantic:   Distilled facts and long-term knowledge about users/domain
+ * - procedural: Behavioral rules, patterns, and operating constraints the agent learned
+ * - working:    Short-lived context scoped to the current thread (ephemeral knowledge)
+ */
+export const memoryTypeEnum = pgEnum('memory_type', [
+	'episodic',
+	'semantic',
+	'procedural',
+	'working',
+]);
+
+export type MemoryTypeEnum = (typeof memoryTypeEnum.enumValues)[number];
 
 /**
  * Custom pgvector column type for Drizzle ORM — variable-length vector.
@@ -31,6 +49,16 @@ export const agentMemory = pgTable(
 		agentId: uuid('agent_id')
 			.notNull()
 			.references(() => agents.id, { onDelete: 'cascade' }),
+		/**
+		 * Optional thread scope — set for 'working' memory entries.
+		 * Null means the entry is global to the agent (not scoped to a thread).
+		 */
+		threadId: uuid('thread_id').references(() => agentThreads.id, { onDelete: 'cascade' }),
+		/**
+		 * Memory classification — used to filter retrieval by type.
+		 * Default is 'semantic' (the most common long-term memory type).
+		 */
+		memoryType: memoryTypeEnum('memory_type').notNull().default('semantic'),
 		/** Raw text content of the memory entry */
 		content: text('content').notNull(),
 		/**
@@ -39,13 +67,17 @@ export const agentMemory = pgTable(
 		 * Changing the agent's embedding model requires clearing existing memory entries.
 		 */
 		embedding: vector('embedding').notNull(),
-		/** Optional metadata (source, tags, etc.) */
+		/** Optional metadata (source, tags, confidence, etc.) */
 		metadata: jsonb('metadata'),
 		createdAt: timestamp('created_at').defaultNow().notNull(),
 	},
 	(table) => [
 		/** B-tree index for filtering by agent */
 		index('agent_memory_agent_id_idx').on(table.agentId),
+		/** B-tree index for filtering by memory type */
+		index('agent_memory_type_idx').on(table.memoryType),
+		/** B-tree index for thread-scoped working memory queries */
+		index('agent_memory_thread_id_idx').on(table.threadId),
 		// HNSW index is intentionally omitted — pgvector requires a fixed-dimension column
 		// (e.g. vector(1536)) to build an HNSW index, but this system supports multiple
 		// embedding models with different output dimensions. Exact cosine search via
