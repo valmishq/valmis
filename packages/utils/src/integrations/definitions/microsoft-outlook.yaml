@@ -1,0 +1,49 @@
+id: microsoft-outlook
+name: Microsoft Outlook (OAuth2)
+type: oauth2
+icon: /logos/microsoft-outlook.svg
+description: >
+  Connect to Microsoft Outlook via Azure AD OAuth2 to read, send, and manage emails
+  using the Microsoft Graph API.
+documentationUrl: https://learn.microsoft.com/en-us/graph/api/resources/mail-api-overview
+properties:
+  - name: clientId
+    displayName: Client ID (Application ID)
+    type: string
+    required: true
+    description: >
+      Application (client) ID from your Azure AD app registration.
+      Found in Azure Portal → App registrations → your app → Overview.
+  - name: clientSecret
+    displayName: Client Secret
+    type: secret
+    required: true
+    description: >
+      Client secret value from Azure AD app registration.
+      Found in Azure Portal → App registrations → your app → Certificates & secrets.
+
+oauth2:
+  authorizationUrl: 'https://login.microsoftonline.com/common/oauth2/v2.0/authorize'
+  accessTokenUrl: 'https://login.microsoftonline.com/common/oauth2/v2.0/token'
+  clientIdProperty: clientId
+  clientSecretProperty: clientSecret
+  # Microsoft accepts client_secret in the POST body (inBody)
+  authStyle: inBody
+  # User.Read is required to call /me on the Graph API (used by testRequest).
+  # offline_access is required to receive a refresh_token.
+  scope: >-
+    openid email profile offline_access
+    https://graph.microsoft.com/User.Read
+    https://graph.microsoft.com/Mail.Read
+    https://graph.microsoft.com/Mail.Send
+    https://graph.microsoft.com/Mail.ReadWrite
+    https://graph.microsoft.com/MailboxSettings.Read
+
+requestMapping:
+  headers:
+    Authorization: 'Bearer {{properties.accessToken}}'
+
+testRequest:
+  method: GET
+  url: 'https://graph.microsoft.com/v1.0/me'
+  accountIdentifierKey: userPrincipalName

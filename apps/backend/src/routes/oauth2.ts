@@ -377,8 +377,10 @@ export function createOAuth2Router(authService: AuthService): Router {
 			'Content-Type': 'application/x-www-form-urlencoded',
 		};
 
-		// If authStyle is inHeader, use Basic auth (only for non-PKCE flows)
-		if (oauth2Config.authStyle === 'inHeader' && !oauth2Config.usePkce) {
+		// If authStyle is inHeader, use Basic auth for token exchange.
+		// This applies even when PKCE is used — some providers (e.g. Airtable) require
+		// Basic auth credentials in the Authorization header AND a code_verifier in the body.
+		if (oauth2Config.authStyle === 'inHeader' && clientSecret) {
 			const encoded = Buffer.from(`${clientId}:${clientSecret}`).toString('base64');
 			headers['Authorization'] = `Basic ${encoded}`;
 		}

@@ -1,0 +1,52 @@
+id: hubspot-oauth2
+name: HubSpot (OAuth2)
+type: oauth2
+icon: /logos/hubspot.svg
+description: >
+  Connect to HubSpot via OAuth2 using a public app. Required when building integrations
+  that act on behalf of multiple HubSpot accounts.
+documentationUrl: https://developers.hubspot.com/docs/guides/apps/public-apps/overview
+properties:
+  - name: clientId
+    displayName: Client ID
+    type: string
+    required: true
+    description: Client ID from your HubSpot public app (Apps > your app > Auth tab)
+  - name: clientSecret
+    displayName: Client Secret
+    type: secret
+    required: true
+    description: Client Secret from your HubSpot public app (Apps > your app > Auth tab)
+
+oauth2:
+  authorizationUrl: 'https://app.hubspot.com/oauth/authorize'
+  accessTokenUrl: 'https://api.hubapi.com/oauth/v1/token'
+  clientIdProperty: clientId
+  clientSecretProperty: clientSecret
+  # HubSpot accepts client credentials in the POST body
+  authStyle: inBody
+  scope: >-
+    oauth
+    crm.objects.contacts.read
+    crm.lists.read
+    crm.objects.contacts.write
+    crm.objects.companies.read
+    crm.objects.companies.write
+    crm.objects.deals.read
+    crm.objects.deals.write
+    crm.schemas.contacts.read
+    crm.schemas.companies.read
+    crm.schemas.deals.read
+    crm.objects.owners.read
+    crm.lists.write
+    forms
+    tickets
+
+requestMapping:
+  headers:
+    Authorization: 'Bearer {{properties.accessToken}}'
+
+testRequest:
+  method: GET
+  url: 'https://api.hubapi.com/account-info/v3/details'
+  accountIdentifierKey: portalId

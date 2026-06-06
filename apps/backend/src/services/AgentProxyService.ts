@@ -75,7 +75,7 @@ export class AgentProxyService {
 		return payload as unknown as SandboxTokenPayload;
 	}
 
-	// ─── HITL ──────────────────────────────────────────────────────────────
+	// HITL
 
 	/**
 	 * Submit a HITL request on behalf of a sandbox.
@@ -145,24 +145,52 @@ export class AgentProxyService {
 		return true;
 	}
 
-	// ─── Credential Proxy ─────────────────────────────────────────────────
+	// Header sanitisation
+
+	/**
+	 * Strip surrounding double-quote characters that LLMs occasionally wrap around
+	 * header names, e.g. '"Content-Type"' becomes 'Content-Type'.
+	 *
+	 * Node.js fetch's Headers.append rejects quoted names with the error:
+	 *   `Headers.append: ""Content-Type"" is an invalid header name`
+	 *
+	 * This is a defensive normalisation layer — valid header names are unchanged.
+	 */
+	private sanitizeHeaders(
+		headers: Record<string, string> | undefined,
+	): Record<string, string> | undefined {
+		if (!headers) return headers;
+		const sanitized: Record<string, string> = {};
+		for (const [key, value] of Object.entries(headers)) {
+			// Remove leading/trailing double-quote characters from the header name
+			const cleanKey = key.replace(/^"+|"+$/g, '');
+			sanitized[cleanKey] = value;
+		}
+		return sanitized;
+	}
+
+	// Credential Proxy
 
 	/**
 	 * Execute a credential proxy request on behalf of a sandbox.
 	 *
 	 * Steps:
 	 *   1. Verify PROXY_TOKEN
-	 *   2. If credentialId is non-empty, enforce it is in the token's allowed list
+	 *   2. Sanitize caller-supplied header names (strip LLM-generated surrounding quotes)
+	 *   3. If credentialId is non-empty, enforce it is in the token's allowed list
 	 *      and delegate to CredentialResolverService.executeWithCredential()
-	 *   3. If credentialId is empty, execute the request directly without
+	 *   4. If credentialId is empty, execute the request directly without
 	 *      injecting any authentication (for public APIs)
-	 *   4. Return response (status, headers, body) — never the raw credential
+	 *   5. Return response (status, headers, body) — never the raw credential
 	 */
 	async executeProxyRequest(proxyToken: string, request: ProxyRequest): Promise<ProxyResponse> {
 		// Step 1 — validate token
 		const tokenPayload = await this.verifyProxyToken(proxyToken);
 
-		// Step 2a — unauthenticated path: empty credentialId means no auth injection
+		// Step 2 — sanitize headers: strip surrounding quotes that LLMs generate
+		const sanitizedHeaders = this.sanitizeHeaders(request.headers);
+
+		// Step 3a — unauthenticated path: empty credentialId means no auth injection
 		if (!request.credentialId) {
 			logger.info(
 				{ agentId: tokenPayload.agentId, url: request.url },
@@ -181,7 +209,7 @@ export class AgentProxyService {
 
 			const fetchOptions: RequestInit = {
 				method: request.method,
-				headers: request.headers,
+				headers: sanitizedHeaders,
 			};
 			if (request.body) {
 				fetchOptions.body = request.body;
@@ -197,7 +225,7 @@ export class AgentProxyService {
 			return { status: response.status, headers, body };
 		}
 
-		// Step 2b — authenticated path: enforce credential allowlist
+		// Step 3b — authenticated path: enforce credential allowlist
 		if (!tokenPayload.credentialIds.includes(request.credentialId)) {
 			throw new Error(
 				`Credential ${request.credentialId} is not authorized for this sandbox session`,
@@ -209,20 +237,20 @@ export class AgentProxyService {
 			'[proxy] executing authenticated credential proxy request',
 		);
 
-		// Step 3 — execute via resolver (handles OAuth2 refresh, header injection, etc.)
+		// Step 4 — execute via resolver (handles OAuth2 refresh, header injection, etc.)
 		const response = await this.credentialResolver.executeWithCredential(
 			request.credentialId,
 			tokenPayload.ownerId,
 			{
 				method: request.method,
 				url: request.url,
-				headers: request.headers,
+				headers: sanitizedHeaders,
 				qs: request.qs,
 				body: request.body,
 			},
 		);
 
-		// Step 4 — collect response
+		// Step 5 — collect response
 		const body = await response.text();
 		const headers: Record<string, string> = {};
 		response.headers.forEach((value, key) => {

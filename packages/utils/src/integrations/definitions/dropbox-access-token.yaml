@@ -1,0 +1,42 @@
+id: dropbox-access-token
+name: Dropbox (Access Token)
+type: bearerToken
+description: >
+  Connect to the Dropbox API using a short-lived or long-lived access token.
+  Recommended for testing or server-side integrations with a single account.
+  For production apps with multiple users, use OAuth2 instead.
+documentationUrl: https://developers.dropbox.com/oauth-guide
+icon: /logos/dropbox.svg
+properties:
+  - name: accessToken
+    displayName: Access Token
+    type: secret
+    required: true
+    description: >
+      Generate a token in the Dropbox App Console under
+      OAuth 2 → Generated access token. Tokens are scoped to the app
+      and grant access to either a single App Folder or the Full Dropbox
+      depending on the access type you selected when creating the app.
+  - name: appAccessType
+    displayName: App Access Type
+    type: options
+    required: true
+    description: >
+      Choose the same access type you selected when creating your Dropbox app.
+      "App Folder" grants access only to a folder named after your app.
+      "Full Dropbox" grants access to the user's entire Dropbox.
+    default: app_folder
+    options:
+      - name: App Folder
+        value: app_folder
+      - name: Full Dropbox
+        value: full_dropbox
+
+requestMapping:
+  headers:
+    Authorization: 'Bearer {{properties.accessToken}}'
+
+testRequest:
+  method: POST
+  url: https://api.dropboxapi.com/2/users/get_current_account
+  accountIdentifierKey: email

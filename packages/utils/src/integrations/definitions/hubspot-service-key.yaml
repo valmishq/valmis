@@ -1,0 +1,26 @@
+id: hubspot-service-key
+name: HubSpot (Service Key)
+type: bearerToken
+icon: /logos/hubspot.svg
+description: >
+  Connect to HubSpot using a Service Key (private app access token).
+  Recommended for most integrations. Service keys are scoped and do not require OAuth2 setup.
+documentationUrl: https://developers.hubspot.com/docs/guides/apps/private-apps/service-keys-overview
+properties:
+  - name: token
+    displayName: App Token (Service Key)
+    type: secret
+    required: true
+    description: >
+      The access token value from your HubSpot Service Key.
+      Go to Development > Keys > Service Keys in your HubSpot account,
+      create a key with the required scopes, then copy the token value.
+
+requestMapping:
+  headers:
+    Authorization: 'Bearer {{properties.token}}'
+
+testRequest:
+  method: GET
+  url: 'https://api.hubapi.com/account-info/v3/details'
+  accountIdentifierKey: portalId
