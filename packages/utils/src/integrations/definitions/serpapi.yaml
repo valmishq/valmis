@@ -1,0 +1,32 @@
+id: serpapi
+name: SerpApi
+type: apiKey
+icon: /logos/serpapi.png
+description: >
+  Connect to SerpApi using your private API key. SerpApi lets you scrape
+  search engine results pages (Google, Bing, YouTube, and more) in real
+  time. The key is appended as a query parameter (?api_key=...) on every
+  request. The Account API endpoint is free and does not count toward your
+  monthly quota.
+documentationUrl: https://serpapi.com/search-api
+properties:
+  - name: apiKey
+    displayName: API Key
+    type: secret
+    required: true
+    description: >
+      Your SerpApi private key. Find it under the 'Your Account' tab at
+      https://serpapi.com/manage-api-key
+
+# SerpApi authenticates via an 'api_key' query parameter on every request.
+requestMapping:
+  qs:
+    api_key: '{{properties.apiKey}}'
+
+testRequest:
+  method: GET
+  # Account endpoint — free, not counted toward monthly quota.
+  # Returns account details including plan info and remaining searches.
+  url: https://serpapi.com/account.json
+  # account_email is returned in the response and used as the connected account identifier.
+  accountIdentifierKey: account_email

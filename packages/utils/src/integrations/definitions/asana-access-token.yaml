@@ -1,0 +1,28 @@
+id: asanaAccessToken
+name: Asana (Access Token)
+type: bearerToken
+icon: /logos/asana.svg
+description: >
+  Connect to Asana using a Personal Access Token (PAT).
+  The token is sent as a Bearer token on every request.
+documentationUrl: https://developers.asana.com/docs/personal-access-token
+properties:
+  - name: token
+    displayName: Access Token
+    type: secret
+    required: true
+    description: >
+      A Personal Access Token generated from the Asana developer console.
+      Go to https://app.asana.com/0/developer-console, then select
+      Create new token under Personal access tokens.
+
+requestMapping:
+  headers:
+    Authorization: 'Bearer {{properties.token}}'
+
+testRequest:
+  method: GET
+  # GET /users/me returns the currently authenticated user's profile.
+  url: https://app.asana.com/api/1.0/users/me
+  # email from the response data object is stored as the connected account label.
+  accountIdentifierKey: data.email

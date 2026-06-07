@@ -1,4 +1,4 @@
-import { eq, and, desc } from 'drizzle-orm';
+import { eq, and, desc, sql } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import { agentThreads, agentMessages, agents } from '../db/schema/index.js';
 import type {
@@ -7,6 +7,7 @@ import type {
 	AgentMessageRole,
 	AgentThreadStatus,
 	AgentTriggerType,
+	AgentRunSummary,
 	ContentBlock,
 	MessageTokenUsage,
 } from '@repo/types';
@@ -43,6 +44,7 @@ function rowToThread(row: typeof agentThreads.$inferSelect): AgentThread {
 		triggerType: row.triggerType as AgentTriggerType,
 		triggerId: row.triggerId ?? undefined,
 		triggerPayload: (row.triggerPayload as Record<string, unknown>) ?? undefined,
+		contextTokens: row.contextTokens ?? undefined,
 		createdAt: row.createdAt,
 		updatedAt: row.updatedAt,
 	};
@@ -127,6 +129,31 @@ export class AgentSessionService {
 		return rows.map(rowToThread);
 	}
 
+	/**
+	 * Returns the most recently created thread for an agent, excluding the given threadId.
+	 * Used by the auto-summarize feature to find the previous thread when a new one is created.
+	 * No ownership check beyond the ownerId filter — internal use only.
+	 */
+	async getLastThreadBeforeId(
+		agentId: string,
+		ownerId: string,
+		excludeThreadId: string,
+	): Promise<AgentThread | null> {
+		const rows = await db
+			.select()
+			.from(agentThreads)
+			.where(
+				and(
+					eq(agentThreads.agentId, agentId),
+					eq(agentThreads.ownerId, ownerId),
+					sql`${agentThreads.id} != ${excludeThreadId}`,
+				),
+			)
+			.orderBy(desc(agentThreads.createdAt))
+			.limit(1);
+		return rows[0] ? rowToThread(rows[0]) : null;
+	}
+
 	/** Update thread status */
 	async updateThreadStatus(id: string, status: AgentThreadStatus): Promise<void> {
 		await db
@@ -141,6 +168,37 @@ export class AgentSessionService {
 			.update(agentThreads)
 			.set({ title, updatedAt: new Date() })
 			.where(and(eq(agentThreads.id, id), eq(agentThreads.ownerId, ownerId)));
+	}
+
+	/**
+	 * Accumulate context window tokens for a thread.
+	 * Called after every LLM turn with (usage.input + usage.output).
+	 * Both input and output tokens grow the context because output tokens from
+	 * this turn become input context on the next turn.
+	 * Uses SQL addition so concurrent updates are safe (no read-modify-write race).
+	 * A future compaction feature can reset/reduce this value via updateThreadContextTokens().
+	 * No ownership check — internal use only (called by AgentLlmProxyService).
+	 */
+	async accumulateThreadContextTokens(id: string, tokensToAdd: number): Promise<void> {
+		await db
+			.update(agentThreads)
+			.set({
+				contextTokens: sql`COALESCE(${agentThreads.contextTokens}, 0) + ${tokensToAdd}`,
+				updatedAt: new Date(),
+			})
+			.where(eq(agentThreads.id, id));
+	}
+
+	/**
+	 * Directly set the context window token count for a thread.
+	 * Used by a future compaction feature to reset the context to a smaller value.
+	 * No ownership check — internal use only.
+	 */
+	async updateThreadContextTokens(id: string, contextTokens: number): Promise<void> {
+		await db
+			.update(agentThreads)
+			.set({ contextTokens, updatedAt: new Date() })
+			.where(eq(agentThreads.id, id));
 	}
 
 	/** Delete a thread and all its messages (ownership enforced) */
@@ -196,5 +254,111 @@ export class AgentSessionService {
 			.where(eq(agentMessages.threadId, threadId))
 			.orderBy(agentMessages.createdAt);
 		return rows.map(rowToMessage);
+	}
+
+	// ─── Observability ────────────────────────────────────────────────────
+
+	/**
+	 * List aggregated run summaries for an agent (newest first).
+	 *
+	 * Aggregates token usage and cost from agent_messages.token_usage JSONB column.
+	 * The token_usage shape is { input: number, output: number, cost: { total: number } }.
+	 * Uses raw SQL for JSONB numeric extraction since Drizzle doesn't have built-in helpers.
+	 *
+	 * Ownership is verified by requiring ownerId on agent_threads (denormalized).
+	 */
+	async listRuns(
+		agentId: string,
+		ownerId: string,
+		limit = 50,
+		offset = 0,
+	): Promise<AgentRunSummary[]> {
+		// First verify agent ownership
+		const agentRows = await db
+			.select({ id: agents.id })
+			.from(agents)
+			.where(and(eq(agents.id, agentId), eq(agents.ownerId, ownerId)))
+			.limit(1);
+		if (!agentRows[0]) return [];
+
+		// Fetch all threads for this agent owned by this user, ordered newest first
+		const threads = await db
+			.select()
+			.from(agentThreads)
+			.where(and(eq(agentThreads.agentId, agentId), eq(agentThreads.ownerId, ownerId)))
+			.orderBy(desc(agentThreads.createdAt))
+			.limit(limit)
+			.offset(offset);
+
+		if (threads.length === 0) return [];
+
+		const threadIds = threads.map((t) => t.id);
+
+		// Aggregate message stats per thread in one query using raw SQL for JSONB extraction.
+		// Columns returned:
+		//   thread_id, message_count, tool_call_count,
+		//   total_input_tokens, total_output_tokens, total_cost, last_input_tokens
+		const statsRows = await db.execute(sql`
+			SELECT
+				m.thread_id,
+				COUNT(*)::int                                                            AS message_count,
+				COUNT(*) FILTER (WHERE m.role = 'tool_result')::int                    AS tool_call_count,
+				COALESCE(SUM(
+					CASE WHEN m.role = 'assistant' AND m.token_usage IS NOT NULL
+					THEN (m.token_usage->>'input')::numeric ELSE 0 END
+				), 0)::float8                                                           AS total_input_tokens,
+				COALESCE(SUM(
+					CASE WHEN m.role = 'assistant' AND m.token_usage IS NOT NULL
+					THEN (m.token_usage->>'output')::numeric ELSE 0 END
+				), 0)::float8                                                           AS total_output_tokens,
+				COALESCE(SUM(
+					CASE WHEN m.role = 'assistant' AND m.token_usage IS NOT NULL
+					THEN (m.token_usage->'cost'->>'total')::numeric ELSE 0 END
+				), 0)::float8                                                           AS total_cost,
+				COALESCE((
+					SELECT (sub.token_usage->>'input')::float8
+					FROM agent_messages sub
+					WHERE sub.thread_id = m.thread_id AND sub.role = 'assistant' AND sub.token_usage IS NOT NULL
+					ORDER BY sub.created_at DESC
+					LIMIT 1
+				), 0)                                                                   AS last_input_tokens
+			FROM agent_messages m
+			WHERE m.thread_id = ANY(${sql.raw(`ARRAY['${threadIds.join("','")}'::uuid]`)})
+			GROUP BY m.thread_id
+		`);
+
+		// Build a lookup map from threadId → stats
+		type StatsRow = {
+			thread_id: string;
+			message_count: number;
+			tool_call_count: number;
+			total_input_tokens: number;
+			total_output_tokens: number;
+			total_cost: number;
+			last_input_tokens: number;
+		};
+		const statsMap = new Map<string, StatsRow>();
+		for (const row of statsRows.rows as StatsRow[]) {
+			statsMap.set(row.thread_id, row);
+		}
+
+		return threads.map((thread) => {
+			const stats = statsMap.get(thread.id);
+			return {
+				id: thread.id,
+				agentId: thread.agentId,
+				title: thread.title ?? undefined,
+				status: thread.status as AgentRunSummary['status'],
+				triggerType: thread.triggerType as AgentRunSummary['triggerType'],
+				messageCount: stats?.message_count ?? 0,
+				toolCallCount: stats?.tool_call_count ?? 0,
+				totalInputTokens: stats?.total_input_tokens ?? 0,
+				totalOutputTokens: stats?.total_output_tokens ?? 0,
+				totalCost: stats?.total_cost ?? 0,
+				lastInputTokens: stats?.last_input_tokens ?? 0,
+				createdAt: thread.createdAt,
+				updatedAt: thread.updatedAt,
+			};
+		});
 	}
 }

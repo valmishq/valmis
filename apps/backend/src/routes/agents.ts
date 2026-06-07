@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import type { Request, Response } from 'express';
 import { AgentService } from '../services/AgentService.js';
+import { AgentSessionService } from '../services/AgentSessionService.js';
 import { requireAuth } from '../middleware/auth.js';
 import { logger } from '../config/logger.js';
 import type { AuthService } from '../services/AuthService.js';
@@ -11,12 +12,14 @@ import type {
 	AgentDeleteResponse,
 	AgentMemoryListResponse,
 	AgentMemoryDeleteResponse,
+	AgentRunsListResponse,
 	CreateAgentRequestBody,
 	UpdateAgentRequestBody,
 	OwnerIdRequestBody,
 } from '@repo/types';
 
 const agentService = new AgentService();
+const sessionService = new AgentSessionService();
 
 /**
  * Factory — creates the agents router with an injected AuthService instance.
@@ -261,6 +264,40 @@ export function createAgentsRouter(authService: AuthService): Router {
 		const entries = await agentService.listMemory(agentId, limit, offset);
 		const body: AgentMemoryListResponse = { success: true, data: entries };
 		res.json(body);
+	});
+
+	/**
+	 * GET /v1/agents/:id/runs
+	 * List aggregated run summaries (threads + token/cost stats) for an agent.
+	 * Query: ownerId (required), limit? (default 50), offset? (default 0)
+	 */
+	router.get('/:id/runs', auth, async (req: Request, res: Response) => {
+		const agentId = req.params.id as string;
+		const ownerId = req.query.ownerId as string | undefined;
+		if (!ownerId) {
+			const body: AgentRunsListResponse = {
+				success: false,
+				error: 'ownerId query parameter is required',
+			};
+			res.status(400).json(body);
+			return;
+		}
+
+		const limit = Math.min(parseInt((req.query.limit as string) ?? '50', 10), 100);
+		const offset = parseInt((req.query.offset as string) ?? '0', 10);
+
+		try {
+			const runs = await sessionService.listRuns(agentId, ownerId, limit, offset);
+			const body: AgentRunsListResponse = { success: true, data: runs };
+			res.json(body);
+		} catch (err) {
+			logger.error({ err, agentId }, 'Failed to list agent runs');
+			const body: AgentRunsListResponse = {
+				success: false,
+				error: 'Failed to load run history',
+			};
+			res.status(500).json(body);
+		}
 	});
 
 	/**

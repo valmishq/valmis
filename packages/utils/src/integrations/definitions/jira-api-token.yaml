@@ -1,0 +1,42 @@
+id: jiraApiToken
+name: Jira (API Token)
+type: basicAuth
+icon: /logos/jira.svg
+description: >
+  Connect to Jira Software Cloud using your Atlassian account email and an API token.
+  Credentials are sent as HTTP Basic Auth (Base64-encoded email:token) on every request.
+  Use this for Jira Cloud only — not for Jira Server/Data Center.
+documentationUrl: https://support.atlassian.com/atlassian-account/docs/manage-api-tokens-for-your-atlassian-account/
+properties:
+  - name: username
+    displayName: Email Address
+    type: string
+    required: true
+    description: >
+      The email address associated with your Atlassian account.
+  - name: password
+    displayName: API Token
+    type: secret
+    required: true
+    description: >
+      An Atlassian API token. Generate one at
+      https://id.atlassian.com/manage-profile/security/api-tokens.
+      New tokens may take up to a minute before they work.
+  - name: domain
+    displayName: Jira Domain
+    type: string
+    required: true
+    description: >
+      The base URL of your Jira Cloud instance, e.g. https://yourcompany.atlassian.net.
+      No trailing slash.
+
+# basicAuth type auto-injects: Authorization: Basic base64(username:password)
+# The 'password' property name is required by the resolver for auto-injection.
+# The displayName 'API Token' is what the user sees in the UI.
+
+testRequest:
+  method: GET
+  # GET /rest/api/2/myself returns the currently authenticated user's profile.
+  url: '{{properties.domain}}/rest/api/2/myself'
+  # emailAddress from the myself response is stored as the connected account label.
+  accountIdentifierKey: emailAddress

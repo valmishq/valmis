@@ -5,7 +5,14 @@
 	import ToolCallIndicator from './ToolCallIndicator.svelte';
 	import MarkdownRenderer from './MarkdownRenderer.svelte';
 	import ImageBlock from './ImageBlock.svelte';
+	import { TOOL_ICON_MAP, DEFAULT_TOOL_ICON } from './tool-icon-map.js';
 	import type { AgentMessage, ContentBlock } from '@repo/types';
+
+	/** Shape of one entry in credentialMetaMap */
+	interface CredentialMeta {
+		icon: string | undefined;
+		integrationName: string;
+	}
 
 	/**
 	 * Renders a single chat message row.
@@ -25,7 +32,14 @@
 		 * Populated by tool_call_delta SSE events so ToolCallIndicator can show
 		 * the arguments the LLM decided to pass (the "thinking context").
 		 */
-		toolCallArgs = {}
+		toolCallArgs = {},
+		/**
+		 * Map of credentialId → { icon, integrationName }.
+		 * icon: logo path from the YAML definition (e.g. /logos/github.svg), may be undefined.
+		 * integrationName: human-readable name (e.g. "GitHub", "Slack").
+		 * Used to display the integration icon and name in call_api tool indicators.
+		 */
+		credentialMetaMap = {}
 	}: {
 		message: AgentMessage;
 		agentName: string;
@@ -34,6 +48,7 @@
 		isStreaming?: boolean;
 		toolResults?: Record<string, string>;
 		toolCallArgs?: Record<string, { toolName: string; argsJson: string }>;
+		credentialMetaMap?: Record<string, CredentialMeta>;
 	} = $props();
 
 	let isUser = $derived(message.role === 'user');
@@ -65,6 +80,43 @@
 
 	/** Show a loading pulse if streaming and no text yet */
 	let showTypingIndicator = $derived(isStreaming && isAssistant && combinedText.length === 0);
+
+	/**
+	 * Resolve the icon and label to display for a tool call.
+	 *
+	 * For call_api with a credentialId present in credentialMetaMap:
+	 *   → returns integration logo URL + integration name for the label.
+	 *
+	 * For all other tools (or call_api with no/unknown credential):
+	 *   → returns a Lucide icon component from TOOL_ICON_MAP (fallback: DEFAULT_TOOL_ICON).
+	 *   → toolDisplayName is undefined so ToolCallIndicator uses its default snake_case formatter.
+	 */
+	function resolveToolDisplay(
+		toolName: string,
+		argsJson: string | undefined
+	):
+		| { type: 'img'; url: string; toolDisplayName: string }
+		| { type: 'icon'; component: typeof DEFAULT_TOOL_ICON; toolDisplayName?: undefined } {
+		if (toolName === 'call_api' && argsJson) {
+			try {
+				const args = JSON.parse(argsJson) as Record<string, unknown>;
+				const credentialId = typeof args.credentialId === 'string' ? args.credentialId : '';
+				if (credentialId) {
+					const meta = credentialMetaMap[credentialId];
+					if (meta?.icon) {
+						return {
+							type: 'img',
+							url: meta.icon,
+							toolDisplayName: `Call Api — ${meta.integrationName}`
+						};
+					}
+				}
+			} catch {
+				// malformed argsJson — fall through to icon
+			}
+		}
+		return { type: 'icon', component: TOOL_ICON_MAP[toolName] ?? DEFAULT_TOOL_ICON };
+	}
 </script>
 
 {#if message.role === 'tool_result'}
@@ -106,14 +158,20 @@
 				 result: only available from live tool_call_end events during the current session.
 			-->
 				{#each toolCallBlocks as block (block.id)}
+					{@const argsJson =
+						toolCallArgs[block.id]?.argsJson ??
+						(Object.keys(block.arguments).length > 0
+							? JSON.stringify(block.arguments, null, 2)
+							: undefined)}
+					{@const display = resolveToolDisplay(block.name, argsJson)}
 					<ToolCallIndicator
 						toolName={block.name}
-						argsJson={toolCallArgs[block.id]?.argsJson ??
-							(Object.keys(block.arguments).length > 0
-								? JSON.stringify(block.arguments, null, 2)
-								: undefined)}
+						toolDisplayName={display.toolDisplayName}
+						{argsJson}
 						result={toolResults[block.id]}
 						isRunning={isStreaming && !toolResults[block.id]}
+						iconUrl={display.type === 'img' ? display.url : undefined}
+						iconComponent={display.type === 'icon' ? display.component : undefined}
 					/>
 				{/each}
 

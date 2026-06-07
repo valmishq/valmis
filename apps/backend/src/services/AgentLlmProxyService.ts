@@ -6,10 +6,12 @@ import { EncryptionService } from './EncryptionService.js';
 import { AgentService } from './AgentService.js';
 import { AgentStreamBus } from './AgentStreamBus.js';
 import { AgentSessionService } from './AgentSessionService.js';
+import { AgentMemoryService } from './AgentMemoryService.js';
 import { logger } from '../config/logger.js';
 import { v4 as uuidv4 } from 'uuid';
 import type { ContentBlock, MessageTokenUsage } from '@repo/types';
 import { resolveProviderApi } from '@repo/utils';
+import { LLM_MODELS } from '@repo/models';
 
 /**
  * Handles LLM proxy requests from agent child processes.
@@ -33,6 +35,7 @@ export class AgentLlmProxyService {
 		private readonly encryptionService: EncryptionService,
 		private readonly streamBus: AgentStreamBus,
 		private readonly sessionService: AgentSessionService,
+		private readonly memoryService: AgentMemoryService,
 	) {}
 
 	/**
@@ -248,6 +251,19 @@ export class AgentLlmProxyService {
 							content: contentBlocks,
 							tokenUsage: usage,
 						});
+
+						// Accumulate context window tokens (input + output) for this turn.
+						// Both input and output tokens count toward context size because output
+						// from this turn becomes input context on the next turn.
+						// When a compaction feature is added, this value can be reset/reduced
+						// independently of the total token/cost metrics.
+						if (usage) {
+							await this.sessionService.accumulateThreadContextTokens(
+								tokenPayload.threadId,
+								usage.input + usage.output,
+							);
+						}
+
 						logger.info(
 							{
 								agentId: tokenPayload.agentId,
@@ -352,9 +368,17 @@ export class AgentLlmProxyService {
 			);
 
 			let title = '';
+			let titleUsage: MessageTokenUsage | undefined;
 			for await (const event of titleStream) {
 				if (event.type === 'text_delta') {
 					title += event.delta;
+				}
+				if (event.type === 'done' && event.message.usage) {
+					titleUsage = {
+						input: event.message.usage.input,
+						output: event.message.usage.output,
+						cost: { total: event.message.usage.cost?.total ?? 0 },
+					};
 				}
 			}
 
@@ -368,14 +392,157 @@ export class AgentLlmProxyService {
 
 			if (!title) return null;
 
+			// Persist title generation usage to the thread so it counts toward cost.
+			// Stored as an assistant message with no visible content (empty text block).
+			// This ensures the run page and chat bar both account for this LLM call.
+			if (titleUsage) {
+				await this.sessionService.appendMessage({
+					threadId,
+					role: 'assistant',
+					content: [{ type: 'text', text: '' }],
+					tokenUsage: titleUsage,
+				});
+			}
+
 			await this.sessionService.updateThreadTitle(threadId, ownerId, title);
 
-			logger.info({ threadId, title }, '[llm-proxy] generated thread title');
+			logger.info({ threadId, title, titleUsage }, '[llm-proxy] generated thread title');
 			return title;
 		} catch (err) {
 			// Non-fatal — title generation is best-effort
 			logger.warn({ err, threadId }, '[llm-proxy] thread title generation failed');
 			return null;
+		}
+	}
+
+	/**
+	 * Summarise the user messages from a previous thread and write the summary as a
+	 * semantic memory entry for the agent. Called fire-and-forget when a new thread
+	 * is created so the agent "remembers" what was discussed in the previous session.
+	 *
+	 * Only user messages are sent to the LLM for summarisation — assistant messages,
+	 * tool calls, and tool results are excluded. This keeps the context concise and
+	 * avoids leaking internal execution details into long-term memory.
+	 *
+	 * Silently no-ops if:
+	 *   - The previous thread has no user messages
+	 *   - The agent has no LLM model configured
+	 *   - The agent has no embedding model configured (memory write would fail)
+	 *
+	 * @param agentId          - Agent whose memory to write to
+	 * @param ownerId          - Owner required for DB queries and auth
+	 * @param prevThreadId     - The thread to summarise (the most recently created before newThreadId)
+	 */
+	async summarizeThreadToMemory(
+		agentId: string,
+		ownerId: string,
+		prevThreadId: string,
+	): Promise<void> {
+		try {
+			// Load user messages from the previous thread only
+			const messages = await this.sessionService.listMessagesInternal(prevThreadId);
+			const userMessages = messages.filter((m) => m.role === 'user');
+
+			if (userMessages.length === 0) {
+				logger.debug(
+					{ agentId, prevThreadId },
+					'[llm-proxy] summarize: no user messages in previous thread — skipping',
+				);
+				return;
+			}
+
+			// Build a readable transcript from user messages only
+			const transcript = userMessages
+				.map((m, idx) => {
+					const textBlocks = m.content.filter(
+						(b): b is Extract<typeof b, { type: 'text' }> => b.type === 'text',
+					);
+					const text = textBlocks
+						.map((b) => b.text)
+						.join(' ')
+						.trim();
+					return text ? `User message ${idx + 1}: ${text}` : null;
+				})
+				.filter((line): line is string => line !== null)
+				.join('\n');
+
+			if (!transcript) {
+				logger.debug(
+					{ agentId, prevThreadId },
+					'[llm-proxy] summarize: all user messages were empty — skipping',
+				);
+				return;
+			}
+
+			// Build a minimal fake token payload so resolveModel can fetch agent config
+			const fakePayload: import('@repo/types').SandboxTokenPayload = {
+				agentId,
+				ownerId,
+				threadId: prevThreadId,
+				credentialIds: [],
+				iat: Math.floor(Date.now() / 1000),
+				exp: Math.floor(Date.now() / 1000) + 120,
+			};
+
+			const { model, apiKey } = await this.resolveModel(fakePayload);
+
+			const summaryPrompt =
+				`The following are user messages from a conversation session. ` +
+				`Summarise the most important facts, preferences, goals, and topics discussed. ` +
+				`Be concise. Focus on information that would be useful to remember in future sessions. Omit not important things. This is only for storing important facts about the user. There is no need to log trivia or anything that won't be useful in the future.` +
+				`Do NOT mention that this is a summary — write as plain factual statements.\n\n` +
+				transcript;
+
+			const summaryUserMsg: UserMessage = {
+				role: 'user',
+				content: [{ type: 'text', text: summaryPrompt } as TextContent],
+				timestamp: Date.now(),
+			};
+
+			const summaryStream = stream(
+				model,
+				{
+					systemPrompt:
+						'You extract and summarise the most important information from conversation transcripts.',
+					messages: [summaryUserMsg],
+					tools: [],
+				},
+				{ apiKey },
+			);
+
+			let summary = '';
+			for await (const event of summaryStream) {
+				if (event.type === 'text_delta') {
+					summary += event.delta;
+				}
+			}
+
+			summary = summary.trim();
+			if (!summary) {
+				logger.debug(
+					{ agentId, prevThreadId },
+					'[llm-proxy] summarize: LLM returned empty summary — skipping memory write',
+				);
+				return;
+			}
+
+			// Write the summary as a semantic memory entry
+			await this.memoryService.writeMemory(agentId, ownerId, {
+				content: summary,
+				memoryType: 'semantic',
+				metadata: { source: 'thread_summary', threadId: prevThreadId },
+			});
+
+			logger.info(
+				{ agentId, prevThreadId, summaryLength: summary.length },
+				'[llm-proxy] thread summarized and stored as semantic memory',
+			);
+		} catch (err) {
+			// Non-fatal — thread summarization is best-effort and must not block thread creation
+			logger.warn(
+				{ err, agentId, prevThreadId },
+				'[llm-proxy] thread summarization failed (non-fatal)',
+			);
 		}
 	}
 
@@ -425,6 +592,24 @@ export class AgentLlmProxyService {
 			? config.model.split('/').slice(1).join('/')
 			: config.model;
 
+		// Look up catalog pricing and context window for accurate cost tracking.
+		// Try exact match first (catalog uses "provider/model" slugs like "openai/gpt-4o").
+		// Fall back to bare model name match for agents configured without the provider prefix
+		// (e.g. model stored as "gpt-4o" → matches catalog entry "openai/gpt-4o").
+		const catalogEntry =
+			LLM_MODELS.find((m) => m.id === config.model) ??
+			LLM_MODELS.find((m) => m.id.endsWith('/' + config.model));
+
+		// IMPORTANT: The catalog stores pricing as cost-per-single-token (e.g. 0.000003).
+		// pi-ai expects cost-per-MILLION-tokens (e.g. 3.0).
+		// Multiply by 1_000_000 to convert.
+		const perMillion = (raw: string | undefined): number => {
+			if (!raw) return 0;
+			const v = parseFloat(raw);
+			return isNaN(v) ? 0 : v * 1_000_000;
+		};
+		const contextWindow = catalogEntry?.contextLength ?? 128000;
+
 		const model: Model<string> = {
 			id: nativeModelId,
 			api,
@@ -432,8 +617,13 @@ export class AgentLlmProxyService {
 			name: config.model,
 			reasoning: false,
 			input: ['text'],
-			cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-			contextWindow: 128000,
+			cost: {
+				input: perMillion(catalogEntry?.pricing.promptPerToken),
+				output: perMillion(catalogEntry?.pricing.completionPerToken),
+				cacheRead: perMillion(catalogEntry?.pricing.cacheReadPerToken),
+				cacheWrite: perMillion(catalogEntry?.pricing.cacheWritePerToken),
+			},
+			contextWindow,
 			maxTokens: 4096,
 			baseUrl: secretData.baseUrl ?? '',
 		};

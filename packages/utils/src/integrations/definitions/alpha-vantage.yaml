@@ -1,0 +1,30 @@
+id: alphaVantage
+name: Alpha Vantage
+type: apiKey
+icon: /logos/alpha-vintage.svg
+description: >
+  Connect to Alpha Vantage using your free or premium API key. Alpha Vantage
+  provides real-time and historical financial market data including stock
+  quotes, forex rates, cryptocurrency prices, and 50+ technical indicators.
+  The API key is appended as the `apikey` query parameter on every request.
+documentationUrl: https://www.alphavantage.co/documentation/
+properties:
+  - name: apiKey
+    displayName: API Key
+    type: secret
+    required: true
+    description: >
+      Your Alpha Vantage API key. Get a free key at
+      https://www.alphavantage.co/support/#api-key.
+      Free tier allows up to 25 requests per day.
+
+# Alpha Vantage authenticates via an 'apikey' query parameter on every request.
+requestMapping:
+  qs:
+    apikey: '{{properties.apiKey}}'
+
+testRequest:
+  method: GET
+  # TIME_SERIES_INTRADAY for IBM is a lightweight, always-available endpoint.
+  # Returns a small JSON payload confirming the key is valid.
+  url: https://www.alphavantage.co/query?function=TIME_SERIES_INTRADAY&symbol=IBM&interval=5min&outputsize=compact

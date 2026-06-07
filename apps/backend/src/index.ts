@@ -64,6 +64,7 @@ const llmProxyService = new AgentLlmProxyService(
 	encryptionService,
 	agentStreamBus,
 	sessionService,
+	agentMemoryService,
 );
 const runtimeService = new AgentRuntimeService(
 	sessionService,
@@ -99,6 +100,17 @@ app.use((req, res, next) => {
 		// Webhook endpoints are called by external services at arbitrary frequency;
 		// IP-based rate limiting would drop legitimate high-volume events.
 		/^\/v1\/webhooks\//,
+		// Sandbox-internal endpoints are called by agent child processes (localhost),
+		// not by browser clients. All sandbox calls originate from 127.0.0.1, so they
+		// would all share a single IP bucket and exhaust it quickly during active turns
+		// (llm/stream + proxy + message appends + memory writes per turn). These routes
+		// are already secured by PROXY_TOKEN verification — rate limiting adds no value.
+		/^\/v1\/runtime\/internal\//,
+		// SSE stream endpoint — the browser holds this connection open for the duration
+		// of an agent turn. Reconnects (network drops, tab focus events) count against
+		// the per-IP limit. Excluding it prevents false-positive 429s on the stream.
+		// The endpoint itself is protected by requireAuth (JWT/API-key).
+		/^\/v1\/runtime\/[^/]+\/threads\/[^/]+\/stream$/,
 	];
 	if (excluded.some((p) => p.test(req.path))) return next();
 	return rateLimiter(req, res, next);
@@ -126,6 +138,7 @@ app.use(
 		llmProxyService,
 		triggerService,
 		agentMemoryService,
+		agentService,
 	),
 );
 // Webhook routes — public, HMAC-verified

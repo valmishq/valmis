@@ -1,0 +1,25 @@
+id: tally-api-key
+name: Tally
+type: bearerToken
+icon: /logos/tally.svg
+description: >
+  Connect to Tally using a personal API key. Allows programmatic access to
+  your forms, submissions, and account data.
+documentationUrl: https://tally.so/help/api-keys
+properties:
+  - name: apiKey
+    displayName: API Key
+    type: secret
+    required: true
+    description: >
+      Your Tally API key. Generate one at Settings → API keys. Keys start
+      with "tly-".
+
+requestMapping:
+  headers:
+    Authorization: 'Bearer {{properties.apiKey}}'
+
+testRequest:
+  method: GET
+  url: 'https://api.tally.so/users/me'
+  accountIdentifierKey: email

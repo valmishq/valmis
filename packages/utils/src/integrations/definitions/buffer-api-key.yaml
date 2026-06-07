@@ -1,0 +1,31 @@
+id: buffer-api-key
+name: Buffer (API Key)
+type: apiKey
+icon: /logos/buffer.jpeg
+description: >
+  Connect to Buffer using a personal API key. Your key acts on behalf of your
+  account only and gives access to all organizations and channels in your Buffer account.
+documentationUrl: https://publish.buffer.com/settings/api
+properties:
+  - name: apiKey
+    displayName: API Key
+    type: secret
+    required: true
+    description: >
+      Your Buffer API key. Generate one at Settings → API in your Buffer account.
+      Keep it secret — never expose it in client-side code.
+
+requestMapping:
+  headers:
+    Authorization: 'Bearer {{properties.apiKey}}'
+
+# Buffer's API is GraphQL-only (POST https://api.buffer.com).
+# testRequest.headers and testRequest.body are forwarded verbatim by the
+# credential test route, so no backend logic needs to know about GraphQL.
+testRequest:
+  method: POST
+  url: 'https://api.buffer.com'
+  headers:
+    Content-Type: 'application/json'
+  body: '{"query":"{ account { id email } }"}'
+  accountIdentifierKey: data.account.email

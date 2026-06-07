@@ -68,6 +68,17 @@
 			return [{ label: 'Agents' }];
 		}
 
+		// ── /app/agents/[id]/runs ────────────────────────────────────────────────
+		const agentRunsMatch = pathname.match(/^\/app\/agents\/([^/]+)\/runs$/);
+		if (agentRunsMatch) {
+			const agentName = agent?.name ?? 'Agent';
+			return [
+				{ label: 'Agents', href: '/app/agents' },
+				{ label: agentName, href: `/app/agents/new?id=${agentRunsMatch[1]}&editmode=true` },
+				{ label: 'Runs' }
+			];
+		}
+
 		// ── /app/agents/new (create or edit mode) ─────────────────────────────────
 		if (pathname === '/app/agents/new') {
 			const isEditMode = searchParams.get('editmode') === 'true';

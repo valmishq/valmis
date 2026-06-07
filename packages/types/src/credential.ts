@@ -67,6 +67,19 @@ export interface TestRequest {
 	method: 'GET' | 'POST';
 	url: string;
 	/**
+	 * Optional HTTP headers to include with the test request.
+	 * Use this for APIs that require a specific Content-Type or other headers
+	 * that are not injected by the credential's requestMapping.
+	 * Example: { 'Content-Type': 'application/json' }
+	 */
+	headers?: Record<string, string>;
+	/**
+	 * Optional request body string sent with POST test requests.
+	 * Required for APIs that are POST-only, such as GraphQL endpoints.
+	 * Example: '{"query":"{ account { id email } }"}'
+	 */
+	body?: string;
+	/**
 	 * Dot-notation key path into the JSON response body whose value is stored as
 	 * `connectedAccount` on the credential after a successful OAuth2 authorization.
 	 * Example: "email"  →  response.email

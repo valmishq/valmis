@@ -23,7 +23,7 @@ const authorizationService = new AuthorizationService();
  * Requires app.set('trust proxy', true) so X-Forwarded-For is trusted.
  */
 export const rateLimiter = rateLimit({
-	windowMs: 15 * 60 * 1000, // 15 minutes
+	windowMs: 1 * 60 * 1000, // 1 minutes
 	max: 200,
 	standardHeaders: true,
 	legacyHeaders: false,

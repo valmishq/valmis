@@ -328,10 +328,14 @@ export function createCredentialsRouter(authService: AuthService): Router {
 			credentialData,
 		);
 
-		// Execute via resolver — handles proactive/reactive OAuth2 token refresh
+		// Execute via resolver — handles proactive/reactive OAuth2 token refresh.
+		// Pass testRequest.headers and testRequest.body directly from the YAML definition
+		// so integrations like Buffer (GraphQL POST-only) can supply their own headers/body.
 		const testResponse = await resolverService.executeWithCredential(testId, ownerId, {
 			url: resolvedTestUrl,
 			method: definition.testRequest.method,
+			headers: definition.testRequest.headers,
+			body: definition.testRequest.body,
 		});
 
 		if (!testResponse.ok) {

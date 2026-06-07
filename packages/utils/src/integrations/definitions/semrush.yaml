@@ -1,0 +1,30 @@
+id: semrush
+name: SEMrush
+type: apiKey
+icon: /logos/semrush.svg
+description: >
+  Connect to the SEMrush API using your API key.
+  The key is appended as a query parameter (?key=...) on every request.
+  Requires a SEMrush subscription with API access enabled.
+documentationUrl: https://developer.semrush.com/api/basics/get-started/
+properties:
+  - name: apiKey
+    displayName: API Key
+    type: secret
+    required: true
+    description: >
+      Your SEMrush API key. Find it at
+      https://www.semrush.com/accounts/profile/subscription-info/
+      under the API tab.
+
+# SEMrush authenticates via a 'key' query parameter, not a header.
+requestMapping:
+  qs:
+    key: '{{properties.apiKey}}'
+
+testRequest:
+  method: GET
+  # Account info endpoint — validates the key and returns account details.
+  url: https://api.semrush.com/management/v1/info
+  # login field in the response contains the account email address.
+  accountIdentifierKey: login

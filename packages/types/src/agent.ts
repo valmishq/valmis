@@ -120,6 +120,42 @@ export interface UpdateAgentRequestBody {
 	embeddingDim?: number;
 }
 
+// ─── Run Summary (aggregated per-thread observability) ───────────────────────
+
+/**
+ * Aggregated stats for one agent thread — returned by GET /v1/agents/:id/runs.
+ * All data is derived from agent_threads + agent_messages, no extra table needed.
+ */
+export interface AgentRunSummary {
+	/** Thread ID */
+	id: string;
+	agentId: string;
+	/** User-visible conversation title */
+	title?: string;
+	/** Thread lifecycle status */
+	status: 'idle' | 'running' | 'completed' | 'error';
+	/** How this thread was initiated */
+	triggerType: 'chat' | 'cron' | 'webhook' | 'manual';
+	/** Total number of messages in the thread (all roles) */
+	messageCount: number;
+	/** Number of tool_result messages (proxy for tool calls made) */
+	toolCallCount: number;
+	/** Sum of input tokens across all assistant messages in this thread */
+	totalInputTokens: number;
+	/** Sum of output tokens across all assistant messages */
+	totalOutputTokens: number;
+	/** Sum of cost.total across all assistant messages (USD) */
+	totalCost: number;
+	/**
+	 * Input token count from the most recent assistant message.
+	 * This equals the context window occupancy for the last turn
+	 * (the provider counts all history as input).
+	 */
+	lastInputTokens: number;
+	createdAt: Date;
+	updatedAt: Date;
+}
+
 // ─── API Response Envelopes ───────────────────────────────────────────────────
 
 export type AgentResponse = ApiResponse<Agent>;
@@ -129,3 +165,4 @@ export type AgentMemoryListResponse = ApiResponse<AgentMemoryEntry[]>;
 export type AgentMemoryDeleteResponse = ApiResponse<{ deleted: boolean }>;
 export type AgentMemoryWriteResponse = ApiResponse<AgentMemoryEntry>;
 export type AgentMemorySearchResponse = ApiResponse<AgentMemorySearchResult[]>;
+export type AgentRunsListResponse = ApiResponse<AgentRunSummary[]>;

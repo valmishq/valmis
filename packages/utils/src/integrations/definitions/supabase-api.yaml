@@ -1,0 +1,36 @@
+id: supabase-api
+name: Supabase API
+type: apiKey
+icon: /logos/supabase.svg
+description: >
+  Connect to your Supabase project using the project URL and service role
+  secret key. The service role key bypasses Row Level Security and has full
+  access to your project's data.
+documentationUrl: https://supabase.com/docs/guides/api/api-keys
+properties:
+  - name: host
+    displayName: Project URL
+    type: string
+    required: true
+    description: >
+      Your Supabase project URL. Found under Project Settings → API →
+      Project URL. Example: https://xyzcompany.supabase.co
+  - name: serviceRoleSecret
+    displayName: Secret Key
+    type: secret
+    required: true
+    description: >
+      Your project's service_role API key. Found under Project Settings →
+      API → Project API keys → service_role. Keep this key secret — it
+      bypasses Row Level Security.
+
+requestMapping:
+  headers:
+    # Supabase requires both headers: Authorization for PostgREST auth,
+    # apikey for the API gateway routing and rate limiting.
+    Authorization: 'Bearer {{properties.serviceRoleSecret}}'
+    apikey: '{{properties.serviceRoleSecret}}'
+
+testRequest:
+  method: GET
+  url: '{{properties.host}}/auth/v1/health'

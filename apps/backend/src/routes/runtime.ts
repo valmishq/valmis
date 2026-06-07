@@ -7,6 +7,7 @@ import { AgentRuntimeService } from '../services/AgentRuntimeService.js';
 import { AgentProxyService } from '../services/AgentProxyService.js';
 import { AgentLlmProxyService } from '../services/AgentLlmProxyService.js';
 import { AgentMemoryService } from '../services/AgentMemoryService.js';
+import { AgentService } from '../services/AgentService.js';
 import { TriggerService } from '../services/TriggerService.js';
 import { agentStreamBus } from '../services/AgentStreamBus.js';
 import { logger } from '../config/logger.js';
@@ -93,6 +94,7 @@ export function createRuntimeRouter(
 	llmProxyService: AgentLlmProxyService,
 	triggerService: TriggerService,
 	memoryService: AgentMemoryService,
+	agentService: AgentService,
 ): Router {
 	const router = Router();
 	const auth = requireAuth(authService);
@@ -330,6 +332,14 @@ export function createRuntimeRouter(
 	/**
 	 * POST /v1/runtime/:agentId/threads
 	 * Create a new chat thread.
+	 *
+	 * After creating the thread, fire-and-forget: find the most recently created
+	 * previous thread for this agent and summarise its user messages into a
+	 * semantic memory entry. This gives the agent cross-session recall without
+	 * any additional user action.
+	 *
+	 * Skipped if the agent has no embeddingModelConfigId (memory write would fail)
+	 * or no modelConfigId (LLM summarisation would fail).
 	 */
 	router.post('/:agentId/threads', auth, async (req: Request, res: Response) => {
 		const { agentId } = req.params as { agentId: string };
@@ -344,6 +354,31 @@ export function createRuntimeRouter(
 			const thread = await sessionService.createThread({ agentId, ownerId, title });
 			const body: AgentThreadResponse = { success: true, data: thread };
 			res.status(201).json(body);
+
+			// Fire-and-forget: summarize the previous thread into long-term memory.
+			// Done after responding so it never delays the client.
+			// Only runs when the agent has both an LLM and an embedding model configured.
+			(async () => {
+				try {
+					const agent = await agentService.getById(agentId, ownerId);
+					if (!agent?.modelConfigId || !agent.embeddingModelConfigId) return;
+
+					const prevThread = await sessionService.getLastThreadBeforeId(
+						agentId,
+						ownerId,
+						thread.id,
+					);
+					if (!prevThread) return;
+
+					await llmProxyService.summarizeThreadToMemory(agentId, ownerId, prevThread.id);
+				} catch (bgErr) {
+					// Non-fatal background task — log and swallow
+					logger.warn(
+						{ bgErr, agentId },
+						'[runtime] background thread summarization error (non-fatal)',
+					);
+				}
+			})();
 		} catch (err) {
 			logger.error({ err }, '[runtime] failed to create thread');
 			res.status(500).json({ success: false, error: 'Failed to create thread' });
@@ -444,7 +479,7 @@ export function createRuntimeRouter(
 			res.status(401).json({ success: false, error: 'Unauthorized' });
 			return;
 		}
-		const { content } = req.body as { content?: string };
+		const { content, userDatetime } = req.body as { content?: string; userDatetime?: string };
 
 		if (!content) {
 			res.status(400).json({ success: false, error: 'content is required' });
@@ -529,8 +564,15 @@ export function createRuntimeRouter(
 					});
 			}
 
-			// Spawn container (non-blocking)
-			await runtimeService.spawnForThread(agentId, threadId, ownerId, 'chat');
+			// Spawn container (non-blocking), passing the user's local datetime for system prompt injection
+			await runtimeService.spawnForThread(
+				agentId,
+				threadId,
+				ownerId,
+				'chat',
+				undefined,
+				userDatetime,
+			);
 
 			res.status(201).json({ success: true, data: userMessage });
 		} catch (err) {

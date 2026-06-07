@@ -41,7 +41,7 @@ const WORKSPACE_ROOT = process.env.WORKSPACE_ROOT ?? '/workspace';
  * ask the user to provide it. This prevents infinite tool-call loops when the
  * agent cannot find an answer through the available tools.
  */
-const MAX_TOOL_CALLS_PER_TURN = 10; //adjustable via agent setting TBD.
+const MAX_TOOL_CALLS_PER_TURN = 20; //adjustable via agent setting TBD.
 
 /**
  * Builds and runs the pi-agent Agent for a single task/conversation turn.
@@ -211,10 +211,17 @@ export async function runAgent(
 	});
 
 	// ── Build effective system prompt ─────────────────────────────────────────
-	// Append the list of authorised credential IDs so the model knows exactly
-	// which IDs to pass to call_api. Also provides clear rules on when NOT to
-	// attach a credential to prevent credential leakage to unrelated services.
-	let effectiveSystemPrompt = config.systemInstruction;
+
+	// Inject current date and time so the agent can reason about time-sensitive tasks.
+	// Uses the user's browser datetime when available (chat turns), falls back to
+	// server UTC time for non-chat triggers (cron, webhook, manual) where no browser is involved.
+	const datetimeLine = config.userDatetime
+		? `The user's current date and time is: ${config.userDatetime}`
+		: `The current server time is: ${new Date().toISOString()} . ` +
+			`This trigger was not initiated by a user browser session, so the user's local ` +
+			`timezone is unknown. So there might be a slight difference with the current user time (a few hours top). But this might also be the same as user time.`;
+	let effectiveSystemPrompt =
+		`## Current Date & Time\n${datetimeLine}\n\n` + config.systemInstruction;
 	if (config.credentials.length > 0) {
 		// Use rich metadata (name, integration, scopes) so the model can correctly match a
 		// credential to the service it was created for and know which operations are permitted.
@@ -235,7 +242,6 @@ export async function runAgent(
 				return line;
 			})
 			.join('\n');
-		console.log('credentialList ', credentialList);
 		effectiveSystemPrompt +=
 			`\n\n## Available Credentials\n` +
 			`The following credentials are configured for this agent and can be used with the call_api tool:\n` +
@@ -267,19 +273,42 @@ export async function runAgent(
 	if (config.embeddingModelConfigId) {
 		effectiveSystemPrompt +=
 			`\n\n## Long-Term Memory\n` +
-			`You have access to persistent memory tools (memory_write, memory_search).\n` +
-			`Use them according to these rules:\n` +
-			`- **memory_search**: Call at the start of a task to recall relevant past context, ` +
-			`user preferences, or known facts before proceeding.\n` +
-			`- **memory_write (semantic)**: Store important facts, user preferences, ` +
-			`or domain knowledge that should persist across sessions.\n` +
-			`- **memory_write (episodic)**: Record significant task outcomes, ` +
-			`decisions made, or events that occurred.\n` +
-			`- **memory_write (procedural)**: Store behavioral rules or constraints ` +
-			`you have learned (e.g. user prefers X format, always do Y before Z).\n` +
-			`- **memory_write (working)**: Store temporary context that is only ` +
-			`relevant for the current session.\n` +
-			`Keep memories concise and self-contained. Avoid storing duplicates.`;
+			`You have access to persistent memory tools (memory_write, memory_search) ` +
+			`that let you store and recall information across sessions.\n\n` +
+			`### When to use memory_search\n` +
+			`- At the start of each task or conversation turn, search memory for context ` +
+			`relevant to what the user is asking. Use it to recall past preferences, ` +
+			`known facts about the user, ongoing projects, or prior outcomes.\n` +
+			`- Be proactive: if you think past context might exist, check before proceeding.\n\n` +
+			`### When to use memory_write — WRITE PROACTIVELY\n` +
+			`Write a memory entry immediately when:\n` +
+			`- The user shares a **preference** (e.g. "I prefer X", "always use Y format", ` +
+			`"don't do Z"). Write this as **procedural**.\n` +
+			`- The user shares a **personal fact** (e.g. their name, role, organisation, ` +
+			`project details, goals, constraints). Write this as **semantic**.\n` +
+			`- The user corrects you or gives feedback that changes how you should behave. ` +
+			`Write this as **procedural**.\n` +
+			`- You discover or confirm an **important fact** that will be useful in future ` +
+			`sessions (domain knowledge, account details, recurring task patterns). ` +
+			`Write this as **semantic**.\n` +
+			`- A **significant task outcome** occurs that the user would expect you to ` +
+			`remember (e.g. a document was published, a workflow was configured, a key ` +
+			`decision was made). Write this as **episodic**.\n` +
+			`- Use **working** only for temporary context that is only useful within ` +
+			`the current session and has no long-term value.\n\n` +
+			`### What NOT to write\n` +
+			`- **Do NOT** write memory entries that record your own execution steps, ` +
+			`tool calls made, or intermediate reasoning. Memory is not a log of what ` +
+			`you did — it is knowledge that should persist and benefit future sessions.\n` +
+			`- **Do NOT** write a memory entry just because you completed a task. Only ` +
+			`write if there is genuinely new information worth remembering.\n` +
+			`- **Do NOT** duplicate information already in memory. Check first with ` +
+			`memory_search if you are unsure whether a fact is already stored.\n\n` +
+			`### Format\n` +
+			`Keep each memory concise and self-contained (it will be retrieved in ` +
+			`isolation). Write in third-person-neutral factual style, not as a diary ` +
+			`entry. Example: "User prefers responses in bullet-point format." not ` +
+			`"The user told me they like bullets."`;
 	}
 
 	// ── Tool restrictions (workspace boundary + no host exploration) ──────────
@@ -305,6 +334,7 @@ export async function runAgent(
 		`### run_code and run_terminal — Use with Caution\n` +
 		`- Only call run_code or run_terminal when the task genuinely cannot be accomplished ` +
 		`any other way (e.g. the user explicitly asked for code execution or file manipulation).\n` +
+		`Important: DO NOT use run_code tool to run unnecessary code, especially code that just print what you typed in the code. Only use this tool if you actually have a purpose. \n` +
 		`- Keep commands simple and scoped to the task. Do not write scripts that probe ` +
 		`system state, install packages, modify system configuration, or perform network ` +
 		`requests outside the workspace.\n` +

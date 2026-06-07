@@ -9,6 +9,7 @@
 	import ChatThreadSidebar from '$lib/components/custom/chat/ChatThreadSidebar.svelte';
 	import ChatMessage from '$lib/components/custom/chat/ChatMessage.svelte';
 	import ChatInput from '$lib/components/custom/chat/ChatInput.svelte';
+	import ChatUsageBar from '$lib/components/custom/chat/ChatUsageBar.svelte';
 	import AgentAvatar from '$lib/components/custom/chat/AgentAvatar.svelte';
 	import HitlPrompt from '$lib/components/custom/chat/HitlPrompt.svelte';
 	import EditThreadTitleDialog from '$lib/components/custom/chat/EditThreadTitleDialog.svelte';
@@ -29,6 +30,25 @@
 	let isCreatingThread = $state(false);
 	/** Mobile sidebar overlay open state */
 	let sidebarOpen = $state(false);
+
+	// ── Usage tracking (token/cost bar) ───────────────────────────────────────
+
+	/**
+	 * Current context window occupancy in tokens.
+	 * Seeded from thread.contextTokens (a SET-style column on the thread row).
+	 * On each message_end, SET to event.usage.input (the latest turn's input,
+	 * which equals the full context the provider counted on that call).
+	 * Unlike a running sum, this accurately reflects actual context size and can
+	 * be reduced independently when a future compaction feature is implemented.
+	 */
+	let contextTokens = $state(data.threadContextTokens);
+
+	/**
+	 * Cumulative cost for this thread in USD.
+	 * Seeded from DB (sum of all persisted assistant messages) and accumulated
+	 * with each new message_end event so it stays consistent across page reloads.
+	 */
+	let sessionCost = $state(data.threadTotalCost);
 
 	// ── History hydration helpers ──────────────────────────────────────────
 
@@ -92,6 +112,9 @@
 		isStreaming = false;
 		streamingMessageId = null;
 		pendingHitl = null;
+		// Reset session usage stats to the DB values for the new thread
+		contextTokens = data.threadContextTokens;
+		sessionCost = data.threadTotalCost;
 		// Sync the breadcrumb title to the loaded thread title
 		activeBreadcrumbThreadTitle.set(data.thread.title ?? null);
 
@@ -295,11 +318,19 @@
 			}
 
 			case 'message_end': {
-				// Mark streaming complete; token usage available
 				messages = messages.map((msg) => {
 					if (msg.id !== event.messageId) return msg;
 					return { ...msg, tokenUsage: event.usage };
 				});
+				if (event.usage) {
+					// Accumulate context tokens: add both input and output for this turn.
+					// Output tokens from this turn become input context on the next turn,
+					// so both contribute to growing context size. A future compaction
+					// feature will reset this value independently of sessionCost.
+					contextTokens += event.usage.input + event.usage.output;
+					// Cost is also cumulative.
+					sessionCost += event.usage.cost.total;
+				}
 				streamingMessageId = null;
 				isStreaming = false;
 				scrollToBottom();
@@ -388,7 +419,9 @@
 		try {
 			const res = await api(`/runtime/${data.agent.id}/threads/${data.thread.id}/messages`, {
 				method: 'POST',
-				body: JSON.stringify({ content })
+				// Include the browser's local datetime with timezone offset so the agent system
+				// prompt reflects the user's local time, not UTC.
+				body: JSON.stringify({ content, userDatetime: new Date().toString() })
 			});
 
 			if (!res.ok) {
@@ -623,6 +656,7 @@
 							isStreaming={isStreaming && message.id === streamingMessageId}
 							{toolResults}
 							{toolCallArgs}
+							credentialMetaMap={data.credentialMetaMap}
 						/>
 					{/each}
 
@@ -641,8 +675,14 @@
 			{/if}
 		</ScrollArea>
 
-		<!-- Input bar -->
+		<!-- Token/cost bar + input -->
 		<div class="mx-auto w-full max-w-4xl md:px-8">
+			<!-- Subtle usage bar shown above the input; togglable via the eye icon -->
+			<ChatUsageBar
+				latestInputTokens={contextTokens}
+				{sessionCost}
+				modelContextLength={data.modelContextLength}
+			/>
 			<ChatInput
 				onSend={handleSend}
 				disabled={inputDisabled}

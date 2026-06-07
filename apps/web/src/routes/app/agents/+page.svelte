@@ -11,6 +11,7 @@
 	import PlusIcon from '@lucide/svelte/icons/plus';
 	import TrashIcon from '@lucide/svelte/icons/trash-2';
 	import PencilIcon from '@lucide/svelte/icons/pencil';
+	import ActivityIcon from '@lucide/svelte/icons/activity';
 	import BotIcon from '@lucide/svelte/icons/bot';
 	import type { PageData } from './$types';
 	import type { Agent, CredentialMetadata } from '@repo/types';
@@ -214,6 +215,17 @@
 
 						<!-- Right: actions -->
 						<div class="flex shrink-0 items-center gap-1">
+							<Button
+								variant="ghost"
+								size="sm"
+								onclick={() => goto(`/app/agents/${agent.id}/runs`)}
+								class="text-muted-foreground hover:text-foreground"
+								title="View run history"
+							>
+								<ActivityIcon class="size-4" />
+								<span class="sr-only">View runs for {agent.name}</span>
+							</Button>
+
 							<Button
 								variant="ghost"
 								size="sm"

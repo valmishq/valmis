@@ -1,0 +1,1 @@
+ALTER TABLE "agent_threads" ADD COLUMN "context_tokens" integer;

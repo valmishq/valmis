@@ -2,6 +2,8 @@
 	import WrenchIcon from '@lucide/svelte/icons/wrench';
 	import ChevronDownIcon from '@lucide/svelte/icons/chevron-down';
 	import CheckIcon from '@lucide/svelte/icons/check';
+	import LoaderCircleIcon from '@lucide/svelte/icons/loader-circle';
+	import { DEFAULT_TOOL_ICON } from './tool-icon-map.js';
 
 	/**
 	 * Expandable tool call strip shown inside assistant messages.
@@ -9,19 +11,37 @@
 	 * While running (isRunning=true): shows tool name + animated dots.
 	 * After the LLM has formed the call (argsJson present): name is updated.
 	 * After execution (result present): expandable to show args + result.
+	 *
+	 * Icon resolution priority:
+	 *  1. iconUrl  — integration logo image (e.g. /logos/github.svg) for call_api with credential
+	 *  2. iconComponent — Lucide icon constructor from TOOL_ICON_MAP for built-in tools
+	 *  3. DEFAULT_TOOL_ICON (WrenchIcon) — ultimate fallback
+	 *
+	 * Label resolution priority:
+	 *  1. toolDisplayName — pre-formatted label (e.g. "Call Api — GitHub") for call_api
+	 *  2. formatToolName(toolName) — snake_case → title-case formatter fallback
 	 */
 	let {
 		toolName,
+		toolDisplayName,
 		argsJson,
 		result,
-		isRunning = false
+		isRunning = false,
+		iconUrl,
+		iconComponent
 	}: {
 		toolName: string;
+		/** Pre-formatted display label — overrides the default snake_case formatter */
+		toolDisplayName?: string;
 		/** Pretty-printed JSON args the LLM decided to pass — the "thinking context" */
 		argsJson?: string;
 		/** Raw tool execution output returned to the agent */
 		result?: string;
 		isRunning?: boolean;
+		/** Integration logo URL — shown when call_api is used with a known credential */
+		iconUrl?: string;
+		/** Lucide icon constructor — shown for built-in tools */
+		iconComponent?: typeof WrenchIcon;
 	} = $props();
 
 	let expanded = $state(false);
@@ -37,30 +57,42 @@
 		if (!name) return 'Using tool…';
 		return name.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 	}
+
+	/** Resolved display label — prefer toolDisplayName prop, fall back to formatter */
+	let displayLabel = $derived(toolDisplayName ?? formatToolName(toolName));
+
+	/** Resolved icon component — iconComponent prop, or DEFAULT_TOOL_ICON fallback */
+	let ResolvedIcon = $derived(iconComponent ?? DEFAULT_TOOL_ICON);
 </script>
 
 <div class="my-1 overflow-hidden rounded-md border border-border/40 bg-muted/20">
 	<!-- Header strip — always visible -->
 	<button
 		type="button"
-		class="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs text-muted-foreground transition-colors hover:bg-muted/40 disabled:pointer-events-none"
+		class="flex w-full items-center gap-2 px-2 py-1.5 text-left text-xs text-muted-foreground transition-colors hover:bg-muted/40 disabled:pointer-events-none"
 		onclick={() => canExpand && (expanded = !expanded)}
 		disabled={!canExpand}
 	>
-		<WrenchIcon class="size-3 shrink-0 opacity-60" />
+		<!-- Icon: integration logo image takes priority over Lucide icon -->
+		{#if iconUrl}
+			<img
+				src={iconUrl}
+				alt=""
+				class="size-4 shrink-0 rounded-sm object-contain opacity-80"
+				onerror={(e) => {
+					// Hide broken images — the text label still identifies the tool
+					(e.currentTarget as HTMLImageElement).style.display = 'none';
+				}}
+			/>
+		{:else}
+			<ResolvedIcon class="size-3 shrink-0 opacity-60" />
+		{/if}
 
-		<span class="flex-1 font-medium">{formatToolName(toolName)}</span>
+		<span class="flex-1 font-medium">{displayLabel}</span>
 
 		{#if isRunning}
-			<!-- Animated dots while the tool is being invoked -->
-			<span class="flex items-center gap-0.5">
-				<span class="size-1 animate-bounce rounded-full bg-muted-foreground [animation-delay:0ms]"
-				></span>
-				<span class="size-1 animate-bounce rounded-full bg-muted-foreground [animation-delay:150ms]"
-				></span>
-				<span class="size-1 animate-bounce rounded-full bg-muted-foreground [animation-delay:300ms]"
-				></span>
-			</span>
+			<!-- Spinning loader while the tool is being invoked -->
+			<LoaderCircleIcon class="size-3 shrink-0 animate-spin text-muted-foreground/60" />
 		{:else}
 			<CheckIcon class="size-3 shrink-0 text-green-500" />
 			{#if hasDetails}
@@ -83,7 +115,7 @@
 						Arguments
 					</p>
 					<pre
-						class="overflow-x-auto font-mono text-[11px] leading-relaxed break-words whitespace-pre-wrap text-muted-foreground/80">{argsJson}</pre>
+						class="overflow-x-auto font-mono text-[11px] leading-relaxed wrap-break-word break-all whitespace-pre-wrap text-muted-foreground/80">{argsJson}</pre>
 				</div>
 			{/if}
 
@@ -96,7 +128,7 @@
 						Result
 					</p>
 					<pre
-						class="overflow-x-auto font-mono text-[11px] leading-relaxed break-words whitespace-pre-wrap text-muted-foreground/80">{result}</pre>
+						class="overflow-x-auto font-mono text-[11px] leading-relaxed wrap-break-word break-all whitespace-pre-wrap text-muted-foreground/80">{result}</pre>
 				</div>
 			{/if}
 		</div>

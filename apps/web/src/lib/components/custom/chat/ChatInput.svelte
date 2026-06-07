@@ -74,7 +74,7 @@
 
 <svelte:window onkeydown={handleGlobalKeydown} />
 
-<div class="border-t border-border/50 bg-background px-4 pt-3 pb-4">
+<div class="bg-background px-4 pt-3 pb-4">
 	<div
 		class="flex items-end rounded-2xl border border-border bg-card px-3 py-3 shadow-sm transition-colors focus-within:border-ring/50 focus-within:shadow-md"
 	>

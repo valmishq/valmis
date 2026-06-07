@@ -63,6 +63,19 @@ const testRequestSchema = z.object({
 	 */
 	url: z.string().min(1),
 	/**
+	 * Optional HTTP headers to include with the test request.
+	 * Use this for APIs that require a specific Content-Type or other headers
+	 * that are not injected by the credential's requestMapping.
+	 * Example: { 'Content-Type': 'application/json' }
+	 */
+	headers: z.record(z.string(), z.string()).optional(),
+	/**
+	 * Optional request body string sent with POST test requests.
+	 * Required for APIs that are POST-only, such as GraphQL endpoints.
+	 * Example: '{"query":"{ account { id email } }"}'
+	 */
+	body: z.string().optional(),
+	/**
 	 * Dot-notation key path into the JSON response body whose value will be
 	 * stored as `connectedAccount` on the credential after a successful OAuth2
 	 * authorization. Only used during the OAuth2 callback flow.

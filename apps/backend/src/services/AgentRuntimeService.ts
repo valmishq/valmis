@@ -148,6 +148,7 @@ export class AgentRuntimeService {
 		ownerId: string,
 		triggerType: AgentTriggerType = 'chat',
 		triggerPayload?: Record<string, unknown>,
+		userDatetime?: string,
 	): Promise<void> {
 		// Fetch the agent once — reuse for both the proxy token and runtime config build.
 		const agent = await this.agentService.getById(agentId, ownerId);
@@ -163,6 +164,7 @@ export class AgentRuntimeService {
 			ownerId,
 			triggerType,
 			triggerPayload,
+			userDatetime,
 		);
 
 		// Issue a scoped PROXY_TOKEN for this child process session
@@ -305,6 +307,7 @@ export class AgentRuntimeService {
 		ownerId: string,
 		triggerType: AgentTriggerType,
 		triggerPayload?: Record<string, unknown>,
+		userDatetime?: string,
 	): Promise<AgentRuntimeConfig> {
 		let modelProvider = '';
 		let modelId = '';
@@ -412,6 +415,9 @@ export class AgentRuntimeService {
 			embeddingModelConfigId: agent.embeddingModelConfigId,
 			triggerType,
 			triggerPayload,
+			// User's local datetime — used to inject current date/time context into the system prompt.
+			// Falls back to server time in agent-runner.ts when absent (cron/webhook/manual triggers).
+			...(userDatetime !== undefined ? { userDatetime } : {}),
 		};
 	}
 }

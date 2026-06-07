@@ -20,6 +20,15 @@ export interface AgentThread {
 	triggerType: AgentTriggerType;
 	triggerId?: string;
 	triggerPayload?: Record<string, unknown>;
+	/**
+	 * Current context window occupancy in tokens.
+	 * Set to usage.input from the most recent assistant message after each LLM turn.
+	 * Unlike total input token sums, this value represents what will actually be sent
+	 * to the LLM on the next call. A context compaction feature can reduce this value
+	 * without affecting the cumulative total-token / cost metrics.
+	 * Null for threads created before this field was introduced.
+	 */
+	contextTokens?: number;
 	createdAt: Date;
 	updatedAt: Date;
 }
@@ -236,6 +245,12 @@ export interface AgentRuntimeConfig {
 	embeddingModelConfigId?: string;
 	triggerType: AgentTriggerType;
 	triggerPayload?: Record<string, unknown>;
+	/**
+	 * ISO 8601 datetime string with timezone offset representing the user's local
+	 * date and time at the moment the message was sent.
+	 * Falls back to server time if absent (e.g. non-chat triggers like cron/webhook).
+	 */
+	userDatetime?: string;
 }
 
 // ─── SSE Event types (host → browser) ────────────────────────────────────────

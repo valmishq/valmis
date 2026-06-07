@@ -1,4 +1,4 @@
-import { pgTable, pgEnum, uuid, text, jsonb, timestamp, index } from 'drizzle-orm/pg-core';
+import { pgTable, pgEnum, uuid, text, integer, jsonb, timestamp, index } from 'drizzle-orm/pg-core';
 import { agents } from './agents.js';
 
 /** Lifecycle status of an agent thread */
@@ -52,6 +52,15 @@ export const agentThreads = pgTable(
 		triggerId: uuid('trigger_id'),
 		/** Payload delivered to the agent when this thread was spawned by a trigger */
 		triggerPayload: jsonb('trigger_payload'),
+		/**
+		 * Current context window size in tokens — updated after every LLM turn.
+		 * Tracks the real context occupancy rather than a running sum of all turns.
+		 * Set to usage.input from the most recent assistant message.
+		 * A future context compaction feature can reduce this value independently of
+		 * the total-tokens metric (which always accumulates).
+		 * Null for threads created before this column was added.
+		 */
+		contextTokens: integer('context_tokens'),
 		createdAt: timestamp('created_at').defaultNow().notNull(),
 		updatedAt: timestamp('updated_at').defaultNow().notNull(),
 	},

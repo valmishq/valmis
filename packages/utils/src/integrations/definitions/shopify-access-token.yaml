@@ -1,0 +1,47 @@
+id: shopify-access-token
+name: Shopify
+type: apiKey
+icon: /logos/shopify.svg
+description: >
+  Connect to a Shopify store using a custom app Access Token. This method
+  is recommended for private apps or single-store integrations. You will
+  need the store subdomain, the Admin API Access Token, and the API Secret
+  Key generated when you create and install a custom app in the Shopify admin.
+documentationUrl: https://shopify.dev/docs/apps/build/authentication-authorization/access-token-types/generate-app-access-tokens-admin
+properties:
+  - name: shopSubdomain
+    displayName: Shop Subdomain
+    type: string
+    required: true
+    description: >
+      Your Shopify store subdomain. Found in your store URL:
+      https://<subdomain>.myshopify.com — enter only the subdomain part,
+      e.g. my-store (not the full URL).
+  - name: accessToken
+    displayName: Access Token
+    type: secret
+    required: true
+    description: >
+      The Admin API Access Token for your custom app. Found under
+      Apps > Develop apps > [Your App] > API Credentials > Admin API
+      Access Token.
+  - name: appSecretKey
+    displayName: APP Secret Key
+    type: secret
+    required: true
+    description: >
+      The API Secret Key for your custom app. Found under
+      Apps > Develop apps > [Your App] > API Credentials > API Secret Key.
+      Used for HMAC webhook verification.
+
+# Shopify Admin REST API authenticates via the X-Shopify-Access-Token header.
+requestMapping:
+  headers:
+    X-Shopify-Access-Token: '{{properties.accessToken}}'
+
+testRequest:
+  method: GET
+  # Shop endpoint — returns store details including the shop name/domain.
+  url: 'https://{{properties.shopSubdomain}}.myshopify.com/admin/api/2024-01/shop.json'
+  # myshopify_domain is returned in the response and used as the connected account identifier.
+  accountIdentifierKey: shop.myshopify_domain
