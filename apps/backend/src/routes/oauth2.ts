@@ -246,9 +246,14 @@ export function createOAuth2Router(authService: AuthService): Router {
 			response_type: 'code',
 			scope,
 			state,
-			access_type: 'offline',
-			prompt: 'consent',
 		});
+
+		// Append any provider-specific extra auth params defined in the integration YAML
+		if (oauth2Config.extraAuthParams) {
+			for (const [key, value] of Object.entries(oauth2Config.extraAuthParams)) {
+				params.set(key, value);
+			}
+		}
 
 		// PKCE: generate verifier + challenge, store verifier in credential for callback
 		if (oauth2Config.usePkce) {

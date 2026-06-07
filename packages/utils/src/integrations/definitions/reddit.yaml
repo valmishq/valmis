@@ -1,0 +1,46 @@
+id: reddit
+name: Reddit
+type: oauth2
+icon: /logos/reddit.svg
+description: >
+  Connect to Reddit via OAuth2. Allows reading and writing to Reddit on behalf
+  of a user, including posts, comments, messages, and account data.
+documentationUrl: https://www.reddit.com/dev/api/oauth
+properties:
+  - name: clientId
+    displayName: Client ID
+    type: string
+    required: true
+    description: >
+      The client ID shown beneath your app name on https://www.reddit.com/prefs/apps.
+      Create a "web app" type application to get a client ID and secret.
+  - name: clientSecret
+    displayName: Client Secret
+    type: secret
+    required: true
+    description: >
+      The secret shown on your Reddit app settings page.
+      Only "web app" type applications have a client secret.
+
+oauth2:
+  authorizationUrl: 'https://www.reddit.com/api/v1/authorize'
+  accessTokenUrl: 'https://www.reddit.com/api/v1/access_token'
+  clientIdProperty: clientId
+  clientSecretProperty: clientSecret
+  # Reddit requires HTTP Basic auth (clientId:clientSecret) for token exchange
+  authStyle: inHeader
+  # Request permanent access so a refresh token is issued (duration=permanent)
+  # identity — read username/karma; read — read posts/comments; submit — post/comment;
+  # privatemessages — read/send DMs; history — read user history; mysubreddits — list subs
+  scope: 'identity read submit privatemessages history mysubreddits'
+
+# Reddit OAuth API calls must use oauth.reddit.com, not www.reddit.com
+requestMapping:
+  headers:
+    Authorization: 'Bearer {{properties.accessToken}}'
+
+# /api/v1/me returns the authenticated user object
+testRequest:
+  method: GET
+  url: https://oauth.reddit.com/api/v1/me
+  accountIdentifierKey: name

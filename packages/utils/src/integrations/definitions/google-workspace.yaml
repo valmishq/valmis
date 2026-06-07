@@ -27,6 +27,10 @@ oauth2:
   clientIdProperty: clientId
   clientSecretProperty: clientSecret
   authStyle: inBody
+  # Google requires these to issue a refresh_token on first authorization
+  extraAuthParams:
+    access_type: offline
+    prompt: consent
 
 requestMapping:
   headers:

@@ -46,6 +46,12 @@ const oauth2ConfigSchema = z.object({
 	grantType: z.enum(['authorizationCode', 'clientCredentials']).optional(),
 	/** When true, PKCE S256 challenge is used instead of client_secret */
 	usePkce: z.boolean().optional(),
+	/**
+	 * Additional query parameters appended to the authorization URL.
+	 * Use this for provider-specific params (e.g. Google's access_type=offline,
+	 * prompt=consent) that should NOT be sent to every provider.
+	 */
+	extraAuthParams: z.record(z.string(), z.string()).optional(),
 });
 
 const testRequestSchema = z.object({

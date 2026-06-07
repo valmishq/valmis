@@ -24,6 +24,10 @@ oauth2:
   clientSecretProperty: clientSecret
   authStyle: inBody
   scope: 'openid email https://mail.google.com/ https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/gmail.send https://www.googleapis.com/auth/gmail.compose https://www.googleapis.com/auth/gmail.insert https://www.googleapis.com/auth/gmail.labels https://www.googleapis.com/auth/gmail.modify'
+  # Google requires these to issue a refresh_token on first authorization
+  extraAuthParams:
+    access_type: offline
+    prompt: consent
 
 requestMapping:
   headers:

@@ -24,6 +24,10 @@ oauth2:
   clientSecretProperty: clientSecret
   authStyle: inBody
   scope: 'openid email https://www.googleapis.com/auth/spreadsheets'
+  # Google requires these to issue a refresh_token on first authorization
+  extraAuthParams:
+    access_type: offline
+    prompt: consent
 
 requestMapping:
   headers:

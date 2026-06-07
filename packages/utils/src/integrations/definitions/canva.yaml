@@ -1,0 +1,57 @@
+id: canva
+name: Canva (OAuth2)
+type: oauth2
+icon: /logos/canva.svg
+description: >
+  Connect to Canva via OAuth2 to read and write designs, upload assets,
+  use brand templates, and access profile information. Requires a Canva
+  integration created in the Canva Developer Portal.
+documentationUrl: https://www.canva.dev/docs/connect/
+properties:
+  - name: clientId
+    displayName: Client ID
+    type: string
+    required: true
+    description: Client ID from your Canva integration (Developer Portal → Your integrations → Configuration)
+  - name: clientSecret
+    displayName: Client Secret
+    type: secret
+    required: true
+    description: Client Secret generated in your Canva integration settings
+  - name: scope
+    displayName: Scopes
+    type: string
+    required: true
+    description: >
+      Space-separated list of Canva Connect API scopes. Must exactly match
+      the scopes enabled in your Canva Developer Portal integration settings.
+      Available scopes: design:content:read, design:content:write,
+      design:meta:read, asset:read, asset:write, brandtemplate:meta:read,
+      brandtemplate:content:read, profile:read, folder:read, comment:read,
+      comment:write, collaboration:event.
+    default: >-
+      design:content:read design:content:write design:meta:read asset:read asset:write brandtemplate:meta:read brandtemplate:content:read profile:read comment:read
+      comment:write
+
+# Canva uses Authorization Code flow with PKCE (S256).
+# Token exchange requires Basic auth (Base64 of client_id:client_secret in Authorization header).
+oauth2:
+  authorizationUrl: 'https://www.canva.com/api/oauth/authorize'
+  accessTokenUrl: 'https://api.canva.com/rest/v1/oauth/token'
+  clientIdProperty: clientId
+  clientSecretProperty: clientSecret
+  # Canva requires client credentials as Basic auth in the Authorization header
+  authStyle: inHeader
+  # Canva mandates PKCE S256
+  usePkce: true
+
+requestMapping:
+  headers:
+    Authorization: 'Bearer {{properties.accessToken}}'
+
+# Fetches the authenticated user's profile to verify the token and
+# populate the connected account label with the display name.
+testRequest:
+  method: GET
+  url: 'https://api.canva.com/rest/v1/users/me/profile'
+  accountIdentifierKey: profile.display_name

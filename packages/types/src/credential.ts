@@ -47,6 +47,12 @@ export interface OAuth2Config {
 	 * Recommended for public clients. Replaces client_secret in the token exchange.
 	 */
 	usePkce?: boolean;
+	/**
+	 * Additional query parameters appended to the authorization URL.
+	 * Use this for provider-specific params (e.g. Google's access_type=offline,
+	 * prompt=consent) that must not be sent to every provider.
+	 */
+	extraAuthParams?: Record<string, string>;
 }
 
 /** HTTP request mapping — tells the engine where to inject credentials */

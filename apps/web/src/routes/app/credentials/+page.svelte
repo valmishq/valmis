@@ -528,7 +528,6 @@
 								type={inputType(prop)}
 								bind:value={formValues[prop.name]}
 								required={prop.required}
-								placeholder={prop.description ?? ''}
 							/>
 						{/if}
 

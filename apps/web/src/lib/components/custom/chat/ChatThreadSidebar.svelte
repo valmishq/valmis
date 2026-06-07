@@ -168,7 +168,7 @@
 								onclick={() => (open = false)}
 								class="flex min-w-0 flex-1 flex-col px-2.5 py-2"
 							>
-								<span class="truncate text-sm leading-snug font-medium">
+								<span class=" truncate text-sm leading-snug font-medium">
 									{threadTitle(thread)}
 								</span>
 								<span class="mt-0.5 flex items-center gap-1.5 text-[10px] text-muted-foreground">

@@ -4,6 +4,7 @@
 	import { onDestroy } from 'svelte';
 	import { api } from '$lib/api.client.js';
 	import { authStore } from '$lib/stores/auth.store.js';
+	import { activeBreadcrumbThreadTitle } from '$lib/stores/breadcrumb.store.js';
 	import { get } from 'svelte/store';
 	import ChatThreadSidebar from '$lib/components/custom/chat/ChatThreadSidebar.svelte';
 	import ChatMessage from '$lib/components/custom/chat/ChatMessage.svelte';
@@ -91,6 +92,8 @@
 		isStreaming = false;
 		streamingMessageId = null;
 		pendingHitl = null;
+		// Sync the breadcrumb title to the loaded thread title
+		activeBreadcrumbThreadTitle.set(data.thread.title ?? null);
 
 		// Re-open SSE for the new thread
 		openStream();
@@ -315,6 +318,10 @@
 			case 'thread_title_updated': {
 				// Update the title of the active thread in the sidebar immediately.
 				threads = threads.map((t) => (t.id === event.threadId ? { ...t, title: event.title } : t));
+				// Also update the breadcrumb if this is the currently viewed thread
+				if (event.threadId === data.thread.id) {
+					activeBreadcrumbThreadTitle.set(event.title);
+				}
 				break;
 			}
 
@@ -506,6 +513,10 @@
 			}
 			// Optimistically update the thread title in the sidebar
 			threads = threads.map((t) => (t.id === renameTarget!.id ? { ...t, title } : t));
+			// If renaming the currently active thread, update the breadcrumb immediately
+			if (renameTarget!.id === data.thread.id) {
+				activeBreadcrumbThreadTitle.set(title);
+			}
 			renameDialogOpen = false;
 		} catch {
 			setAlert({
