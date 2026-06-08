@@ -1,5 +1,6 @@
 id: airtable-pat
 name: Airtable (Personal Access Token)
+brandName: Airtable
 type: bearerToken
 icon: /logos/airtable.svg
 description: >

@@ -118,6 +118,11 @@ export interface CredentialMetadata {
 export interface CredentialDefinition {
 	id: string;
 	name: string;
+	/**
+	 * The brand/company name for display purposes (e.g. "GitHub", "Notion").
+	 * Falls back to `name` when not set.
+	 */
+	brandName: string;
 	type: CredentialType;
 	/** Path or URL to the service logo/icon for the UI */
 	icon?: string;

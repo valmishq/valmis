@@ -1,5 +1,6 @@
 id: notionApi
-name: Notion API
+name: Notion (API Key)
+brandName: Notion
 type: bearerToken
 icon: /logos/notion.svg
 description: Connect to your Notion workspace using an Internal Integration Token.

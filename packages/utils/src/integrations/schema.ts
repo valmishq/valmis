@@ -88,6 +88,7 @@ const testRequestSchema = z.object({
 export const credentialDefinitionSchema = z.object({
 	id: z.string(),
 	name: z.string(),
+	brandName: z.string(),
 	type: credentialTypeSchema,
 	icon: z.string().optional(),
 	description: z.string().optional(),

@@ -73,9 +73,9 @@ export const load: PageServerLoad = async (event) => {
 		const definitions = (definitionsBody.data ?? []) as CredentialDefinition[];
 
 		// Build definition id → { icon, name } lookup
-		const definitionMetaMap: Record<string, { icon: string | undefined; name: string }> = {};
+		const definitionMetaMap: Record<string, { icon: string | undefined; brandName: string }> = {};
 		for (const def of definitions) {
-			definitionMetaMap[def.id] = { icon: def.icon, name: def.name };
+			definitionMetaMap[def.id] = { icon: def.icon, brandName: def.brandName || def.name };
 		}
 
 		// Map credential id → integration meta via credential.type === definition.id
@@ -84,7 +84,7 @@ export const load: PageServerLoad = async (event) => {
 			if (meta) {
 				credentialMetaMap[cred.id] = {
 					icon: meta.icon,
-					integrationName: meta.name
+					integrationName: meta.brandName
 				};
 			}
 		}

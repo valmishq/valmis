@@ -1,5 +1,6 @@
 id: hubspot-service-key
 name: HubSpot (Service Key)
+brandName: HubSpot
 type: bearerToken
 icon: /logos/hubspot.svg
 description: >

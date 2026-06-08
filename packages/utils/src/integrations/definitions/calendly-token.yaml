@@ -1,5 +1,6 @@
 id: calendly-token
 name: Calendly (Access token)
+brandName: Calendly
 type: bearerToken
 icon: /logos/calendly.svg
 description: >

@@ -1,5 +1,6 @@
 id: httpBasicAuth
 name: Basic Auth
+brandName: Basic Auth
 type: basicAuth
 description: >
   HTTP Basic Authentication. The username and password are encoded as

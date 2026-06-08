@@ -1,0 +1,32 @@
+id: cloudflareApiToken
+name: Cloudflare (API Token)
+brandName: Cloudflare
+type: apiKey
+icon: /logos/cloudflare.svg
+description: >
+  Connect to the Cloudflare API using an API Token. Manage DNS records,
+  zones, Workers, R2, Pages, and other Cloudflare services. The token is
+  sent as a Bearer token in the Authorization header. API Tokens support
+  fine-grained permissions and are preferred over the Global API Key.
+documentationUrl: https://developers.cloudflare.com/api/
+properties:
+  - name: apiToken
+    displayName: API Token
+    type: secret
+    required: true
+    description: >
+      Your Cloudflare API Token. Create one at
+      https://dash.cloudflare.com/profile/api-tokens.
+      Grant only the specific permissions your use case requires.
+
+# Cloudflare API Token auth uses Bearer scheme in the Authorization header.
+requestMapping:
+  headers:
+    Authorization: 'Bearer {{properties.apiToken}}'
+
+testRequest:
+  method: GET
+  # GET /user returns the authenticated user's profile.
+  # result.email is used as the connected account identifier.
+  url: https://api.cloudflare.com/client/v4/user
+  accountIdentifierKey: result.email

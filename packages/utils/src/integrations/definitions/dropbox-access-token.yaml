@@ -1,5 +1,6 @@
 id: dropbox-access-token
 name: Dropbox (Access Token)
+brandName: Dropbox
 type: bearerToken
 description: >
   Connect to the Dropbox API using a short-lived or long-lived access token.

@@ -1,5 +1,6 @@
 id: tally-api-key
 name: Tally
+brandName: Tally
 type: bearerToken
 icon: /logos/tally.svg
 description: >

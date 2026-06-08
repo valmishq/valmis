@@ -1,5 +1,6 @@
 id: canva
 name: Canva (OAuth2)
+brandName: Canva
 type: oauth2
 icon: /logos/canva.svg
 description: >

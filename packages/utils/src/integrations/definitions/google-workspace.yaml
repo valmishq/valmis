@@ -1,5 +1,6 @@
 id: googleWorkspaceOAuth2
 name: Google Workspace (OAuth2)
+brandName: Google Workspace
 type: oauth2
 icon: /logos/google.svg
 description: Authenticate via Google OAuth2. You must create credentials in Google Cloud Console.

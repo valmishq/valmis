@@ -1,5 +1,6 @@
 id: pineconeApi
 name: Pinecone
+brandName: Pinecone
 type: apiKey
 description: >
   Connect to the Pinecone vector database API using an API key sent as a custom header.

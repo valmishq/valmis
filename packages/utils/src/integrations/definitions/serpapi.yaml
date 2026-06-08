@@ -1,5 +1,6 @@
 id: serpapi
 name: SerpApi
+brandName: SerpApi
 type: apiKey
 icon: /logos/serpapi.png
 description: >

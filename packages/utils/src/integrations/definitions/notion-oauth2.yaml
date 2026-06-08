@@ -1,5 +1,6 @@
 id: notion-oauth2
 name: Notion (OAuth2)
+brandName: Notion
 type: oauth2
 icon: /logos/notion.svg
 description: >

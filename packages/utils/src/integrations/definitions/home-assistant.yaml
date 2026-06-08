@@ -1,5 +1,6 @@
 id: homeAssistant
 name: Home Assistant
+brandName: Home Assistant
 type: apiKey
 icon: /logos/home-assistant.svg
 description: >

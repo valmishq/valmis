@@ -1,5 +1,6 @@
 id: semrush
 name: SEMrush
+brandName: SEMrush
 type: apiKey
 icon: /logos/semrush.svg
 description: >

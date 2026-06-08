@@ -1,5 +1,6 @@
 id: hubspot-oauth2
 name: HubSpot (OAuth2)
+brandName: HubSpot
 type: oauth2
 icon: /logos/hubspot.svg
 description: >

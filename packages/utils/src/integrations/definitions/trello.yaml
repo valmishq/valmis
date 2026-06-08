@@ -1,5 +1,6 @@
 id: trello
-name: Trello
+name: Trello (API Key)
+brandName: Trello
 type: custom
 icon: /logos/trello.svg
 description: >

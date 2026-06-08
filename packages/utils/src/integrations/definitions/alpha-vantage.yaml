@@ -1,5 +1,6 @@
 id: alphaVantage
 name: Alpha Vantage
+brandName: Alpha Vantage
 type: apiKey
 icon: /logos/alpha-vintage.svg
 description: >

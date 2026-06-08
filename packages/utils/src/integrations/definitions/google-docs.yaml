@@ -1,5 +1,6 @@
 id: google-docs
 name: Google Docs (OAuth2)
+brandName: Google Docs
 type: oauth2
 icon: /logos/google-docs.svg
 description: Connect to Google Docs via Google OAuth2 to read, write, and manage documents.

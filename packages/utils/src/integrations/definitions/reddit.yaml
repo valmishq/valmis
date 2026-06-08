@@ -1,5 +1,6 @@
 id: reddit
 name: Reddit
+brandName: Reddit
 type: oauth2
 icon: /logos/reddit.svg
 description: >

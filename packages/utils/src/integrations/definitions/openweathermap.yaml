@@ -1,5 +1,6 @@
 id: openWeatherMapApi
 name: OpenWeatherMap
+brandName: OpenWeatherMap
 type: apiKey
 description: >
   Connect to the OpenWeatherMap API using an API key passed as a query parameter.

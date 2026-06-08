@@ -1,5 +1,6 @@
 id: pushover
 name: Pushover
+brandName: Pushover
 type: apiKey
 icon: /logos/pushover.svg
 description: >

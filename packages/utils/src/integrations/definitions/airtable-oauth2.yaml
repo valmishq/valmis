@@ -1,5 +1,6 @@
 id: airtable-oauth2
 name: Airtable (OAuth2)
+brandName: Airtable
 type: oauth2
 icon: /logos/airtable.svg
 description: >

@@ -1,5 +1,6 @@
 id: asanaAccessToken
 name: Asana (Access Token)
+brandName: Asana
 type: bearerToken
 icon: /logos/asana.svg
 description: >

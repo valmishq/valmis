@@ -1,5 +1,6 @@
 id: githubApi
 name: GitHub
+brandName: GitHub
 type: bearerToken
 description: >
   Connect to the GitHub REST API using a Personal Access Token (classic or fine-grained).

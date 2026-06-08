@@ -1,5 +1,6 @@
 id: cal-com
 name: Cal.com
+brandName: Cal.com
 type: bearerToken
 icon: /logos/cal-com.svg
 description: >

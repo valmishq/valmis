@@ -1,5 +1,6 @@
 id: httpQueryAuth
 name: API Key (Query Parameter)
+brandName: API Key (Query Parameter)
 type: apiKey
 description: >
   Generic API key authentication via a URL query parameter.

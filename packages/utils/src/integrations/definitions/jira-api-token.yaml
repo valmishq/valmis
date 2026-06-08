@@ -1,5 +1,6 @@
 id: jiraApiToken
 name: Jira (API Token)
+brandName: Jira
 type: basicAuth
 icon: /logos/jira.svg
 description: >

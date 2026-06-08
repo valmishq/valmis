@@ -1,5 +1,6 @@
 id: buffer-api-key
 name: Buffer (API Key)
+brandName: Buffer
 type: apiKey
 icon: /logos/buffer.jpeg
 description: >

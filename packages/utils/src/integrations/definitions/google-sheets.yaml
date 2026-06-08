@@ -1,5 +1,6 @@
 id: google-sheets
 name: Google Sheets (OAuth2)
+brandName: Google Sheets
 type: oauth2
 icon: /logos/google-sheets.svg
 description: Connect to Google Sheets via Google OAuth2 to read, write, and manage spreadsheets.

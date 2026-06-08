@@ -88,7 +88,7 @@
 			<ResolvedIcon class="size-3 shrink-0 opacity-60" />
 		{/if}
 
-		<span class="flex-1 font-medium">{displayLabel}</span>
+		<span class="flex-1 font-medium">{displayLabel.replace('Api', 'API')}</span>
 
 		{#if isRunning}
 			<!-- Spinning loader while the tool is being invoked -->

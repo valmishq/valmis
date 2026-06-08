@@ -1,5 +1,6 @@
 id: shopify-access-token
-name: Shopify
+name: Shopify (Access Token)
+brandName: Shopify
 type: apiKey
 icon: /logos/shopify.svg
 description: >

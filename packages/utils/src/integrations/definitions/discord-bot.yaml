@@ -1,5 +1,6 @@
 id: discord-bot
-name: Discord (Bot)
+name: Discord (Bot Token)
+brandName: Discord
 type: bearerToken
 icon: /logos/discord.svg
 description: >

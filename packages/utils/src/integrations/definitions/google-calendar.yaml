@@ -1,5 +1,6 @@
 id: google-calendar
 name: Google Calendar (OAuth2)
+brandName: Google Calendar
 type: oauth2
 icon: /logos/google-calendar.svg
 description: Connect to Google Calendar via Google OAuth2 to read, create, update, and delete events and calendars.

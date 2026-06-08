@@ -1,5 +1,6 @@
 id: httpHeaderAuth
 name: API Key (Header)
+brandName: API Key (Header)
 type: apiKey
 description: >
   Generic API key authentication via a custom HTTP header.

@@ -1,5 +1,6 @@
 id: microsoft-outlook
 name: Microsoft Outlook (OAuth2)
+brandName: Microsoft Outlook
 type: oauth2
 icon: /logos/microsoft-outlook.svg
 description: >

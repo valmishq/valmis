@@ -1,5 +1,6 @@
 id: slack
 name: Slack (OAuth2)
+brandName: Slack
 type: oauth2
 icon: /logos/slack.svg
 description: Connect to Slack via OAuth2 to send messages, manage channels, and interact with workspaces as a bot.

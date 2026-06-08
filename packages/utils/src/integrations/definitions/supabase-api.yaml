@@ -1,5 +1,6 @@
 id: supabase-api
 name: Supabase API
+brandName: Supabase
 type: apiKey
 icon: /logos/supabase.svg
 description: >

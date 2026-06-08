@@ -1,5 +1,6 @@
 id: gmail
 name: Gmail (OAuth2)
+brandName: Gmail
 type: oauth2
 icon: /logos/gmail.svg
 description: Connect to Gmail via Google OAuth2 with full access to read, send, compose, and manage emails.

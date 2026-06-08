@@ -1,5 +1,6 @@
 id: httpBearerToken
 name: Bearer Token
+brandName: Bearer Token
 type: bearerToken
 description: >
   Generic Bearer token authentication. The token is sent as

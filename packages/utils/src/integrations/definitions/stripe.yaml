@@ -1,5 +1,6 @@
 id: stripe
 name: Stripe
+brandName: Stripe
 type: bearerToken
 description: >
   Connect to the Stripe API using a Secret Key. Supports both live mode (sk_live_*)
