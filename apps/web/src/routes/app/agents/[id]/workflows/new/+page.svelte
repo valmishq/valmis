@@ -11,6 +11,7 @@
 	import { Separator } from '$lib/components/ui/separator/index.js';
 	import PageHeader from '$lib/components/page-header.svelte';
 	import WorkflowStepCard from '$lib/components/custom/workflow/WorkflowStepCard.svelte';
+	import CronSchedulePicker from '$lib/components/custom/workflow/CronSchedulePicker.svelte';
 	import type { PageData, ActionData } from './$types';
 	import type { WorkflowStep, CredentialDefinition, AgentTriggerKind } from '@repo/types';
 	import ArrowLeftIcon from '@lucide/svelte/icons/arrow-left';
@@ -320,16 +321,19 @@
 			{#if triggerKind === 'cron'}
 				<!-- Cron fields -->
 				<div class="space-y-4 rounded-lg border border-border p-4">
+					<!-- Visual schedule picker — stays in sync with the raw expression below -->
+					<CronSchedulePicker bind:value={cronSchedule} />
+
 					<div class="space-y-1.5">
 						<Label for="cron-schedule">
-							Cron expression
+							Expression
 							<a
 								href="https://crontab.guru/"
 								target="_blank"
 								rel="noopener noreferrer"
 								class="ml-1 text-xs font-normal text-muted-foreground underline-offset-2 hover:underline"
 							>
-								(help)
+								reference ↗
 							</a>
 						</Label>
 						<Input
@@ -339,9 +343,6 @@
 							placeholder="0 9 * * 1-5"
 							class="font-mono text-sm"
 						/>
-						<p class="text-xs text-muted-foreground">
-							e.g. <code class="rounded bg-muted px-1 py-0.5">0 9 * * 1-5</code> = weekdays at 9am
-						</p>
 					</div>
 					<div class="space-y-1.5">
 						<Label for="cron-timezone">
