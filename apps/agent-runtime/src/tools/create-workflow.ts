@@ -49,14 +49,16 @@ export function createCreateWorkflowTool(ctx: ToolContext): AgentTool {
 		name: 'create_workflow',
 		label: 'Create Workflow',
 		description:
-			'Create a new automation workflow for this agent. ' +
-			'⚠️ ONLY use this tool when the user has EXPLICITLY asked to create a workflow. ' +
-			'BEFORE calling this tool, you MUST: ' +
-			'(1) Design the full workflow with all step names and instructions based on the user description, ' +
-			'(2) Present the complete configuration to the user including step-by-step description AND trigger type, ' +
-			'(3) Ask for confirmation using ask_human, ' +
-			'(4) Only proceed to call this tool after the user confirms. ' +
-			'Do NOT call this tool speculatively or without user confirmation.',
+			'Create a new automation workflow for this agent with named steps, instructions, and a trigger. ' +
+			'⚠️ RESTRICTED: Only call this when the user has EXPLICITLY asked to create a new workflow. ' +
+			'BEFORE calling this tool you MUST complete ALL of the following steps: ' +
+			'(1) Design the full workflow — choose a name, description, and write detailed instructions for each step. ' +
+			'(2) Decide on the trigger type (manual / cron / webhook). For cron, explain the schedule in plain English to the user. ' +
+			'(3) Present the complete configuration (all steps, trigger type and schedule) to the user in a readable format. ' +
+			'(4) Use ask_human to get EXPLICIT confirmation — only proceed after the user says yes, confirm, or go ahead. ' +
+			'Do NOT call this tool speculatively, without presenting the config first, or without ask_human confirmation. ' +
+			'IMPORTANT: After this tool completes, your reply to the user MUST include ALL ' +
+			'markdown links returned in the tool result exactly as they appear — do not omit or paraphrase them.',
 		parameters: Type.Object({
 			name: Type.String({
 				description: 'The workflow name (short, descriptive).',

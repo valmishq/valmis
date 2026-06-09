@@ -29,7 +29,8 @@ export function createListWorkflowsTool(ctx: ToolContext): AgentTool {
 			"Returns each workflow's ID, name, description, and step count. " +
 			'Use this to discover which workflows can be triggered. ' +
 			"Use read_workflow to inspect a workflow's step-by-step configuration, " +
-			'and trigger_workflow to execute one.',
+			'and trigger_workflow to execute one. ' +
+			'Always call this first to get the correct workflowId before triggering or reading a specific workflow.',
 		parameters: Type.Object({}),
 		execute: async (_toolCallId, _params) => {
 			logger.info('[agent-runner] list_workflows — fetching workflow list');

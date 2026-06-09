@@ -28,7 +28,9 @@ export function createReadWorkflowTool(ctx: ToolContext): AgentTool {
 			"Read the full configuration of a specific workflow, including every step's " +
 			'name, instruction, allowed tools, and error handling settings. ' +
 			'Use list_workflows first to discover available workflow IDs. ' +
-			'Use this to understand what a workflow does before triggering it.',
+			'Use this to understand exactly what a workflow does before triggering it — ' +
+			"inspecting the steps helps you confirm the workflow matches the user's intent " +
+			'and tells you what payload keys the steps expect.',
 		parameters: Type.Object({
 			workflowId: Type.String({
 				description: 'The ID of the workflow to read.',

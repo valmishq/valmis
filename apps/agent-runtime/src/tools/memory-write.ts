@@ -33,7 +33,8 @@ export function createMemoryWriteTool(ctx: ToolContext): AgentTool {
 			'Use this to remember important facts, user preferences, task outcomes, or behavioral rules. ' +
 			'Choose the memory type that best reflects the nature of the information: ' +
 			'episodic (what happened), semantic (facts/knowledge), procedural (rules/behaviors), ' +
-			'or working (temporary context for this session only).',
+			'or working (temporary context for this session only).' +
+			'Only memorize things that may be useful for future context, do not memorize trivial and insignificant details that does not have a long term impact.',
 		parameters: Type.Object({
 			content: Type.String({
 				description: 'The text content to store in memory. Be specific and self-contained.',

@@ -26,11 +26,14 @@ export function createTriggerWorkflowTool(ctx: ToolContext): AgentTool {
 		label: 'Trigger Workflow',
 		description:
 			'Start executing an enabled workflow asynchronously. ' +
-			'The workflow runs as a separate process — this tool returns immediately ' +
-			'with a runId confirming the workflow was started. ' +
-			'You can optionally pass a payload object that will be available to ' +
+			'Use this when the user asks you to run, start, or execute a workflow. ' +
+			'Always call list_workflows first to confirm the correct workflowId — never guess an ID. ' +
+			'The workflow runs as a separate process and returns immediately with a runId; ' +
+			'it does NOT produce output in this chat turn. ' +
+			'You can optionally pass a string key-value payload that is available to ' +
 			'the workflow steps as {{trigger.payload}}. ' +
-			'Use list_workflows to find available workflow IDs.',
+			'IMPORTANT: After this tool completes, your reply to the user MUST include ALL ' +
+			'markdown links returned in the tool result exactly as they appear — do not omit or paraphrase them.',
 		parameters: Type.Object({
 			workflowId: Type.String({
 				description: 'The ID of the workflow to trigger.',
