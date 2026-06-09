@@ -617,10 +617,10 @@
 </svelte:head>
 
 <div class="flex h-full overflow-hidden">
-	<!-- Sidebar — binds the mobile open state -->
+	<!-- Sidebar — bind:threads allows the sidebar to optimistically update pin state -->
 	<ChatThreadSidebar
 		agent={data.agent}
-		{threads}
+		bind:threads
 		activeThreadId={data.thread.id}
 		{isCreatingThread}
 		bind:open={sidebarOpen}

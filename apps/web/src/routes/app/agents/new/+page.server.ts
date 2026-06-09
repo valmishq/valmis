@@ -6,8 +6,7 @@ import type {
 	Agent,
 	CredentialMetadata,
 	CredentialDefinition,
-	LlmProviderConfig,
-	AgentMemoryEntry
+	LlmProviderConfig
 } from '@repo/types';
 
 /**
@@ -53,15 +52,13 @@ export const load: PageServerLoad = async (event) => {
 		llmConfigs = (body.data ?? []) as LlmProviderConfig[];
 	}
 
-	// Edit mode — additionally fetch agent, memory, and assigned skills
+	// Edit mode — additionally fetch agent and assigned skills
 	let agent: Agent | null = null;
-	let memory: AgentMemoryEntry[] = [];
 	let assignedSkillNames: string[] = [];
 
 	if (isEditMode) {
-		const [agentRes, memoryRes, agentSkillsRes] = await Promise.all([
+		const [agentRes, agentSkillsRes] = await Promise.all([
 			api(`/agents/${agentId}?ownerId=${encodeURIComponent(ownerId)}`, event),
-			api(`/agents/${agentId}/memory?ownerId=${encodeURIComponent(ownerId)}&limit=50`, event),
 			api(`/agents/${agentId}/skills?ownerId=${encodeURIComponent(ownerId)}`, event)
 		]);
 
@@ -71,11 +68,6 @@ export const load: PageServerLoad = async (event) => {
 
 		const agentBody = await agentRes.json();
 		agent = agentBody.data as Agent;
-
-		if (memoryRes.ok) {
-			const body = await memoryRes.json();
-			memory = (body.data ?? []) as AgentMemoryEntry[];
-		}
 
 		if (agentSkillsRes.ok) {
 			const body = await agentSkillsRes.json();
@@ -89,7 +81,6 @@ export const load: PageServerLoad = async (event) => {
 		credentials,
 		definitions,
 		llmConfigs,
-		memory,
 		assignedSkillNames
 	};
 };

@@ -2,9 +2,6 @@
 	import { enhance } from '$app/forms';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
-	import { api } from '$lib/api.client.js';
-	import { authStore } from '$lib/stores/auth.store.js';
-	import { get } from 'svelte/store';
 	import { setAlert } from '$lib/components/custom/alert/alert-state.svelte.js';
 	import * as Card from '$lib/components/ui/card/index.js';
 	import * as Popover from '$lib/components/ui/popover/index.js';
@@ -17,14 +14,12 @@
 	import AgentSkillsPanel from '$lib/components/custom/agent-skills-panel.svelte';
 	import AgentCredentialsPanel from '$lib/components/custom/agent-credentials-panel.svelte';
 	import ChevronLeftIcon from '@lucide/svelte/icons/chevron-left';
-	import TrashIcon from '@lucide/svelte/icons/trash-2';
 	import BrainIcon from '@lucide/svelte/icons/brain';
 	import type { PageData, ActionData } from './$types';
 	import type {
 		CredentialMetadata,
 		CredentialDefinition,
 		LlmProviderConfig,
-		AgentMemoryEntry,
 		AgentEvolvedSkill
 	} from '@repo/types';
 	import { EMOJI_PRESETS } from '$lib/components/custom/agent-emojis.js';
@@ -38,13 +33,11 @@
 	let credentials = $state<CredentialMetadata[]>(data.credentials);
 	let definitions = $state<CredentialDefinition[]>(data.definitions);
 	let llmConfigs = $state<LlmProviderConfig[]>(data.llmConfigs);
-	let memory = $state<AgentMemoryEntry[]>(data.memory ?? []);
 
 	$effect(() => {
 		credentials = data.credentials;
 		definitions = data.definitions;
 		llmConfigs = data.llmConfigs;
-		memory = data.memory ?? [];
 	});
 
 	// Show success alert after redirect from form action
@@ -110,54 +103,6 @@
 		emojiPickerOpen = false;
 	}
 
-	// ── Memory deletion (edit mode only) ──────────────────────────────────────
-	let deletingMemoryId = $state<string | null>(null);
-
-	async function handleDeleteMemory(entryId: string) {
-		if (!agent) return;
-		const { user } = get(authStore);
-		if (!user) return;
-
-		deletingMemoryId = entryId;
-		try {
-			const res = await api(`/agents/${agent.id}/memory/${entryId}`, {
-				method: 'DELETE',
-				body: JSON.stringify({ ownerId: user.id })
-			});
-			if (res.ok) {
-				memory = memory.filter((m) => m.id !== entryId);
-			} else {
-				setAlert({
-					type: 'error',
-					title: 'Failed to delete memory',
-					message: 'Could not delete the memory entry.',
-					duration: 5000,
-					show: true
-				});
-			}
-		} catch {
-			setAlert({
-				type: 'error',
-				title: 'Failed to delete memory',
-				message: 'An unexpected error occurred.',
-				duration: 5000,
-				show: true
-			});
-		} finally {
-			deletingMemoryId = null;
-		}
-	}
-
-	function formatDate(iso: string | Date): string {
-		return new Date(iso).toLocaleDateString(undefined, {
-			year: 'numeric',
-			month: 'short',
-			day: 'numeric',
-			hour: '2-digit',
-			minute: '2-digit'
-		});
-	}
-
 	/**
 	 * Evolved skills pre-loaded from server for edit mode.
 	 * Keyed by skill name for O(1) lookup in the panel component.
@@ -171,7 +116,7 @@
 		<title>{agent.name} — Edit Agent — OpenAgent Dashboard</title>
 		<meta
 			name="description"
-			content="Edit the configuration of your AI agent: update instructions, credentials, and review memory."
+			content="Edit the configuration of your AI agent: update instructions, credentials, and memory."
 		/>
 		<meta name="keywords" content="edit agent, agent settings, AI agent configuration, OpenAgent" />
 	{:else}
@@ -187,14 +132,28 @@
 <PageHeader
 	title={isEditMode && agent ? agent.name : 'New Agent'}
 	description={isEditMode
-		? 'Edit agent configuration, credentials, and memory.'
+		? 'Edit agent configuration and credentials.'
 		: 'Configure a new AI agent with its own persona and capabilities.'}
 >
 	{#snippet actions()}
-		<Button variant="outline" onclick={() => goto('/app/agents')} class="gap-2">
-			<ChevronLeftIcon class="size-4" />
-			Back to agents
-		</Button>
+		<div class="flex items-center gap-2">
+			{#if isEditMode && agent}
+				<!-- Link to standalone memory management page -->
+				<Button
+					variant="outline"
+					size="sm"
+					onclick={() => goto(`/app/agents/${agent!.id}/memory`)}
+					class="gap-2"
+				>
+					<BrainIcon class="size-4" />
+					Memory
+				</Button>
+			{/if}
+			<Button variant="outline" onclick={() => goto('/app/agents')} class="gap-2">
+				<ChevronLeftIcon class="size-4" />
+				Back to agents
+			</Button>
+		</div>
 	{/snippet}
 </PageHeader>
 
@@ -428,52 +387,6 @@
 		agentId={isEditMode ? agent?.id : null}
 		{evolvedSkills}
 	/>
-
-	<!-- ── Memory (edit mode only) ───────────────────────────────────────────── -->
-	{#if isEditMode}
-		<Card.Root>
-			<Card.Header>
-				<Card.Title class="text-sm font-medium">Memory</Card.Title>
-				<Card.Description class="text-xs">
-					Long-term memory entries stored by this agent. Searchable at runtime via vector
-					similarity.
-				</Card.Description>
-			</Card.Header>
-			<Card.Content>
-				{#if memory.length === 0}
-					<div class="flex flex-col items-center gap-2 py-6">
-						<BrainIcon class="size-5 text-muted-foreground" />
-						<p class="text-sm text-muted-foreground">No memory entries yet.</p>
-						<p class="text-xs text-muted-foreground">
-							Memory is populated by the agent during conversations.
-						</p>
-					</div>
-				{:else}
-					<div class="space-y-2">
-						{#each memory as entry (entry.id)}
-							<div class="flex items-start gap-3 rounded-md border border-border px-3 py-2.5">
-								<div class="min-w-0 flex-1">
-									<p class="text-sm text-foreground">{entry.content}</p>
-									<p class="mt-1 text-xs text-muted-foreground">{formatDate(entry.createdAt)}</p>
-								</div>
-								<Button
-									type="button"
-									variant="ghost"
-									size="sm"
-									onclick={() => handleDeleteMemory(entry.id)}
-									disabled={deletingMemoryId === entry.id}
-									class="shrink-0 text-destructive hover:bg-destructive/10 hover:text-destructive"
-									title="Delete memory entry"
-								>
-									<TrashIcon class="size-3.5" />
-								</Button>
-							</div>
-						{/each}
-					</div>
-				{/if}
-			</Card.Content>
-		</Card.Root>
-	{/if}
 
 	<!-- ── Submit ────────────────────────────────────────────────────────────── -->
 	<Separator />

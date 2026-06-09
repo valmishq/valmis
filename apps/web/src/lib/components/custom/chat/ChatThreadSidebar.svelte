@@ -6,12 +6,16 @@
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu/index.js';
 	import { ScrollArea } from '$lib/components/ui/scroll-area/index.js';
 	import { Switch } from '$lib/components/ui/switch/index.js';
+	import { api } from '$lib/api.client.js';
+	import { setAlert } from '$lib/components/custom/alert/alert-state.svelte.js';
 	import PlusIcon from '@lucide/svelte/icons/plus';
 	import MessageSquareIcon from '@lucide/svelte/icons/message-square';
 	import WorkflowIcon from '@lucide/svelte/icons/workflow';
 	import MoreHorizontalIcon from '@lucide/svelte/icons/ellipsis';
 	import PencilIcon from '@lucide/svelte/icons/pencil';
 	import Trash2Icon from '@lucide/svelte/icons/trash-2';
+	import PinIcon from '@lucide/svelte/icons/pin';
+	import PinOffIcon from '@lucide/svelte/icons/pin-off';
 	import type { Agent, AgentThread } from '@repo/types';
 
 	/**
@@ -24,7 +28,7 @@
 	 */
 	let {
 		agent,
-		threads,
+		threads = $bindable(),
 		activeThreadId,
 		isCreatingThread = false,
 		open = $bindable(false),
@@ -71,21 +75,68 @@
 		}
 	});
 
-	let filteredThreads = $derived(
-		showWorkflowThreads
-			? [...threads].sort(
-					(a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
-				)
-			: [...threads]
-					.filter((t) => !t.isWorkflowThread)
-					.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
-	);
+	/**
+	 * Sort threads so that pinned ones always come first.
+	 * Within each group (pinned / unpinned) threads are ordered by updatedAt DESC.
+	 * Workflow-thread filter is applied before the sort.
+	 */
+	let filteredThreads = $derived(() => {
+		const base = showWorkflowThreads ? [...threads] : threads.filter((t) => !t.isWorkflowThread);
+
+		const pinned = base
+			.filter((t) => t.isPinned)
+			.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+
+		const unpinned = base
+			.filter((t) => !t.isPinned)
+			.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+
+		return [...pinned, ...unpinned];
+	});
 
 	/** Whether there are any workflow threads at all (used to show the toggle) */
 	let hasWorkflowThreads = $derived(threads.some((t) => t.isWorkflowThread));
 
 	/** Desktop sidebar open state */
 	let desktopOpen = $state(true);
+
+	/**
+	 * Pin or unpin a thread.
+	 * Performs an optimistic local update then confirms via the API.
+	 * Reverts and shows an error toast on failure.
+	 */
+	async function handlePinThread(thread: AgentThread, isPinned: boolean) {
+		// Optimistic update — mutate the bindable threads array
+		threads = threads.map((t) => (t.id === thread.id ? { ...t, isPinned } : t));
+
+		try {
+			const res = await api(`/runtime/${agent.id}/threads/${thread.id}/pin`, {
+				method: 'PATCH',
+				body: JSON.stringify({ isPinned })
+			});
+			if (!res.ok) {
+				// Revert
+				threads = threads.map((t) => (t.id === thread.id ? { ...t, isPinned: !isPinned } : t));
+				const body = await res.json();
+				setAlert({
+					type: 'error',
+					title: isPinned ? 'Failed to pin' : 'Failed to unpin',
+					message: body.error ?? 'Could not update pin status.',
+					duration: 5000,
+					show: true
+				});
+			}
+		} catch {
+			threads = threads.map((t) => (t.id === thread.id ? { ...t, isPinned: !isPinned } : t));
+			setAlert({
+				type: 'error',
+				title: isPinned ? 'Failed to pin' : 'Failed to unpin',
+				message: 'An unexpected error occurred.',
+				duration: 5000,
+				show: true
+			});
+		}
+	}
 </script>
 
 <!--
@@ -185,7 +236,7 @@
 
 		<!-- Thread list -->
 		<ScrollArea class="flex-1 overflow-hidden">
-			{#if filteredThreads.length === 0}
+			{#if filteredThreads().length === 0}
 				<div class="flex flex-col items-center gap-2 px-4 py-10 text-center">
 					<MessageSquareIcon class="size-7 text-muted-foreground/30" />
 					<p class="text-xs text-muted-foreground/70">
@@ -203,9 +254,9 @@
 				</div>
 			{:else}
 				<nav class="space-y-0.5 px-2 pb-4">
-					{#each filteredThreads as thread (thread.id)}
+					{#each filteredThreads() as thread (thread.id)}
 						<div
-							transition:fly={{ x: -8, duration: 180 }}
+							transition:fly={{ x: -8, duration: 200 }}
 							class="group flex items-center rounded-md transition-colors
 							{activeThreadId === thread.id
 								? 'bg-accent text-accent-foreground'
@@ -216,8 +267,12 @@
 								onclick={() => (open = false)}
 								class="flex min-w-0 flex-1 flex-col px-2.5 py-2"
 							>
-								<span class="truncate text-sm leading-snug font-medium">
-									{threadTitle(thread)}
+								<span class="flex items-center gap-1 truncate text-sm leading-snug font-medium">
+									{#if thread.isPinned}
+										<!-- Small pin indicator shown before the title for pinned threads -->
+										<PinIcon class="size-2.5 shrink-0 text-muted-foreground/50" />
+									{/if}
+									<span class="truncate">{threadTitle(thread)}</span>
 								</span>
 								<span class="mt-0.5 flex items-center gap-1.5 text-[10px] text-muted-foreground">
 									{#if thread.status === 'running'}
@@ -255,7 +310,20 @@
 										</Button>
 									{/snippet}
 								</DropdownMenu.Trigger>
-								<DropdownMenu.Content align="end" class="w-40">
+								<DropdownMenu.Content align="end" class="w-44">
+									<!-- Pin / Unpin -->
+									<DropdownMenu.Item
+										onSelect={() => handlePinThread(thread, !thread.isPinned)}
+										class="gap-2"
+									>
+										{#if thread.isPinned}
+											<PinOffIcon class="size-3.5 text-muted-foreground" />
+											Unpin
+										{:else}
+											<PinIcon class="size-3.5 text-muted-foreground" />
+											Pin
+										{/if}
+									</DropdownMenu.Item>
 									<DropdownMenu.Item onSelect={() => onRenameThread(thread)} class="gap-2">
 										<PencilIcon class="size-3.5 text-muted-foreground" />
 										Rename

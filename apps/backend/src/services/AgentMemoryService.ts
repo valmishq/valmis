@@ -9,6 +9,7 @@ import type {
 	AgentMemorySearchResult,
 	MemoryWriteRequest,
 	MemorySearchRequest,
+	MemoryDeleteRequest,
 	MemoryType,
 } from '@repo/types';
 import { AgentService } from './AgentService.js';
@@ -238,5 +239,27 @@ export class AgentMemoryService {
 		);
 
 		return results;
+	}
+
+	/**
+	 * Delete one or more memory entries for an agent.
+	 * The agentId guard (enforced inside AgentService.deleteMemoryBatch) ensures the sandbox
+	 * cannot delete entries belonging to a different agent.
+	 *
+	 * @returns The number of entries actually deleted.
+	 */
+	async deleteMemories(agentId: string, request: MemoryDeleteRequest): Promise<number> {
+		if (!request.memoryIds || request.memoryIds.length === 0) {
+			return 0;
+		}
+
+		const deletedCount = await this.agentService.deleteMemoryBatch(request.memoryIds, agentId);
+
+		logger.info(
+			{ agentId, requested: request.memoryIds.length, deleted: deletedCount },
+			'[memory] memory entries deleted',
+		);
+
+		return deletedCount;
 	}
 }

@@ -1,6 +1,7 @@
 import WrenchIcon from '@lucide/svelte/icons/wrench';
 import DatabaseIcon from '@lucide/svelte/icons/database';
 import SearchIcon from '@lucide/svelte/icons/search';
+import Trash2Icon from '@lucide/svelte/icons/trash-2';
 import FileTextIcon from '@lucide/svelte/icons/file-text';
 import FilePenIcon from '@lucide/svelte/icons/file-pen';
 import FolderIcon from '@lucide/svelte/icons/folder';
@@ -21,6 +22,7 @@ export const TOOL_ICON_MAP: Record<string, typeof WrenchIcon> = {
 	call_api: WrenchIcon,
 	memory_write: DatabaseIcon,
 	memory_search: SearchIcon,
+	memory_delete: Trash2Icon,
 	read_file: FileTextIcon,
 	write_file: FilePenIcon,
 	list_files: FolderIcon,

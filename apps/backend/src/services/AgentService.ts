@@ -346,4 +346,18 @@ export class AgentService {
 			.where(and(eq(agentMemory.id, memoryId), eq(agentMemory.agentId, agentId)));
 		return (result.rowCount ?? 0) > 0;
 	}
+
+	/**
+	 * Delete multiple memory entries by ID in one query.
+	 * The agentId guard ensures an agent can only delete its own memory.
+	 * Returns the number of rows actually deleted (may be less than requested
+	 * if some IDs did not exist or belonged to a different agent).
+	 */
+	async deleteMemoryBatch(memoryIds: string[], agentId: string): Promise<number> {
+		if (memoryIds.length === 0) return 0;
+		const result = await db
+			.delete(agentMemory)
+			.where(and(inArray(agentMemory.id, memoryIds), eq(agentMemory.agentId, agentId)));
+		return result.rowCount ?? 0;
+	}
 }

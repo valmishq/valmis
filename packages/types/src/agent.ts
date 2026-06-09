@@ -92,6 +92,22 @@ export interface MemorySearchRequest {
 	topK?: number;
 }
 
+/**
+ * Memory delete request — sent from the agent sandbox to the host.
+ * Deletes one or more memory entries by ID in a single operation.
+ * The host enforces agentId from the PROXY_TOKEN — entries from other agents cannot be deleted.
+ */
+export interface MemoryDeleteRequest {
+	/** One or more memory entry UUIDs to delete */
+	memoryIds: string[];
+}
+
+/** Response returned to the sandbox after a memory delete operation */
+export interface MemoryDeleteResponse {
+	/** Number of entries actually deleted (may be less than requested if some IDs were not found) */
+	deletedCount: number;
+}
+
 // ─── Request Bodies ───────────────────────────────────────────────────────────
 
 /** POST /v1/agents — create a new agent */

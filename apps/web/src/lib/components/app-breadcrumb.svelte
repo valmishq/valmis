@@ -69,6 +69,17 @@
 			return [{ label: 'Agents' }];
 		}
 
+		// ── /app/agents/[id]/memory ───────────────────────────────────────────────
+		const agentMemoryMatch = pathname.match(/^\/app\/agents\/([^/]+)\/memory$/);
+		if (agentMemoryMatch) {
+			const agentName = agent?.name ?? 'Agent';
+			return [
+				{ label: 'Agents', href: '/app/agents' },
+				{ label: agentName, href: `/app/agents/new?id=${agentMemoryMatch[1]}&editmode=true` },
+				{ label: 'Memory' }
+			];
+		}
+
 		// ── /app/agents/[id]/runs ────────────────────────────────────────────────
 		const agentRunsMatch = pathname.match(/^\/app\/agents\/([^/]+)\/runs$/);
 		if (agentRunsMatch) {

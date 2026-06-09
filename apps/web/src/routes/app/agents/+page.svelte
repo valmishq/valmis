@@ -14,6 +14,7 @@
 	import ActivityIcon from '@lucide/svelte/icons/activity';
 	import BotIcon from '@lucide/svelte/icons/bot';
 	import ZapIcon from '@lucide/svelte/icons/zap';
+	import BrainIcon from '@lucide/svelte/icons/brain';
 	import type { PageData } from './$types';
 	import type { Agent, CredentialMetadata } from '@repo/types';
 
@@ -70,10 +71,6 @@
 			month: 'short',
 			day: 'numeric'
 		});
-	}
-
-	function getCredentialName(credId: string): string {
-		return credentials.find((c) => c.id === credId)?.name ?? credId.slice(0, 8);
 	}
 
 	/**
@@ -174,93 +171,113 @@
 		<Card.Content class="p-0">
 			<ul class="divide-y divide-border">
 				{#each agents as agent (agent.id)}
-					<li class="flex items-start justify-between gap-4 px-6 py-4">
-						<!-- Left: avatar + identity -->
-						<a class="flex min-w-0 flex-1 items-start gap-3" href="/app/chat/{agent.id}">
-							<div
-								class="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-lg bg-muted text-lg"
-							>
-								{#if isEmoji(agent.avatarUrl)}
-									<span>{agent.avatarUrl}</span>
-								{:else if agent.avatarUrl}
-									<img
-										src={agent.avatarUrl}
-										alt={agent.name}
-										class="size-9 rounded-lg object-cover"
-									/>
-								{:else}
-									<BotIcon class="size-4 text-muted-foreground" />
-								{/if}
-							</div>
-							<div class="min-w-0 flex-1">
-								<div class="flex flex-wrap items-center gap-2">
-									<p class="truncate text-sm font-medium text-foreground">{agent.name}</p>
-									{#if agent.credentialIds.length > 0}
-										<Badge variant="secondary" class="shrink-0 text-xs">
-											{agent.credentialIds.length} credential{agent.credentialIds.length !== 1
-												? 's'
-												: ''}
-										</Badge>
+					<!--
+						Two-row layout on mobile: avatar + name info stacked above the action buttons.
+						Single-row layout on sm+ : avatar + name on the left, actions pinned right.
+					-->
+					<li class="px-6 py-4">
+						<div class="flex flex-col space-y-3 sm:flex-row sm:items-center sm:gap-4">
+							<!-- Left: avatar + identity (links to chat) -->
+							<a class="flex min-w-0 flex-1 items-start gap-3" href="/app/chat/{agent.id}">
+								<div
+									class="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-lg bg-muted text-lg"
+								>
+									{#if isEmoji(agent.avatarUrl)}
+										<span>{agent.avatarUrl}</span>
+									{:else if agent.avatarUrl}
+										<img
+											src={agent.avatarUrl}
+											alt={agent.name}
+											class="size-9 rounded-lg object-cover"
+										/>
+									{:else}
+										<BotIcon class="size-4 text-muted-foreground" />
 									{/if}
 								</div>
-								{#if agent.description}
-									<p class="mt-0.5 line-clamp-1 text-xs text-muted-foreground">
-										{agent.description}
+								<div class="min-w-0 flex-1">
+									<div class="flex flex-wrap items-center gap-2">
+										<p class="truncate text-sm font-medium text-foreground">{agent.name}</p>
+										{#if agent.credentialIds.length > 0}
+											<Badge variant="secondary" class="shrink-0 text-xs">
+												{agent.credentialIds.length} credential{agent.credentialIds.length !== 1
+													? 's'
+													: ''}
+											</Badge>
+										{/if}
+									</div>
+									{#if agent.description}
+										<p class="mt-0.5 line-clamp-1 text-xs text-muted-foreground">
+											{agent.description}
+										</p>
+									{/if}
+									<p class="mt-0.5 text-xs text-muted-foreground">
+										Created {formatDate(agent.createdAt)}
 									</p>
-								{/if}
-								<p class="mt-0.5 text-xs text-muted-foreground">
-									Created {formatDate(agent.createdAt)}
-								</p>
+								</div>
+							</a>
+
+							<!-- Right: actions — wraps to its own row on mobile, left-aligned -->
+							<div class="flex shrink-0 items-center gap-1 self-start sm:self-auto">
+								<!-- Workflows -->
+								<Button
+									variant="ghost"
+									size="sm"
+									onclick={() => goto(`/app/agents/${agent.id}/workflows`)}
+									class="text-muted-foreground hover:text-foreground"
+									title="Manage workflows"
+								>
+									<ZapIcon class="size-4" />
+									<span class="sr-only">Workflows for {agent.name}</span>
+								</Button>
+
+								<!-- Run history -->
+								<Button
+									variant="ghost"
+									size="sm"
+									onclick={() => goto(`/app/agents/${agent.id}/runs`)}
+									class="text-muted-foreground hover:text-foreground"
+									title="View run history"
+								>
+									<ActivityIcon class="size-4" />
+									<span class="sr-only">View runs for {agent.name}</span>
+								</Button>
+
+								<!-- Memory -->
+								<Button
+									variant="ghost"
+									size="sm"
+									onclick={() => goto(`/app/agents/${agent.id}/memory`)}
+									class="text-muted-foreground hover:text-foreground"
+									title="View memory"
+								>
+									<BrainIcon class="size-4" />
+									<span class="sr-only">Memory for {agent.name}</span>
+								</Button>
+
+								<!-- Edit -->
+								<Button
+									variant="ghost"
+									size="sm"
+									onclick={() => goto(`/app/agents/new?id=${agent.id}&editmode=true`)}
+									class="text-muted-foreground hover:text-foreground"
+									title="Edit agent"
+								>
+									<PencilIcon class="size-4" />
+									<span class="sr-only">Edit {agent.name}</span>
+								</Button>
+
+								<!-- Delete -->
+								<Button
+									variant="ghost"
+									size="sm"
+									onclick={() => requestDelete(agent)}
+									class="text-destructive hover:bg-destructive/10 hover:text-destructive"
+									title="Delete agent"
+								>
+									<TrashIcon class="size-4" />
+									<span class="sr-only">Delete {agent.name}</span>
+								</Button>
 							</div>
-						</a>
-
-						<!-- Right: actions -->
-						<div class="flex shrink-0 items-center gap-1">
-							<!-- Workflows -->
-							<Button
-								variant="ghost"
-								size="sm"
-								onclick={() => goto(`/app/agents/${agent.id}/workflows`)}
-								class="text-muted-foreground hover:text-foreground"
-								title="Manage workflows"
-							>
-								<ZapIcon class="size-4" />
-								<span class="sr-only">Workflows for {agent.name}</span>
-							</Button>
-
-							<!-- Run history -->
-							<Button
-								variant="ghost"
-								size="sm"
-								onclick={() => goto(`/app/agents/${agent.id}/runs`)}
-								class="text-muted-foreground hover:text-foreground"
-								title="View run history"
-							>
-								<ActivityIcon class="size-4" />
-								<span class="sr-only">View runs for {agent.name}</span>
-							</Button>
-
-							<Button
-								variant="ghost"
-								size="sm"
-								onclick={() => goto(`/app/agents/new?id=${agent.id}&editmode=true`)}
-								class="text-muted-foreground hover:text-foreground"
-								title="Edit agent"
-							>
-								<PencilIcon class="size-4" />
-								<span class="sr-only">Edit {agent.name}</span>
-							</Button>
-
-							<Button
-								variant="ghost"
-								size="sm"
-								onclick={() => requestDelete(agent)}
-								class="text-destructive hover:bg-destructive/10 hover:text-destructive"
-								title="Delete agent"
-							>
-								<TrashIcon class="size-4" />
-								<span class="sr-only">Delete {agent.name}</span>
-							</Button>
 						</div>
 					</li>
 				{/each}

@@ -48,6 +48,7 @@ function rowToThread(row: typeof agentThreads.$inferSelect): AgentThread {
 		triggerPayload: (row.triggerPayload as Record<string, unknown>) ?? undefined,
 		contextTokens: row.contextTokens ?? undefined,
 		isWorkflowThread: row.isWorkflowThread,
+		isPinned: row.isPinned,
 		createdAt: row.createdAt,
 		updatedAt: row.updatedAt,
 	};
@@ -203,6 +204,19 @@ export class AgentSessionService {
 			.update(agentThreads)
 			.set({ contextTokens, updatedAt: new Date() })
 			.where(eq(agentThreads.id, id));
+	}
+
+	/**
+	 * Set or clear the pinned flag for a thread (ownership enforced).
+	 * Returns the updated thread, or null if the thread was not found.
+	 */
+	async pinThread(id: string, ownerId: string, isPinned: boolean): Promise<AgentThread | null> {
+		const rows = await db
+			.update(agentThreads)
+			.set({ isPinned, updatedAt: new Date() })
+			.where(and(eq(agentThreads.id, id), eq(agentThreads.ownerId, ownerId)))
+			.returning();
+		return rows[0] ? rowToThread(rows[0]) : null;
 	}
 
 	/** Delete a thread and all its messages (ownership enforced) */

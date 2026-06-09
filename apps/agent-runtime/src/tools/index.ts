@@ -8,6 +8,7 @@ import { createAskHumanTool } from './ask-human.js';
 import { createRunCodeTool } from './run-code.js';
 import { createMemoryWriteTool } from './memory-write.js';
 import { createMemorySearchTool } from './memory-search.js';
+import { createMemoryDeleteTool } from './memory-delete.js';
 import { createListWorkflowsTool } from './list-workflows.js';
 import { createReadWorkflowTool } from './read-workflow.js';
 import { createTriggerWorkflowTool } from './trigger-workflow.js';
@@ -44,6 +45,7 @@ export function createAgentTools(ctx: Parameters<typeof createCallApiTool>[0]): 
 		createRunCodeTool(ctx),
 		createMemoryWriteTool(ctx),
 		createMemorySearchTool(ctx),
+		createMemoryDeleteTool(ctx),
 		createListWorkflowsTool(ctx),
 		createReadWorkflowTool(ctx),
 		createTriggerWorkflowTool(ctx),

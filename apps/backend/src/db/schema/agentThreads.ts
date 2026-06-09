@@ -78,6 +78,12 @@ export const agentThreads = pgTable(
 		 * Used in the frontend to let users toggle visibility of workflow-generated threads.
 		 */
 		isWorkflowThread: boolean('is_workflow_thread').notNull().default(false),
+		/**
+		 * True when the user has pinned this thread to the top of the sidebar list.
+		 * Pinned threads are sorted above unpinned ones, with time ordering preserved
+		 * within each group (pinned and unpinned sorted by updatedAt DESC separately).
+		 */
+		isPinned: boolean('is_pinned').notNull().default(false),
 		createdAt: timestamp('created_at').defaultNow().notNull(),
 		updatedAt: timestamp('updated_at').defaultNow().notNull(),
 	},

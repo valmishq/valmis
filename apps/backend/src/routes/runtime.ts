@@ -31,6 +31,7 @@ import type {
 	HitlRequest,
 	MemoryWriteRequest,
 	MemorySearchRequest,
+	MemoryDeleteRequest,
 	ContentBlock,
 	WorkflowSummary,
 	WorkflowTriggerContext,
@@ -424,6 +425,45 @@ export function createRuntimeRouter(
 		} catch (err) {
 			logger.error({ err, threadId }, '[runtime] failed to rename thread');
 			res.status(500).json({ success: false, error: 'Failed to rename thread' });
+		}
+	});
+
+	/**
+	 * PATCH /v1/runtime/:agentId/threads/:threadId/pin
+	 * Pin or unpin a thread. Body: { isPinned: boolean }
+	 */
+	router.patch('/:agentId/threads/:threadId/pin', auth, async (req: Request, res: Response) => {
+		const { agentId, threadId } = req.params as { agentId: string; threadId: string };
+		const ownerId = req.user?.sub;
+		if (!ownerId) {
+			res.status(401).json({ success: false, error: 'Unauthorized' });
+			return;
+		}
+
+		const { isPinned } = req.body as { isPinned?: unknown };
+		if (typeof isPinned !== 'boolean') {
+			res.status(400).json({ success: false, error: 'isPinned (boolean) is required' });
+			return;
+		}
+
+		// Verify ownership and agent-thread relationship
+		const thread = await sessionService.getThreadById(threadId, ownerId);
+		if (!thread || thread.agentId !== agentId) {
+			res.status(404).json({ success: false, error: 'Thread not found' });
+			return;
+		}
+
+		try {
+			const updated = await sessionService.pinThread(threadId, ownerId, isPinned);
+			if (!updated) {
+				res.status(404).json({ success: false, error: 'Thread not found' });
+				return;
+			}
+			const body: AgentThreadResponse = { success: true, data: updated };
+			res.json(body);
+		} catch (err) {
+			logger.error({ err, threadId }, '[runtime] failed to pin/unpin thread');
+			res.status(500).json({ success: false, error: 'Failed to update pin status' });
 		}
 	});
 
@@ -1181,6 +1221,40 @@ export function createRuntimeRouter(
 		} catch (err) {
 			const message = err instanceof Error ? err.message : 'Memory search failed';
 			logger.error({ err, agentId: sandboxToken.agentId }, '[runtime] memory search failed');
+			res.status(400).json({ success: false, error: message });
+		}
+	});
+
+	/**
+	 * POST /v1/runtime/internal/memory/delete
+	 * Sandbox deletes one or more memory entries by ID for the current agent.
+	 * Body: { memoryIds: string[] }
+	 * agentId is taken from the PROXY_TOKEN — the sandbox cannot delete another agent's memory.
+	 * Returns { deletedCount: number } — may be less than requested if some IDs were not found.
+	 */
+	router.post('/internal/memory/delete', async (req: Request, res: Response) => {
+		const sandboxToken = (req as Request & { sandboxToken: SandboxTokenPayload }).sandboxToken;
+		const body = req.body as MemoryDeleteRequest;
+
+		if (!Array.isArray(body.memoryIds) || body.memoryIds.length === 0) {
+			res.status(400).json({ success: false, error: 'memoryIds (non-empty array) is required' });
+			return;
+		}
+
+		// Cap the batch size to prevent abuse
+		if (body.memoryIds.length > 100) {
+			res
+				.status(400)
+				.json({ success: false, error: 'memoryIds may contain at most 100 entries per request' });
+			return;
+		}
+
+		try {
+			const deletedCount = await memoryService.deleteMemories(sandboxToken.agentId, body);
+			res.json({ success: true, data: { deletedCount } });
+		} catch (err) {
+			const message = err instanceof Error ? err.message : 'Memory delete failed';
+			logger.error({ err, agentId: sandboxToken.agentId }, '[runtime] memory delete failed');
 			res.status(400).json({ success: false, error: message });
 		}
 	});

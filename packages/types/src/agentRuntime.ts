@@ -36,6 +36,11 @@ export interface AgentThread {
 	 * False for interactive user chat threads.
 	 */
 	isWorkflowThread: boolean;
+	/**
+	 * True when the user has pinned this thread to the top of the sidebar.
+	 * Pinned threads sort before unpinned ones; within each group ordering is by updatedAt DESC.
+	 */
+	isPinned: boolean;
 	createdAt: Date;
 	updatedAt: Date;
 }

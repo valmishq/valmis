@@ -1,0 +1,1 @@
+ALTER TABLE "agent_threads" ADD COLUMN "is_pinned" boolean DEFAULT false NOT NULL;

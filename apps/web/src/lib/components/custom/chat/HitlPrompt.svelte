@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { Button } from '$lib/components/ui/button/index.js';
 	import CircleUserIcon from '@lucide/svelte/icons/circle-user';
+	import MarkdownRenderer from '$lib/components/custom/chat/MarkdownRenderer.svelte';
 
 	/**
 	 * HITL (Human-in-the-Loop) prompt card.
@@ -36,7 +37,7 @@
 
 		<!-- Prompt text -->
 		<div class="px-4 py-3">
-			<p class="text-sm leading-relaxed text-foreground">{prompt}</p>
+			<MarkdownRenderer content={prompt} />
 		</div>
 
 		<!-- Pre-defined option buttons — only rendered if provided -->

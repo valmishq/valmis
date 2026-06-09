@@ -9,6 +9,8 @@ import type {
 	HitlResponse,
 	MemoryWriteRequest,
 	MemorySearchRequest,
+	MemoryDeleteRequest,
+	MemoryDeleteResponse,
 	AgentMemoryEntry,
 	AgentMemorySearchResult,
 	WorkflowRunStatus,
@@ -229,6 +231,32 @@ export class ProxyClient {
 		};
 		if (!json.success || !json.data) {
 			throw new Error(`Memory search failed: ${json.error ?? 'unknown error'}`);
+		}
+		return json.data;
+	}
+
+	/**
+	 * Delete one or more memory entries for this agent.
+	 *
+	 * The host enforces the agentId from the PROXY_TOKEN — the sandbox cannot
+	 * delete memory entries belonging to any other agent.
+	 *
+	 * @returns { deletedCount } — number of rows actually removed.
+	 */
+	async memoryDelete(request: MemoryDeleteRequest): Promise<MemoryDeleteResponse> {
+		const res = await fetch(`${this.baseUrl}/v1/runtime/internal/memory/delete`, {
+			method: 'POST',
+			headers: this.authHeaders(),
+			body: JSON.stringify(request),
+		});
+
+		const json = (await res.json()) as {
+			success: boolean;
+			data?: MemoryDeleteResponse;
+			error?: string;
+		};
+		if (!json.success || !json.data) {
+			throw new Error(`Memory delete failed: ${json.error ?? 'unknown error'}`);
 		}
 		return json.data;
 	}

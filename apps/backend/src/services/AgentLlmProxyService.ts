@@ -1,4 +1,10 @@
-import { stream, type Model, type UserMessage, type TextContent } from '@earendil-works/pi-ai';
+import {
+	stream,
+	complete,
+	type Model,
+	type UserMessage,
+	type TextContent,
+} from '@earendil-works/pi-ai';
 import type { LlmProxyRequest, AgentStreamEvent, SandboxTokenPayload } from '@repo/types';
 import { AgentProxyService } from './AgentProxyService.js';
 import { LlmProviderService } from './llmProviderService.js';
@@ -416,22 +422,27 @@ export class AgentLlmProxyService {
 	}
 
 	/**
-	 * Summarise the user messages from a previous thread and write the summary as a
-	 * semantic memory entry for the agent. Called fire-and-forget when a new thread
-	 * is created so the agent "remembers" what was discussed in the previous session.
+	 * Extract important information from user messages in a previous thread and write them
+	 * as typed memory entries. Called fire-and-forget when a new thread is created.
 	 *
-	 * Only user messages are sent to the LLM for summarisation — assistant messages,
-	 * tool calls, and tool results are excluded. This keeps the context concise and
-	 * avoids leaking internal execution details into long-term memory.
+	 * Replaces the old flat-summary approach with a dedup-aware JSON extraction:
+	 *   1. Build a transcript of user messages from the previous thread.
+	 *   2. Search existing memory for similar entries (provides context for dedup).
+	 *   3. Ask the LLM (using complete(), non-streaming) to decide what — if anything —
+	 *      is new and worth storing. The LLM must respond with JSON:
+	 *        { "hasNewMemory": false }
+	 *        { "hasNewMemory": true, "memories": [{ "content": "...", "memoryType": "..." }] }
+	 *   4. Only writes if hasNewMemory is true. Each entry is written individually so a
+	 *      failure on one does not prevent the others from being written.
 	 *
 	 * Silently no-ops if:
 	 *   - The previous thread has no user messages
 	 *   - The agent has no LLM model configured
-	 *   - The agent has no embedding model configured (memory write would fail)
+	 *   - The agent has no embedding model configured (needed for dedup search + write)
 	 *
-	 * @param agentId          - Agent whose memory to write to
-	 * @param ownerId          - Owner required for DB queries and auth
-	 * @param prevThreadId     - The thread to summarise (the most recently created before newThreadId)
+	 * @param agentId      - Agent whose memory to write to
+	 * @param ownerId      - Owner required for DB queries and auth
+	 * @param prevThreadId - The thread to extract from
 	 */
 	async summarizeThreadToMemory(
 		agentId: string,
@@ -439,6 +450,10 @@ export class AgentLlmProxyService {
 		prevThreadId: string,
 	): Promise<void> {
 		try {
+			// Check that the agent has both an LLM and an embedding model
+			const agent = await this.agentService.getById(agentId, ownerId);
+			if (!agent?.modelConfigId || !agent.embeddingModelConfigId) return;
+
 			// Load user messages from the previous thread only
 			const messages = await this.sessionService.listMessagesInternal(prevThreadId);
 			const userMessages = messages.filter((m) => m.role === 'user');
@@ -451,7 +466,7 @@ export class AgentLlmProxyService {
 				return;
 			}
 
-			// Build a readable transcript from user messages only
+			// Build a readable transcript from user message text blocks only
 			const transcript = userMessages
 				.map((m, idx) => {
 					const textBlocks = m.content.filter(
@@ -474,6 +489,27 @@ export class AgentLlmProxyService {
 				return;
 			}
 
+			// Search existing memory to provide dedup context.
+			// We use the full transcript as a query so the most relevant existing entries appear.
+			// Non-fatal if search fails (embedding model missing, etc.) — we continue with empty context.
+			let existingMemoryContext = '(none)';
+			try {
+				const existingResults = await this.memoryService.searchMemory(agentId, ownerId, {
+					query: transcript.slice(0, 500), // cap to avoid overly large embedding inputs
+					topK: 8,
+				});
+				if (existingResults.length > 0) {
+					existingMemoryContext = existingResults
+						.map((r) => `- [${r.memoryType}] ${r.content}`)
+						.join('\n');
+				}
+			} catch (searchErr) {
+				logger.debug(
+					{ searchErr, agentId },
+					'[llm-proxy] summarize: memory search failed — proceeding without dedup context',
+				);
+			}
+
 			// Build a minimal fake token payload so resolveModel can fetch agent config
 			const fakePayload: import('@repo/types').SandboxTokenPayload = {
 				agentId,
@@ -486,59 +522,107 @@ export class AgentLlmProxyService {
 
 			const { model, apiKey } = await this.resolveModel(fakePayload);
 
-			const summaryPrompt =
-				`The following are user messages from a conversation session. ` +
-				`Summarise the most important facts, preferences, goals, and topics discussed. ` +
-				`Be concise. Focus on information that would be useful to remember in future sessions. Omit not important things. This is only for storing important facts about the user. There is no need to log trivia or anything that won't be useful in the future.` +
-				`Do NOT mention that this is a summary — write as plain factual statements.\n\n` +
-				transcript;
+			// Ask the LLM to decide what is new and worth storing.
+			// The response MUST be valid JSON — no markdown fencing.
+			const extractionPrompt =
+				`You are a memory extraction assistant. Extract important facts from the user messages below.\n\n` +
+				`Existing stored memories (for dedup — do not repeat these):\n${existingMemoryContext}\n\n` +
+				`User messages from the conversation:\n${transcript}\n\n` +
+				`Rules:\n` +
+				`- Extract IMPORTANT facts only: preferences, personal details, corrections, domain knowledge, goals, constraints.\n` +
+				`- Skip greetings, small talk, one-off questions, or anything ephemeral.\n` +
+				`- Skip anything already covered by the existing memories above.\n` +
+				`- If nothing new is worth remembering, return hasNewMemory: false.\n\n` +
+				`You MUST respond with valid JSON only (no markdown, no explanation):\n` +
+				`{"hasNewMemory":false}\n` +
+				`or\n` +
+				`{"hasNewMemory":true,"memories":[{"content":"<self-contained factual statement>","memoryType":"semantic|procedural|episodic"}]}`;
 
-			const summaryUserMsg: UserMessage = {
+			const extractUserMsg: UserMessage = {
 				role: 'user',
-				content: [{ type: 'text', text: summaryPrompt } as TextContent],
+				content: [{ type: 'text', text: extractionPrompt } as TextContent],
 				timestamp: Date.now(),
 			};
 
-			const summaryStream = stream(
+			// complete() is a single non-streaming call — appropriate for a background task
+			const response = await complete(
 				model,
 				{
 					systemPrompt:
-						'You extract and summarise the most important information from conversation transcripts.',
-					messages: [summaryUserMsg],
+						'You are a memory extraction assistant. Always respond with valid JSON only, no markdown fencing, no explanation.',
+					messages: [extractUserMsg],
 					tools: [],
 				},
 				{ apiKey },
 			);
 
-			let summary = '';
-			for await (const event of summaryStream) {
-				if (event.type === 'text_delta') {
-					summary += event.delta;
-				}
-			}
+			const rawText = response.content
+				.filter((b): b is { type: 'text'; text: string } => b.type === 'text')
+				.map((b) => b.text)
+				.join('')
+				.trim();
 
-			summary = summary.trim();
-			if (!summary) {
+			if (!rawText) {
 				logger.debug(
 					{ agentId, prevThreadId },
-					'[llm-proxy] summarize: LLM returned empty summary — skipping memory write',
+					'[llm-proxy] summarize: empty LLM response — skipping',
 				);
 				return;
 			}
 
-			// Write the summary as a semantic memory entry
-			await this.memoryService.writeMemory(agentId, ownerId, {
-				content: summary,
-				memoryType: 'semantic',
-				metadata: { source: 'thread_summary', threadId: prevThreadId },
-			});
+			// Strip markdown code fences in case the model added them despite instructions
+			const cleaned = rawText
+				.replace(/^```(?:json)?\s*/i, '')
+				.replace(/\s*```$/, '')
+				.trim();
+
+			let parsed: {
+				hasNewMemory: boolean;
+				memories?: Array<{ content: string; memoryType: string }>;
+			};
+			try {
+				parsed = JSON.parse(cleaned) as typeof parsed;
+			} catch {
+				logger.debug(
+					{ agentId, rawText: cleaned.slice(0, 200) },
+					'[llm-proxy] summarize: LLM returned non-JSON — skipping',
+				);
+				return;
+			}
+
+			if (!parsed.hasNewMemory || !Array.isArray(parsed.memories) || parsed.memories.length === 0) {
+				logger.debug({ agentId, prevThreadId }, '[llm-proxy] summarize: no new memories to store');
+				return;
+			}
+
+			const validTypes = new Set(['episodic', 'semantic', 'procedural', 'working']);
+			let writtenCount = 0;
+
+			for (const mem of parsed.memories) {
+				if (!mem.content || typeof mem.content !== 'string') continue;
+				const memoryType = validTypes.has(mem.memoryType) ? mem.memoryType : 'semantic';
+
+				try {
+					await this.memoryService.writeMemory(agentId, ownerId, {
+						content: mem.content,
+						memoryType: memoryType as 'episodic' | 'semantic' | 'procedural' | 'working',
+						metadata: { source: 'thread_summary', threadId: prevThreadId },
+					});
+					writtenCount++;
+				} catch (writeErr) {
+					logger.warn(
+						{ writeErr, agentId, memoryType },
+						'[llm-proxy] summarize: failed to write one memory entry (non-fatal)',
+					);
+				}
+			}
 
 			logger.info(
-				{ agentId, prevThreadId, summaryLength: summary.length },
-				'[llm-proxy] thread summarized and stored as semantic memory',
+				{ agentId, prevThreadId, writtenCount },
+				'[llm-proxy] thread summarized — memory entries written',
 			);
 		} catch (err) {
-			// Non-fatal — thread summarization is best-effort and must not block thread creation
+			// Non-fatal — extraction is best-effort and must not block thread creation
 			logger.warn(
 				{ err, agentId, prevThreadId },
 				'[llm-proxy] thread summarization failed (non-fatal)',

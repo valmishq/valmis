@@ -88,11 +88,12 @@ export function createMemorySearchTool(ctx: ToolContext): AgentTool {
 				return { content: [textContent], details: {} };
 			}
 
-			// Format results as a readable list — each entry shows type, content, and recency
+			// Format results as a readable list.
+			// The `id` field is included so the agent can pass it to memory_delete if needed.
 			const formatted = results
 				.map((r, idx) => {
 					const date = new Date(r.createdAt).toLocaleDateString();
-					return `${idx + 1}. [${r.memoryType.toUpperCase()}] (${date})\n   ${r.content}`;
+					return `${idx + 1}. id: ${r.id}\n   [${r.memoryType.toUpperCase()}] (${date})\n   ${r.content}`;
 				})
 				.join('\n\n');
 
