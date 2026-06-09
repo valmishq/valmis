@@ -19,6 +19,11 @@ export interface ToolContext {
 	 * Defaults to 1 MB (1_048_576 bytes).
 	 */
 	callApiMaxBodyBytes?: number;
+	/**
+	 * The agent's UUID. Used by workflow tools to construct frontend URLs
+	 * that point to the agent's workflow and run pages.
+	 */
+	agentId?: string;
 }
 
 /**

@@ -14,3 +14,6 @@ export * from './agentExecutionTraces.js';
 export * from './agentThreads.js';
 export * from './agentMessages.js';
 export * from './agentTriggers.js';
+export * from './workflows.js';
+export * from './workflowRuns.js';
+export * from './workflowStepLogs.js';

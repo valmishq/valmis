@@ -9,6 +9,8 @@ import { AgentLlmProxyService } from '../services/AgentLlmProxyService.js';
 import { AgentMemoryService } from '../services/AgentMemoryService.js';
 import { AgentService } from '../services/AgentService.js';
 import { TriggerService } from '../services/TriggerService.js';
+import { WorkflowRunService } from '../services/WorkflowRunService.js';
+import { WorkflowService } from '../services/WorkflowService.js';
 import { agentStreamBus } from '../services/AgentStreamBus.js';
 import { logger } from '../config/logger.js';
 import type { AuthService } from '../services/AuthService.js';
@@ -30,6 +32,8 @@ import type {
 	MemoryWriteRequest,
 	MemorySearchRequest,
 	ContentBlock,
+	WorkflowSummary,
+	WorkflowTriggerContext,
 } from '@repo/types';
 
 /**
@@ -95,6 +99,8 @@ export function createRuntimeRouter(
 	triggerService: TriggerService,
 	memoryService: AgentMemoryService,
 	agentService: AgentService,
+	workflowRunService: WorkflowRunService,
+	workflowService: WorkflowService,
 ): Router {
 	const router = Router();
 	const auth = requireAuth(authService);
@@ -780,6 +786,342 @@ export function createRuntimeRouter(
 			const message = err instanceof Error ? err.message : 'Failed to fire trigger';
 			logger.warn({ err, triggerId }, '[runtime] failed to fire manual trigger');
 			res.status(400).json({ success: false, error: message });
+		}
+	});
+
+	// ─── Workflow internal endpoints (PROXY_TOKEN auth) ──────────────────────
+
+	/**
+	 * POST /v1/runtime/internal/workflow/step-start
+	 * Sandbox logs the start of a workflow step.
+	 * Returns { stepLogId } for use in the corresponding step-end call.
+	 */
+	router.post('/internal/workflow/step-start', async (req: Request, res: Response) => {
+		const sandboxToken = (req as Request & { sandboxToken: SandboxTokenPayload }).sandboxToken;
+		const { runId, stepId, stepIndex, stepName, inputContext, attemptNumber } = req.body as {
+			runId: string;
+			stepId: string;
+			stepIndex: number;
+			stepName: string;
+			inputContext: Record<string, unknown>;
+			attemptNumber?: number;
+		};
+
+		if (!runId || !stepId || stepIndex === undefined || !stepName) {
+			res
+				.status(400)
+				.json({ success: false, error: 'runId, stepId, stepIndex, stepName are required' });
+			return;
+		}
+
+		try {
+			// Verify the run belongs to the sandbox's agent
+			const run = await workflowRunService.getRunByIdInternal(runId);
+			if (!run || run.agentId !== sandboxToken.agentId) {
+				res.status(403).json({ success: false, error: 'Workflow run not found or access denied' });
+				return;
+			}
+
+			const stepLog = await workflowRunService.startStepLog({
+				runId,
+				stepId,
+				stepIndex,
+				stepName,
+				inputContext: inputContext ?? {},
+				attemptNumber,
+			});
+			res.status(201).json({ success: true, data: { stepLogId: stepLog.id } });
+		} catch (err) {
+			const message = err instanceof Error ? err.message : 'Workflow step start failed';
+			logger.error({ err, agentId: sandboxToken.agentId }, '[runtime] workflow step start failed');
+			res.status(500).json({ success: false, error: message });
+		}
+	});
+
+	/**
+	 * POST /v1/runtime/internal/workflow/step-end
+	 * Sandbox logs the completion (success, failed, or skipped) of a workflow step.
+	 */
+	router.post('/internal/workflow/step-end', async (req: Request, res: Response) => {
+		const sandboxToken = (req as Request & { sandboxToken: SandboxTokenPayload }).sandboxToken;
+		const { stepLogId, status, outputData, error } = req.body as {
+			stepLogId: string;
+			status: string;
+			outputData?: Record<string, unknown>;
+			error?: string;
+		};
+
+		if (!stepLogId || !status) {
+			res.status(400).json({ success: false, error: 'stepLogId and status are required' });
+			return;
+		}
+
+		try {
+			await workflowRunService.completeStepLog(stepLogId, {
+				status: status as 'running' | 'success' | 'failed' | 'skipped',
+				outputData,
+				error,
+			});
+			res.json({ success: true, data: { updated: true } });
+		} catch (err) {
+			const message = err instanceof Error ? err.message : 'Workflow step end failed';
+			logger.error({ err, agentId: sandboxToken.agentId }, '[runtime] workflow step end failed');
+			res.status(500).json({ success: false, error: message });
+		}
+	});
+
+	/**
+	 * POST /v1/runtime/internal/workflow/run-complete
+	 * Sandbox marks the entire workflow run as completed or errored.
+	 */
+	router.post('/internal/workflow/run-complete', async (req: Request, res: Response) => {
+		const sandboxToken = (req as Request & { sandboxToken: SandboxTokenPayload }).sandboxToken;
+		const { runId, status, error } = req.body as {
+			runId: string;
+			status: string;
+			error?: string;
+		};
+
+		if (!runId || !status) {
+			res.status(400).json({ success: false, error: 'runId and status are required' });
+			return;
+		}
+
+		try {
+			// Verify the run belongs to this agent before allowing completion
+			const run = await workflowRunService.getRunByIdInternal(runId);
+			if (!run || run.agentId !== sandboxToken.agentId) {
+				res.status(403).json({ success: false, error: 'Workflow run not found or access denied' });
+				return;
+			}
+
+			await workflowRunService.completeRun(runId, status as 'completed' | 'error', error);
+			res.json({ success: true, data: { completed: true } });
+		} catch (err) {
+			const message = err instanceof Error ? err.message : 'Workflow run complete failed';
+			logger.error(
+				{ err, agentId: sandboxToken.agentId },
+				'[runtime] workflow run complete failed',
+			);
+			res.status(500).json({ success: false, error: message });
+		}
+	});
+
+	// ─── Workflow agent tool endpoints (PROXY_TOKEN auth) ────────────────────
+
+	/**
+	 * POST /v1/runtime/internal/workflow/create
+	 * Sandbox creates a new workflow for this agent.
+	 *
+	 * The agent provides name, description, and step definitions. Steps are
+	 * mapped to full WorkflowStep objects with UUIDs generated here on the host.
+	 * The workflow is validated by WorkflowService.create() (Zod) before insert.
+	 * Returns the created Workflow object including its generated ID.
+	 *
+	 * Security: agentId and ownerId are derived from the PROXY_TOKEN — the sandbox
+	 * can only create workflows for its own agent.
+	 */
+	router.post('/internal/workflow/create', async (req: Request, res: Response) => {
+		const sandboxToken = (req as Request & { sandboxToken: SandboxTokenPayload }).sandboxToken;
+		const { name, description, steps, trigger } = req.body as {
+			name: string;
+			description?: string;
+			steps: Array<{
+				name: string;
+				instruction: string;
+				allowedTools?: string[];
+				allowedCredentialIds?: string[];
+				errorHandlingAction?: 'stop' | 'continue' | 'retry';
+			}>;
+			trigger?: {
+				kind?: 'cron' | 'webhook' | 'manual';
+				name?: string;
+				config?: Record<string, unknown>;
+				description?: string;
+			};
+		};
+
+		if (!name || !steps || !Array.isArray(steps) || steps.length === 0) {
+			res.status(400).json({ success: false, error: 'name and at least one step are required' });
+			return;
+		}
+
+		try {
+			// Map agent-provided step inputs to full WorkflowStep objects.
+			// UUIDs are generated here on the host so the sandbox cannot inject arbitrary IDs.
+			const { randomUUID } = await import('crypto');
+			const workflowSteps = steps.map((s) => ({
+				id: randomUUID(),
+				name: s.name,
+				instruction: s.instruction,
+				allowedTools: s.allowedTools ?? [],
+				allowedCredentialIds: s.allowedCredentialIds ?? [],
+				errorHandling: {
+					action: (s.errorHandlingAction ?? 'stop') as 'stop' | 'continue' | 'retry',
+				},
+			}));
+
+			const workflow = await workflowService.create({
+				agentId: sandboxToken.agentId,
+				ownerId: sandboxToken.ownerId,
+				name,
+				description,
+				steps: workflowSteps,
+				isEnabled: true,
+				// Pass trigger info — WorkflowService defaults to manual if omitted
+				trigger: trigger
+					? {
+							kind: trigger.kind,
+							name: trigger.name,
+							config: trigger.config as import('@repo/types').AgentTriggerConfig | undefined,
+							description: trigger.description,
+						}
+					: undefined,
+			});
+
+			// Schedule the cron job immediately if the trigger is of kind 'cron'.
+			// WorkflowService cannot do this itself (circular dep with TriggerService),
+			// so the route layer is responsible for calling scheduleFromWorkflow.
+			if (workflow.trigger) {
+				triggerService.scheduleFromWorkflow(workflow.trigger);
+			}
+
+			res.status(201).json({ success: true, data: workflow });
+		} catch (err) {
+			const message = err instanceof Error ? err.message : 'Failed to create workflow';
+			logger.error({ err, agentId: sandboxToken.agentId }, '[runtime] workflow create failed');
+			res.status(400).json({ success: false, error: message });
+		}
+	});
+
+	/**
+	 * GET /v1/runtime/internal/workflow/list
+	 * Sandbox lists enabled workflows belonging to this agent.
+	 * The agent can use this to discover what workflows are available to trigger.
+	 */
+	router.get('/internal/workflow/list', async (req: Request, res: Response) => {
+		const sandboxToken = (req as Request & { sandboxToken: SandboxTokenPayload }).sandboxToken;
+
+		try {
+			// Fetch all workflows for the agent, then map to WorkflowSummary (no steps exposed)
+			const workflows = await workflowService.listByAgentInternal(sandboxToken.agentId);
+			const summaries: WorkflowSummary[] = workflows
+				.filter((w) => w.isEnabled)
+				.map((w) => ({
+					id: w.id,
+					name: w.name,
+					description: w.description,
+					stepCount: w.steps.length,
+					isEnabled: w.isEnabled,
+				}));
+			res.json({ success: true, data: summaries });
+		} catch (err) {
+			const message = err instanceof Error ? err.message : 'Failed to list workflows';
+			logger.error({ err, agentId: sandboxToken.agentId }, '[runtime] workflow list failed');
+			res.status(500).json({ success: false, error: message });
+		}
+	});
+
+	/**
+	 * GET /v1/runtime/internal/workflow/:workflowId
+	 * Sandbox reads the full definition of a single workflow (including all steps).
+	 * Only workflows belonging to this agent are accessible.
+	 */
+	router.get('/internal/workflow/:workflowId', async (req: Request, res: Response) => {
+		const sandboxToken = (req as Request & { sandboxToken: SandboxTokenPayload }).sandboxToken;
+		const { workflowId } = req.params as { workflowId: string };
+
+		try {
+			const workflow = await workflowService.getByIdInternal(workflowId);
+			if (!workflow || workflow.agentId !== sandboxToken.agentId) {
+				res.status(404).json({ success: false, error: 'Workflow not found' });
+				return;
+			}
+			res.json({ success: true, data: workflow });
+		} catch (err) {
+			const message = err instanceof Error ? err.message : 'Failed to read workflow';
+			logger.error({ err, agentId: sandboxToken.agentId }, '[runtime] workflow read failed');
+			res.status(500).json({ success: false, error: message });
+		}
+	});
+
+	/**
+	 * POST /v1/runtime/internal/workflow/:workflowId/trigger
+	 * Sandbox triggers a workflow run directly (without needing a pre-created trigger row).
+	 * Creates a workflow_run record and spawns a new child process with workflow config.
+	 * Returns immediately with { runId } — execution is fire-and-forget.
+	 * Only enabled workflows belonging to this agent can be triggered.
+	 */
+	router.post('/internal/workflow/:workflowId/trigger', async (req: Request, res: Response) => {
+		const sandboxToken = (req as Request & { sandboxToken: SandboxTokenPayload }).sandboxToken;
+		const { workflowId } = req.params as { workflowId: string };
+		const { payload } = req.body as { payload?: Record<string, unknown> };
+
+		try {
+			const workflow = await workflowService.getByIdInternal(workflowId);
+			if (!workflow || workflow.agentId !== sandboxToken.agentId) {
+				res.status(404).json({ success: false, error: 'Workflow not found' });
+				return;
+			}
+			if (!workflow.isEnabled) {
+				res.status(400).json({ success: false, error: 'Workflow is disabled' });
+				return;
+			}
+
+			const firedAt = new Date().toISOString();
+			const triggerPayload: Record<string, unknown> = payload ?? { firedAt };
+
+			// Create a run record
+			const run = await workflowRunService.createRun({
+				workflowId: workflow.id,
+				agentId: sandboxToken.agentId,
+				ownerId: sandboxToken.ownerId,
+				triggerType: 'manual',
+				triggerPayload,
+			});
+
+			// Build trigger context
+			const triggerContext: WorkflowTriggerContext = {
+				type: 'manual',
+				triggerName: 'Agent-initiated',
+				firedAt,
+				payload: triggerPayload,
+			};
+
+			// Create a thread to house the sandbox spawn.
+			// Marked as a workflow thread so users can filter it out in the chat history.
+			const thread = await sessionService.createThread({
+				agentId: sandboxToken.agentId,
+				ownerId: sandboxToken.ownerId,
+				title: `${workflow.name} — ${firedAt}`,
+				triggerType: 'manual',
+				triggerPayload,
+				isWorkflowThread: true,
+			});
+
+			// Spawn child process (fire-and-forget) — do not await
+			runtimeService
+				.spawnForThread(
+					sandboxToken.agentId,
+					thread.id,
+					sandboxToken.ownerId,
+					'manual',
+					triggerPayload,
+					undefined,
+					{ runId: run.id, definition: workflow, triggerContext },
+				)
+				.catch((spawnErr: Error) => {
+					logger.error(
+						{ spawnErr, agentId: sandboxToken.agentId, workflowId },
+						'[runtime] agent-triggered workflow spawn failed',
+					);
+				});
+
+			res.status(201).json({ success: true, data: { runId: run.id } });
+		} catch (err) {
+			const message = err instanceof Error ? err.message : 'Failed to trigger workflow';
+			logger.error({ err, agentId: sandboxToken.agentId }, '[runtime] workflow trigger failed');
+			res.status(500).json({ success: false, error: message });
 		}
 	});
 

@@ -2,7 +2,7 @@
 	import { page } from '$app/state';
 	import { activeBreadcrumbThreadTitle } from '$lib/stores/breadcrumb.store.js';
 	import * as Breadcrumb from '$lib/components/ui/breadcrumb/index.js';
-	import type { Agent } from '@repo/types';
+	import type { Agent, Workflow } from '@repo/types';
 
 	/**
 	 * A breadcrumb item — either a link (with href) or the current page (no href).
@@ -26,6 +26,7 @@
 
 		// Access dynamic entity names from merged page data
 		const agent = (page.data as Record<string, unknown>).agent as Agent | null | undefined;
+		const workflow = (page.data as Record<string, unknown>).workflow as Workflow | null | undefined;
 
 		// ── /app ──────────────────────────────────────────────────────────────────
 		if (pathname === '/app') {
@@ -76,6 +77,81 @@
 				{ label: 'Agents', href: '/app/agents' },
 				{ label: agentName, href: `/app/agents/new?id=${agentRunsMatch[1]}&editmode=true` },
 				{ label: 'Runs' }
+			];
+		}
+
+		// ── /app/agents/[id]/workflows/[workflowId]/runs/[runId] ──────────────────
+		const workflowRunDetailMatch = pathname.match(
+			/^\/app\/agents\/([^/]+)\/workflows\/([^/]+)\/runs\/([^/]+)$/
+		);
+		if (workflowRunDetailMatch) {
+			const agentId = workflowRunDetailMatch[1];
+			const workflowId = workflowRunDetailMatch[2];
+			const agentName = agent?.name ?? 'Agent';
+			const workflowName = workflow?.name ?? 'Workflow';
+			return [
+				{ label: 'Agents', href: '/app/agents' },
+				{ label: agentName, href: `/app/agents/new?id=${agentId}&editmode=true` },
+				{ label: 'Workflows', href: `/app/agents/${agentId}/workflows` },
+				{
+					label: workflowName,
+					href: `/app/agents/${agentId}/workflows/new?workflowId=${workflowId}&editmode=true`
+				},
+				{ label: 'Runs', href: `/app/agents/${agentId}/workflows/${workflowId}/runs` },
+				{ label: 'Run' }
+			];
+		}
+
+		// ── /app/agents/[id]/workflows/[workflowId]/runs ──────────────────────────
+		const workflowRunsMatch = pathname.match(/^\/app\/agents\/([^/]+)\/workflows\/([^/]+)\/runs$/);
+		if (workflowRunsMatch) {
+			const agentId = workflowRunsMatch[1];
+			const workflowId = workflowRunsMatch[2];
+			const agentName = agent?.name ?? 'Agent';
+			const workflowName = workflow?.name ?? 'Workflow';
+			return [
+				{ label: 'Agents', href: '/app/agents' },
+				{ label: agentName, href: `/app/agents/new?id=${agentId}&editmode=true` },
+				{ label: 'Workflows', href: `/app/agents/${agentId}/workflows` },
+				{
+					label: workflowName,
+					href: `/app/agents/${agentId}/workflows/new?workflowId=${workflowId}&editmode=true`
+				},
+				{ label: 'Runs' }
+			];
+		}
+
+		// ── /app/agents/[id]/workflows/new (create or edit mode) ──────────────────
+		const workflowBuilderMatch = pathname.match(/^\/app\/agents\/([^/]+)\/workflows\/new$/);
+		if (workflowBuilderMatch) {
+			const agentId = workflowBuilderMatch[1];
+			const agentName = agent?.name ?? 'Agent';
+			const isEditMode = searchParams.get('editmode') === 'true';
+			if (isEditMode && workflow) {
+				return [
+					{ label: 'Agents', href: '/app/agents' },
+					{ label: agentName, href: `/app/agents/new?id=${agentId}&editmode=true` },
+					{ label: 'Workflows', href: `/app/agents/${agentId}/workflows` },
+					{ label: workflow.name }
+				];
+			}
+			return [
+				{ label: 'Agents', href: '/app/agents' },
+				{ label: agentName, href: `/app/agents/new?id=${agentId}&editmode=true` },
+				{ label: 'Workflows', href: `/app/agents/${agentId}/workflows` },
+				{ label: 'New Workflow' }
+			];
+		}
+
+		// ── /app/agents/[id]/workflows (list) ─────────────────────────────────────
+		const workflowListMatch = pathname.match(/^\/app\/agents\/([^/]+)\/workflows$/);
+		if (workflowListMatch) {
+			const agentId = workflowListMatch[1];
+			const agentName = agent?.name ?? 'Agent';
+			return [
+				{ label: 'Agents', href: '/app/agents' },
+				{ label: agentName, href: `/app/agents/new?id=${agentId}&editmode=true` },
+				{ label: 'Workflows' }
 			];
 		}
 

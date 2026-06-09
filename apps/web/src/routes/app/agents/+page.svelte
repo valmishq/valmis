@@ -13,6 +13,7 @@
 	import PencilIcon from '@lucide/svelte/icons/pencil';
 	import ActivityIcon from '@lucide/svelte/icons/activity';
 	import BotIcon from '@lucide/svelte/icons/bot';
+	import ZapIcon from '@lucide/svelte/icons/zap';
 	import type { PageData } from './$types';
 	import type { Agent, CredentialMetadata } from '@repo/types';
 
@@ -175,7 +176,7 @@
 				{#each agents as agent (agent.id)}
 					<li class="flex items-start justify-between gap-4 px-6 py-4">
 						<!-- Left: avatar + identity -->
-						<div class="flex min-w-0 flex-1 items-start gap-3">
+						<a class="flex min-w-0 flex-1 items-start gap-3" href="/app/chat/{agent.id}">
 							<div
 								class="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-lg bg-muted text-lg"
 							>
@@ -211,10 +212,23 @@
 									Created {formatDate(agent.createdAt)}
 								</p>
 							</div>
-						</div>
+						</a>
 
 						<!-- Right: actions -->
 						<div class="flex shrink-0 items-center gap-1">
+							<!-- Workflows -->
+							<Button
+								variant="ghost"
+								size="sm"
+								onclick={() => goto(`/app/agents/${agent.id}/workflows`)}
+								class="text-muted-foreground hover:text-foreground"
+								title="Manage workflows"
+							>
+								<ZapIcon class="size-4" />
+								<span class="sr-only">Workflows for {agent.name}</span>
+							</Button>
+
+							<!-- Run history -->
 							<Button
 								variant="ghost"
 								size="sm"

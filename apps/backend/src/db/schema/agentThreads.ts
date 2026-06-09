@@ -1,4 +1,14 @@
-import { pgTable, pgEnum, uuid, text, integer, jsonb, timestamp, index } from 'drizzle-orm/pg-core';
+import {
+	pgTable,
+	pgEnum,
+	uuid,
+	text,
+	integer,
+	boolean,
+	jsonb,
+	timestamp,
+	index,
+} from 'drizzle-orm/pg-core';
 import { agents } from './agents.js';
 
 /** Lifecycle status of an agent thread */
@@ -61,6 +71,13 @@ export const agentThreads = pgTable(
 		 * Null for threads created before this column was added.
 		 */
 		contextTokens: integer('context_tokens'),
+		/**
+		 * True when this thread was automatically created by a workflow execution
+		 * (cron, webhook, or manual trigger with workflowId set).
+		 * False for user-initiated chat threads.
+		 * Used in the frontend to let users toggle visibility of workflow-generated threads.
+		 */
+		isWorkflowThread: boolean('is_workflow_thread').notNull().default(false),
 		createdAt: timestamp('created_at').defaultNow().notNull(),
 		updatedAt: timestamp('updated_at').defaultNow().notNull(),
 	},

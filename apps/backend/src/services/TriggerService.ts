@@ -1,17 +1,20 @@
-import { eq, and } from 'drizzle-orm';
+import { eq, and, isNull, or } from 'drizzle-orm';
 import * as nodeCron from 'node-cron';
 import { randomBytes, createHmac, timingSafeEqual } from 'crypto';
 import { db } from '../db/index.js';
-import { agentTriggers, agents } from '../db/schema/index.js';
+import { agentTriggers, agents, workflows } from '../db/schema/index.js';
 import type {
 	AgentTrigger,
 	AgentTriggerKind,
 	AgentTriggerConfig,
 	CronTriggerConfig,
 	WebhookTriggerConfig,
+	WorkflowTriggerContext,
 } from '@repo/types';
 import { AgentRuntimeService } from './AgentRuntimeService.js';
 import { AgentSessionService } from './AgentSessionService.js';
+import { WorkflowService } from './WorkflowService.js';
+import { WorkflowRunService } from './WorkflowRunService.js';
 import { logger } from '../config/logger.js';
 
 // ─── Mappers ──────────────────────────────────────────────────────────────────
@@ -27,6 +30,7 @@ function rowToTrigger(row: typeof agentTriggers.$inferSelect): AgentTrigger {
 		isEnabled: row.isEnabled,
 		lastFiredAt: row.lastFiredAt ?? undefined,
 		description: row.description ?? undefined,
+		workflowId: row.workflowId ?? undefined,
 		createdAt: row.createdAt,
 		updatedAt: row.updatedAt,
 	};
@@ -52,6 +56,13 @@ const MAX_CONSECUTIVE_CRON_FAILURES = 5;
  *   3. Webhook triggers are fired externally via TriggerService.fireWebhookTrigger().
  *   4. Manual triggers are fired via TriggerService.fireManualTrigger().
  *
+ * Trigger → Workflow routing:
+ *   When a trigger has a workflowId set, fireTrigger() routes to the workflow pipeline:
+ *     1. Creates a workflow_run record via WorkflowRunService.
+ *     2. Builds a WorkflowTriggerContext (type, triggerName, firedAt, payload).
+ *     3. Spawns the sandbox with AgentRuntimeConfig.workflow populated.
+ *   When workflowId is null/undefined, the existing chat-style thread creation is used.
+ *
  * Cron scheduling:
  *   - Uses node-cron, which runs in the host process.
  *   - Each enabled cron trigger gets one ScheduledTask stored in cronJobs map.
@@ -71,6 +82,8 @@ export class TriggerService {
 	constructor(
 		private readonly runtimeService: AgentRuntimeService,
 		private readonly sessionService: AgentSessionService,
+		private readonly workflowService: WorkflowService,
+		private readonly workflowRunService: WorkflowRunService,
 	) {}
 
 	// ─── CRUD ──────────────────────────────────────────────────────────────
@@ -83,6 +96,7 @@ export class TriggerService {
 		name: string;
 		config: AgentTriggerConfig;
 		description?: string;
+		workflowId?: string;
 	}): Promise<AgentTrigger> {
 		// For webhook triggers, generate a secret if not provided
 		let config = input.config;
@@ -101,6 +115,7 @@ export class TriggerService {
 				config,
 				isEnabled: true,
 				description: input.description ?? null,
+				workflowId: input.workflowId ?? null,
 				createdAt: now,
 				updatedAt: now,
 			})
@@ -149,7 +164,7 @@ export class TriggerService {
 		return rows[0] ? rowToTrigger(rows[0]) : null;
 	}
 
-	/** Update a trigger's config or enabled state */
+	/** Update a trigger's config, enabled state, or workflow assignment */
 	async update(
 		id: string,
 		ownerId: string,
@@ -158,6 +173,7 @@ export class TriggerService {
 			config?: AgentTriggerConfig;
 			isEnabled?: boolean;
 			description?: string;
+			workflowId?: string | null;
 		},
 	): Promise<AgentTrigger | null> {
 		const existing = await this.getById(id, ownerId);
@@ -168,6 +184,7 @@ export class TriggerService {
 			config: AgentTriggerConfig;
 			isEnabled: boolean;
 			description: string | null;
+			workflowId: string | null;
 			updatedAt: Date;
 		}> = { updatedAt: new Date() };
 
@@ -175,6 +192,7 @@ export class TriggerService {
 		if (input.config !== undefined) updates.config = input.config;
 		if (input.isEnabled !== undefined) updates.isEnabled = input.isEnabled;
 		if (input.description !== undefined) updates.description = input.description ?? null;
+		if (input.workflowId !== undefined) updates.workflowId = input.workflowId;
 
 		await db
 			.update(agentTriggers)
@@ -261,21 +279,61 @@ export class TriggerService {
 		await this.fireTrigger(trigger, { firedAt: new Date().toISOString() });
 	}
 
+	// ─── Public scheduling helpers ────────────────────────────────────────
+
+	/**
+	 * Schedule a cron trigger in memory if it is a cron kind and is enabled.
+	 * This is used by WorkflowService / routes that create or update triggers
+	 * directly via DB (to avoid a circular dependency) so the cron job is
+	 * registered immediately without waiting for the next server restart.
+	 *
+	 * Safe to call for non-cron or disabled triggers — it is a no-op in those cases.
+	 */
+	scheduleFromWorkflow(trigger: AgentTrigger): void {
+		if (trigger.kind === 'cron' && trigger.isEnabled) {
+			// Unschedule any existing job for this id first (update path)
+			this.unscheduleCron(trigger.id);
+			this.scheduleCron(trigger);
+		}
+	}
+
+	/**
+	 * Unschedule a cron job by trigger ID.
+	 * Called by routes that delete a workflow (and its trigger) directly via DB.
+	 * Safe to call for IDs that have no active cron job — it is a no-op.
+	 */
+	unscheduleFromWorkflow(triggerId: string): void {
+		this.unscheduleCron(triggerId);
+	}
+
 	// ─── Startup ──────────────────────────────────────────────────────────
 
 	/**
 	 * Load all enabled cron triggers from the DB and schedule them.
 	 * Call this once at server startup.
+	 *
+	 * Skips triggers whose linked workflow is disabled — a disabled workflow should
+	 * not fire even if the trigger row itself still has isEnabled=true.
+	 * Triggers with no workflowId (standalone triggers) are always scheduled.
 	 */
 	async loadAll(): Promise<void> {
 		const rows = await db
-			.select()
+			.select({ trigger: agentTriggers })
 			.from(agentTriggers)
-			.where(and(eq(agentTriggers.kind, 'cron'), eq(agentTriggers.isEnabled, true)));
+			// Left-join workflows so we can filter on workflow.isEnabled
+			.leftJoin(workflows, eq(agentTriggers.workflowId, workflows.id))
+			.where(
+				and(
+					eq(agentTriggers.kind, 'cron'),
+					eq(agentTriggers.isEnabled, true),
+					// Only schedule if there is no linked workflow OR the workflow is enabled
+					or(isNull(agentTriggers.workflowId), eq(workflows.isEnabled, true)),
+				),
+			);
 
 		let scheduled = 0;
 		for (const row of rows) {
-			const trigger = rowToTrigger(row);
+			const trigger = rowToTrigger(row.trigger);
 			try {
 				this.scheduleCron(trigger);
 				scheduled++;
@@ -289,37 +347,108 @@ export class TriggerService {
 	// ─── Private ──────────────────────────────────────────────────────────
 
 	/**
-	 * Common trigger fire logic: create a thread and spawn a container.
+	 * Common trigger fire logic.
+	 *
+	 * If the trigger has a workflowId:
+	 *   1. Load the workflow definition.
+	 *   2. Create a workflow_run record.
+	 *   3. Build WorkflowTriggerContext and spawn sandbox with workflow config.
+	 *
+	 * If the trigger has no workflowId (legacy / non-workflow triggers):
+	 *   1. Create a chat-style agent_thread.
+	 *   2. Spawn sandbox with the trigger payload (original behaviour).
 	 */
 	private async fireTrigger(
 		trigger: AgentTrigger,
 		payload: Record<string, unknown>,
 	): Promise<void> {
 		logger.info(
-			{ triggerId: trigger.id, agentId: trigger.agentId, kind: trigger.kind },
+			{
+				triggerId: trigger.id,
+				agentId: trigger.agentId,
+				kind: trigger.kind,
+				workflowId: trigger.workflowId ?? null,
+			},
 			'[triggers] firing trigger',
 		);
 
-		// Create a thread for this trigger execution
-		const thread = await this.sessionService.createThread({
-			agentId: trigger.agentId,
-			ownerId: trigger.ownerId,
-			title: `${trigger.name} — ${new Date().toISOString()}`,
-			triggerType: trigger.kind,
-			triggerId: trigger.id,
-			triggerPayload: payload,
-		});
+		const firedAt = new Date().toISOString();
 
-		// Spawn the container
-		await this.runtimeService.spawnForThread(
-			trigger.agentId,
-			thread.id,
-			trigger.ownerId,
-			trigger.kind,
-			payload,
-		);
+		if (trigger.workflowId) {
+			// ── Workflow execution path ───────────────────────────────────────────
+			const workflow = await this.workflowService.getByIdInternal(trigger.workflowId);
+			if (!workflow) {
+				throw new Error(`Workflow ${trigger.workflowId} not found for trigger ${trigger.id}`);
+			}
+			if (!workflow.isEnabled) {
+				throw new Error(`Workflow ${trigger.workflowId} is disabled`);
+			}
 
-		// Update lastFiredAt
+			// Create the run record
+			const run = await this.workflowRunService.createRun({
+				workflowId: workflow.id,
+				agentId: trigger.agentId,
+				ownerId: trigger.ownerId,
+				triggerType: trigger.kind,
+				triggerId: trigger.id,
+				triggerPayload: payload,
+			});
+
+			// Build normalized trigger context for the sandbox
+			const triggerContext: WorkflowTriggerContext = {
+				type: trigger.kind,
+				triggerName: trigger.name,
+				firedAt,
+				payload,
+			};
+
+			// Create a thread to house the sandbox spawn.
+			// Marked as a workflow thread so users can filter it out in the chat history.
+			const thread = await this.sessionService.createThread({
+				agentId: trigger.agentId,
+				ownerId: trigger.ownerId,
+				title: `${workflow.name} — ${firedAt}`,
+				triggerType: trigger.kind,
+				triggerId: trigger.id,
+				triggerPayload: payload,
+				isWorkflowThread: true,
+			});
+
+			// Spawn sandbox with workflow config embedded in AgentRuntimeConfig
+			await this.runtimeService.spawnForThread(
+				trigger.agentId,
+				thread.id,
+				trigger.ownerId,
+				trigger.kind,
+				payload,
+				undefined, // no userDatetime for automated triggers
+				{
+					runId: run.id,
+					definition: workflow,
+					triggerContext,
+				},
+			);
+		} else {
+			// ── Legacy / standalone trigger path ─────────────────────────────────
+			const thread = await this.sessionService.createThread({
+				agentId: trigger.agentId,
+				ownerId: trigger.ownerId,
+				title: `${trigger.name} — ${firedAt}`,
+				triggerType: trigger.kind,
+				triggerId: trigger.id,
+				triggerPayload: payload,
+			});
+
+			await this.runtimeService.spawnForThread(
+				trigger.agentId,
+				thread.id,
+				trigger.ownerId,
+				trigger.kind,
+				payload,
+			);
+		}
+
+		// Update lastFiredAt regardless of path
 		await db
 			.update(agentTriggers)
 			.set({ lastFiredAt: new Date(), updatedAt: new Date() })

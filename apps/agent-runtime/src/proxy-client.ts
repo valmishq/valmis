@@ -11,6 +11,10 @@ import type {
 	MemorySearchRequest,
 	AgentMemoryEntry,
 	AgentMemorySearchResult,
+	WorkflowRunStatus,
+	WorkflowStepLogStatus,
+	WorkflowSummary,
+	Workflow,
 } from '@repo/types';
 
 /**
@@ -21,12 +25,15 @@ import type {
  * in as a constructor argument from the environment at container startup.
  *
  * Endpoints used:
- *   POST /v1/runtime/internal/proxy                — credential API proxy
- *   POST /v1/runtime/internal/llm/stream           — LLM completion proxy
- *   GET  /v1/runtime/internal/thread/:id/messages  — load conversation history
- *   POST /v1/runtime/internal/thread/:id/messages  — append a message
- *   POST /v1/runtime/internal/memory/write         — write a memory entry (host embeds + stores)
- *   POST /v1/runtime/internal/memory/search        — search memory by semantic similarity
+ *   POST /v1/runtime/internal/proxy                  — credential API proxy
+ *   POST /v1/runtime/internal/llm/stream             — LLM completion proxy
+ *   GET  /v1/runtime/internal/thread/:id/messages    — load conversation history
+ *   POST /v1/runtime/internal/thread/:id/messages    — append a message
+ *   POST /v1/runtime/internal/memory/write           — write a memory entry (host embeds + stores)
+ *   POST /v1/runtime/internal/memory/search          — search memory by semantic similarity
+ *   POST /v1/runtime/internal/workflow/step-start    — log workflow step start
+ *   POST /v1/runtime/internal/workflow/step-end      — log workflow step completion
+ *   POST /v1/runtime/internal/workflow/run-complete  — mark workflow run complete
  */
 export class ProxyClient {
 	private readonly baseUrl: string;
@@ -222,6 +229,188 @@ export class ProxyClient {
 		};
 		if (!json.success || !json.data) {
 			throw new Error(`Memory search failed: ${json.error ?? 'unknown error'}`);
+		}
+		return json.data;
+	}
+
+	// ─── Workflow step logging ────────────────────────────────────────────────
+
+	/**
+	 * Log the start of a workflow step execution.
+	 * Returns the stepLogId to be used when logging the step's completion.
+	 */
+	async logWorkflowStepStart(input: {
+		runId: string;
+		stepId: string;
+		stepIndex: number;
+		stepName: string;
+		inputContext: Record<string, unknown>;
+		attemptNumber?: number;
+	}): Promise<string> {
+		const res = await fetch(`${this.baseUrl}/v1/runtime/internal/workflow/step-start`, {
+			method: 'POST',
+			headers: this.authHeaders(),
+			body: JSON.stringify(input),
+		});
+
+		const json = (await res.json()) as {
+			success: boolean;
+			data?: { stepLogId: string };
+			error?: string;
+		};
+		if (!json.success || !json.data) {
+			throw new Error(`Workflow step start failed: ${json.error ?? 'unknown error'}`);
+		}
+		return json.data.stepLogId;
+	}
+
+	/**
+	 * Log the completion (success, failed, or skipped) of a workflow step.
+	 */
+	async logWorkflowStepEnd(input: {
+		stepLogId: string;
+		status: WorkflowStepLogStatus;
+		outputData?: Record<string, unknown>;
+		error?: string;
+	}): Promise<void> {
+		const res = await fetch(`${this.baseUrl}/v1/runtime/internal/workflow/step-end`, {
+			method: 'POST',
+			headers: this.authHeaders(),
+			body: JSON.stringify(input),
+		});
+
+		const json = (await res.json()) as { success: boolean; error?: string };
+		if (!json.success) {
+			throw new Error(`Workflow step end failed: ${json.error ?? 'unknown error'}`);
+		}
+	}
+
+	/**
+	 * Mark a workflow run as completed or errored.
+	 * Called after all steps finish (or on a fatal failure that stops the pipeline).
+	 */
+	async completeWorkflowRun(input: {
+		runId: string;
+		status: WorkflowRunStatus;
+		error?: string;
+	}): Promise<void> {
+		const res = await fetch(`${this.baseUrl}/v1/runtime/internal/workflow/run-complete`, {
+			method: 'POST',
+			headers: this.authHeaders(),
+			body: JSON.stringify(input),
+		});
+
+		const json = (await res.json()) as { success: boolean; error?: string };
+		if (!json.success) {
+			throw new Error(`Workflow run complete failed: ${json.error ?? 'unknown error'}`);
+		}
+	}
+
+	// ─── Workflow agent tools ─────────────────────────────────────────────────
+
+	/**
+	 * List all enabled workflows for this agent.
+	 * The host scopes the query to sandboxToken.agentId.
+	 */
+	async listWorkflows(): Promise<WorkflowSummary[]> {
+		const res = await fetch(`${this.baseUrl}/v1/runtime/internal/workflow/list`, {
+			headers: this.authHeaders(),
+		});
+
+		const json = (await res.json()) as {
+			success: boolean;
+			data?: WorkflowSummary[];
+			error?: string;
+		};
+		if (!json.success || !json.data) {
+			throw new Error(`List workflows failed: ${json.error ?? 'unknown error'}`);
+		}
+		return json.data;
+	}
+
+	/**
+	 * Read the full definition of a single workflow (including steps).
+	 * Only workflows belonging to this agent are accessible.
+	 */
+	async readWorkflow(workflowId: string): Promise<Workflow> {
+		const res = await fetch(`${this.baseUrl}/v1/runtime/internal/workflow/${workflowId}`, {
+			headers: this.authHeaders(),
+		});
+
+		const json = (await res.json()) as {
+			success: boolean;
+			data?: Workflow;
+			error?: string;
+		};
+		if (!json.success || !json.data) {
+			throw new Error(`Read workflow failed: ${json.error ?? 'unknown error'}`);
+		}
+		return json.data;
+	}
+
+	/**
+	 * Create a new workflow for this agent.
+	 * The agent provides name, description, step definitions, and optional trigger config.
+	 * The host validates (via Zod) and persists the workflow + trigger.
+	 * Returns the full created Workflow object including its trigger and generated ID.
+	 */
+	async createWorkflow(input: {
+		name: string;
+		description?: string;
+		steps: Array<{
+			name: string;
+			instruction: string;
+			allowedTools?: string[];
+			allowedCredentialIds?: string[];
+			errorHandlingAction?: 'stop' | 'continue' | 'retry';
+		}>;
+		trigger?: {
+			kind?: 'manual' | 'cron' | 'webhook';
+			name?: string;
+			/** For cron: { schedule, timezone? }. For manual/webhook: omit. */
+			config?: Record<string, string>;
+			description?: string;
+		};
+	}): Promise<Workflow> {
+		const res = await fetch(`${this.baseUrl}/v1/runtime/internal/workflow/create`, {
+			method: 'POST',
+			headers: this.authHeaders(),
+			body: JSON.stringify(input),
+		});
+
+		const json = (await res.json()) as {
+			success: boolean;
+			data?: Workflow;
+			error?: string;
+		};
+		if (!json.success || !json.data) {
+			throw new Error(`Create workflow failed: ${json.error ?? 'unknown error'}`);
+		}
+		return json.data;
+	}
+
+	/**
+	 * Trigger a workflow run (fire-and-forget).
+	 * The host creates a workflow_run record and spawns a new child process.
+	 * Returns immediately with the runId.
+	 */
+	async triggerWorkflow(
+		workflowId: string,
+		payload?: Record<string, string | number | boolean | null>,
+	): Promise<{ runId: string }> {
+		const res = await fetch(`${this.baseUrl}/v1/runtime/internal/workflow/${workflowId}/trigger`, {
+			method: 'POST',
+			headers: this.authHeaders(),
+			body: JSON.stringify({ payload }),
+		});
+
+		const json = (await res.json()) as {
+			success: boolean;
+			data?: { runId: string };
+			error?: string;
+		};
+		if (!json.success || !json.data) {
+			throw new Error(`Trigger workflow failed: ${json.error ?? 'unknown error'}`);
 		}
 		return json.data;
 	}

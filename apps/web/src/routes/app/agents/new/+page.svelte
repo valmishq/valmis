@@ -259,7 +259,7 @@
 							</button>
 						{/snippet}
 					</Popover.Trigger>
-					<Popover.Content class="w-72 p-3" align="start">
+					<Popover.Content class="w-72 p-3 md:w-96" align="start">
 						<p class="mb-2 text-xs font-medium text-muted-foreground">Select an emoji</p>
 						<div class="grid grid-cols-8 gap-1">
 							{#each EMOJI_PRESETS as emoji (emoji)}

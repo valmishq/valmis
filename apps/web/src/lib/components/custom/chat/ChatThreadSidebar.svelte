@@ -1,13 +1,14 @@
 <script lang="ts">
-	import { goto } from '$app/navigation';
+	import { fade, fly } from 'svelte/transition';
+	import { invalidateAll } from '$app/navigation';
 	import AgentAvatar from './AgentAvatar.svelte';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu/index.js';
 	import { ScrollArea } from '$lib/components/ui/scroll-area/index.js';
+	import { Switch } from '$lib/components/ui/switch/index.js';
 	import PlusIcon from '@lucide/svelte/icons/plus';
 	import MessageSquareIcon from '@lucide/svelte/icons/message-square';
-	import ArrowLeftIcon from '@lucide/svelte/icons/arrow-left';
-	import XIcon from '@lucide/svelte/icons/x';
+	import WorkflowIcon from '@lucide/svelte/icons/workflow';
 	import MoreHorizontalIcon from '@lucide/svelte/icons/ellipsis';
 	import PencilIcon from '@lucide/svelte/icons/pencil';
 	import Trash2Icon from '@lucide/svelte/icons/trash-2';
@@ -56,9 +57,32 @@
 		return thread.title ?? 'New conversation';
 	}
 
-	let sortedThreads = $derived(
-		[...threads].sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
+	/** Controls whether workflow-created threads are shown in the list. Default: hidden. */
+	let showWorkflowThreads = $state(false);
+
+	/**
+	 * When the toggle is switched on, invalidate the current page's load function
+	 * so SvelteKit re-fetches the full thread list (which includes workflow threads
+	 * created in the background since the page was first loaded).
+	 */
+	$effect(() => {
+		if (showWorkflowThreads) {
+			void invalidateAll();
+		}
+	});
+
+	let filteredThreads = $derived(
+		showWorkflowThreads
+			? [...threads].sort(
+					(a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+				)
+			: [...threads]
+					.filter((t) => !t.isWorkflowThread)
+					.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
 	);
+
+	/** Whether there are any workflow threads at all (used to show the toggle) */
+	let hasWorkflowThreads = $derived(threads.some((t) => t.isWorkflowThread));
 
 	/** Desktop sidebar open state */
 	let desktopOpen = $state(true);
@@ -142,22 +166,46 @@
 			</Button>
 		</div>
 
-		<!-- Section label -->
-		<p class="my-2 px-4 text-[10px] font-medium tracking-wider text-muted-foreground/60 uppercase">
-			Conversations
-		</p>
+		<!-- Section label + workflow toggle -->
+		<div class="flex items-center justify-between px-4 pb-1">
+			<p class="text-[10px] font-medium tracking-wider text-muted-foreground/60 uppercase">
+				Conversations
+			</p>
+			{#if hasWorkflowThreads}
+				<div
+					class="flex items-center gap-1.5"
+					title={showWorkflowThreads ? 'Hide workflow threads' : 'Show workflow threads'}
+					in:fade={{ duration: 200 }}
+				>
+					<WorkflowIcon class="size-3 text-muted-foreground/50" />
+					<Switch bind:checked={showWorkflowThreads} size="sm" aria-label="Show workflow threads" />
+				</div>
+			{/if}
+		</div>
 
 		<!-- Thread list -->
 		<ScrollArea class="flex-1 overflow-hidden">
-			{#if threads.length === 0}
+			{#if filteredThreads.length === 0}
 				<div class="flex flex-col items-center gap-2 px-4 py-10 text-center">
 					<MessageSquareIcon class="size-7 text-muted-foreground/30" />
-					<p class="text-xs text-muted-foreground/70">No conversations yet</p>
+					<p class="text-xs text-muted-foreground/70">
+						{threads.length === 0 ? 'No conversations yet' : 'No chat conversations'}
+					</p>
+					{#if threads.length > 0 && !showWorkflowThreads}
+						<button
+							type="button"
+							class="text-xs text-muted-foreground/60 underline underline-offset-2 hover:text-muted-foreground"
+							onclick={() => (showWorkflowThreads = true)}
+						>
+							Show workflow threads
+						</button>
+					{/if}
 				</div>
 			{:else}
 				<nav class="space-y-0.5 px-2 pb-4">
-					{#each sortedThreads as thread (thread.id)}
+					{#each filteredThreads as thread (thread.id)}
 						<div
+							transition:fly={{ x: -8, duration: 180 }}
 							class="group flex items-center rounded-md transition-colors
 							{activeThreadId === thread.id
 								? 'bg-accent text-accent-foreground'
@@ -168,7 +216,7 @@
 								onclick={() => (open = false)}
 								class="flex min-w-0 flex-1 flex-col px-2.5 py-2"
 							>
-								<span class=" truncate text-sm leading-snug font-medium">
+								<span class="truncate text-sm leading-snug font-medium">
 									{threadTitle(thread)}
 								</span>
 								<span class="mt-0.5 flex items-center gap-1.5 text-[10px] text-muted-foreground">
@@ -180,6 +228,13 @@
 										<span class="size-1.5 rounded-full bg-muted-foreground/25"></span>
 									{/if}
 									{formatThreadDate(thread.updatedAt)}
+									{#if thread.isWorkflowThread}
+										<span
+											class="rounded bg-muted px-1 py-px text-[9px] font-medium text-muted-foreground"
+										>
+											workflow
+										</span>
+									{/if}
 								</span>
 							</a>
 

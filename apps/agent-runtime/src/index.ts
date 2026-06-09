@@ -1,6 +1,7 @@
 import { logger } from '@repo/utils';
 import { ProxyClient } from './proxy-client.js';
 import { runAgent } from './agent-runner.js';
+import { runWorkflow } from './workflow-runner.js';
 
 /**
  * Agent runtime entrypoint.
@@ -14,6 +15,10 @@ import { runAgent } from './agent-runner.js';
  *   PROXY_HOST     — URL of the host backend (e.g. http://localhost:4000)
  *   RUNTIME_CONFIG — JSON-encoded AgentRuntimeConfig (avoids a round-trip on startup)
  *   WORKSPACE_ROOT — Absolute path to this agent's persistent workspace directory
+ *
+ * Routing:
+ *   - If config.workflow is present → runWorkflow() (multi-step pipeline mode)
+ *   - Otherwise → runAgent() (interactive chat mode)
  *
  * Security guarantees:
  *   - No LLM API keys in this process. LLM calls go through PROXY_HOST.
@@ -52,11 +57,22 @@ async function main(): Promise<void> {
 				provider: config.modelProvider,
 				model: config.modelId,
 				triggerType: config.triggerType,
+				hasWorkflow: !!config.workflow,
 			},
 			'[agent-runtime] config loaded',
 		);
 
-		await runAgent(config, proxyClient);
+		if (config.workflow) {
+			// Workflow mode — executes the multi-step pipeline defined in config.workflow
+			logger.info(
+				{ agentId, threadId, runId: config.workflow.runId },
+				'[agent-runtime] routing to workflow runner',
+			);
+			await runWorkflow(config, proxyClient);
+		} else {
+			// Chat mode — interactive conversation loop
+			await runAgent(config, proxyClient);
+		}
 
 		logger.info({ agentId, threadId }, '[agent-runtime] completed');
 		process.exit(0);

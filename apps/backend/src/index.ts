@@ -15,6 +15,7 @@ import { createAgentsRouter } from './routes/agents.js';
 import { createSkillsRouter } from './routes/skills.js';
 import { createRuntimeRouter } from './routes/runtime.js';
 import { createWebhooksRouter } from './routes/webhooks.js';
+import { createWorkflowsRouter } from './routes/workflows.js';
 import { UserService } from './services/UserService.js';
 import { AuthService } from './services/AuthService.js';
 import { EncryptionService } from './services/EncryptionService.js';
@@ -29,6 +30,8 @@ import { AgentProxyService } from './services/AgentProxyService.js';
 import { AgentLlmProxyService } from './services/AgentLlmProxyService.js';
 import { AgentRuntimeService } from './services/AgentRuntimeService.js';
 import { TriggerService } from './services/TriggerService.js';
+import { WorkflowService } from './services/WorkflowService.js';
+import { WorkflowRunService } from './services/WorkflowRunService.js';
 
 // --- Validate required environment variables at startup ---
 const { JWT_SECRET, JWT_EXPIRES_IN, PROXY_TOKEN_SECRET } = process.env;
@@ -73,7 +76,18 @@ const runtimeService = new AgentRuntimeService(
 	llmProviderService,
 	credentialService,
 );
-const triggerService = new TriggerService(runtimeService, sessionService);
+
+// --- Instantiate workflow services ---
+const workflowService = new WorkflowService();
+const workflowRunService = new WorkflowRunService();
+
+// TriggerService now accepts WorkflowService + WorkflowRunService for workflow routing
+const triggerService = new TriggerService(
+	runtimeService,
+	sessionService,
+	workflowService,
+	workflowRunService,
+);
 
 const app = express();
 const PORT = process.env.BACKEND_PORT ?? 4000;
@@ -103,8 +117,8 @@ app.use((req, res, next) => {
 		// Sandbox-internal endpoints are called by agent child processes (localhost),
 		// not by browser clients. All sandbox calls originate from 127.0.0.1, so they
 		// would all share a single IP bucket and exhaust it quickly during active turns
-		// (llm/stream + proxy + message appends + memory writes per turn). These routes
-		// are already secured by PROXY_TOKEN verification — rate limiting adds no value.
+		// (llm/stream + proxy + message appends + memory writes + workflow step logs per turn).
+		// These routes are already secured by PROXY_TOKEN verification — rate limiting adds no value.
 		/^\/v1\/runtime\/internal\//,
 		// SSE stream endpoint — the browser holds this connection open for the duration
 		// of an agent turn. Reconnects (network drops, tab focus events) count against
@@ -127,6 +141,7 @@ app.use('/v1/api-keys', createApiKeysRouter(authService));
 app.use('/v1/iam', createIamRouter(authService));
 app.use('/v1/agents', createAgentsRouter(authService));
 app.use('/v1/skills', createSkillsRouter(authService));
+
 // Runtime routes — user-facing + sandbox-internal (PROXY_TOKEN auth)
 app.use(
 	'/v1/runtime',
@@ -139,10 +154,22 @@ app.use(
 		triggerService,
 		agentMemoryService,
 		agentService,
+		workflowRunService,
+		workflowService,
 	),
 );
+
 // Webhook routes — public, HMAC-verified
 app.use('/v1/webhooks', createWebhooksRouter(triggerService));
+
+// Workflow routes — scoped under agents (GET/POST /v1/agents/:agentId/workflows/...)
+// triggerService is passed so cron jobs are scheduled immediately on create/update/delete
+// (WorkflowService manages trigger DB rows directly to avoid a circular dep, so it
+// cannot call TriggerService itself — the route layer bridges that gap).
+app.use(
+	'/v1/agents/:agentId/workflows',
+	createWorkflowsRouter(authService, workflowService, workflowRunService, triggerService),
+);
 
 // Global error handler — must be registered last, after all routes
 app.use(errorHandler);

@@ -80,6 +80,7 @@ export async function runAgent(
 	const tools = createAgentTools({
 		proxyClient,
 		workspaceRoot: WORKSPACE_ROOT,
+		agentId: config.agentId,
 	});
 
 	// ── streamFn: routes every LLM call through the host proxy ────────────────
@@ -310,6 +311,35 @@ export async function runAgent(
 			`entry. Example: "User prefers responses in bullet-point format." not ` +
 			`"The user told me they like bullets."`;
 	}
+
+	// Inject workflow guidance so the agent knows it can list, read, trigger, and create workflows.
+	effectiveSystemPrompt +=
+		`\n\n## Workflows\n` +
+		`You have access to automation workflow tools: list_workflows, read_workflow, trigger_workflow, create_workflow.\n\n` +
+		`### list_workflows\n` +
+		`- Use to discover what workflows exist for this agent.\n` +
+		`- Returns id, name, description, step count for each enabled workflow.\n\n` +
+		`### read_workflow\n` +
+		`- Use to inspect the full step-by-step configuration of a specific workflow before triggering it.\n\n` +
+		`### trigger_workflow\n` +
+		`- Use when the user asks you to run, start, or execute an automation workflow.\n` +
+		`- Always confirm the correct workflowId via list_workflows first.\n` +
+		`- Workflows execute asynchronously — triggering one will not produce immediate output in this chat.\n` +
+		`- You can pass a string key-value payload to provide dynamic data to the workflow steps.\n` +
+		`- **IMPORTANT:** After trigger_workflow completes, your reply to the user MUST include ALL the ` +
+		`markdown links returned in the tool result exactly as they appear. Do not paraphrase or omit them.\n\n` +
+		`### create_workflow — RESTRICTED\n` +
+		`- ⚠️ ONLY use create_workflow when the user has EXPLICITLY asked you to CREATE a new workflow.\n` +
+		`- BEFORE calling create_workflow, you MUST:\n` +
+		`  1. Design the full workflow (name, description, each step's name and detailed instruction).\n` +
+		`  2. Present the full configuration to the user in a clear, readable format.\n` +
+		`  3. Use ask_human to get the user's explicit confirmation before proceeding.\n` +
+		`  3.1. Be clear about the trigger type. If necessary, ask the user about the specific info about trigger (webhook, app, cron etc. try to explain your cron code in human readable text).\n` +
+		`  4. Only call create_workflow after the user says "yes", "confirm", "go ahead", or similar.\n` +
+		`- **IMPORTANT:** After create_workflow completes, your reply to the user MUST include ALL the ` +
+		`markdown links returned in the tool result exactly as they appear. Do not paraphrase or omit them.\n` +
+		`- Do NOT call create_workflow speculatively, without asking, or as part of any other task.\n` +
+		`- Do NOT call create_workflow just because a workflow might be useful in the future.`;
 
 	// ── Tool restrictions (workspace boundary + no host exploration) ──────────
 	// These rules apply to all agents regardless of other configuration.

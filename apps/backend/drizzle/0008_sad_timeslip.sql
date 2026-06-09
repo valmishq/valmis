@@ -1,0 +1,1 @@
+ALTER TABLE "agent_threads" ADD COLUMN "is_workflow_thread" boolean DEFAULT false NOT NULL;

@@ -8,6 +8,10 @@ import { createAskHumanTool } from './ask-human.js';
 import { createRunCodeTool } from './run-code.js';
 import { createMemoryWriteTool } from './memory-write.js';
 import { createMemorySearchTool } from './memory-search.js';
+import { createListWorkflowsTool } from './list-workflows.js';
+import { createReadWorkflowTool } from './read-workflow.js';
+import { createTriggerWorkflowTool } from './trigger-workflow.js';
+import { createCreateWorkflowTool } from './create-workflow.js';
 
 export type { ToolContext } from './types.js';
 export { resolveWorkspacePath } from './types.js';
@@ -25,6 +29,9 @@ export { resolveWorkspacePath } from './types.js';
  * Memory tools (memory_write, memory_search) are always included.
  * They silently fail if the agent has no embedding model configured —
  * the host returns a 400 with a descriptive error that becomes a tool result.
+ *
+ * Workflow tools (list_workflows, read_workflow, trigger_workflow) are always
+ * included. They return an appropriate message when no workflows are configured.
  */
 export function createAgentTools(ctx: Parameters<typeof createCallApiTool>[0]): AgentTool[] {
 	return [
@@ -37,5 +44,9 @@ export function createAgentTools(ctx: Parameters<typeof createCallApiTool>[0]): 
 		createRunCodeTool(ctx),
 		createMemoryWriteTool(ctx),
 		createMemorySearchTool(ctx),
+		createListWorkflowsTool(ctx),
+		createReadWorkflowTool(ctx),
+		createTriggerWorkflowTool(ctx),
+		createCreateWorkflowTool(ctx),
 	];
 }

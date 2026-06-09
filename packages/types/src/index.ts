@@ -10,3 +10,4 @@ export * from './agent.js';
 export * from './llmCatalog.js';
 export * from './skill.js';
 export * from './agentRuntime.js';
+export * from './workflow.js';

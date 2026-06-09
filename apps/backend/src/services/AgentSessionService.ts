@@ -21,6 +21,8 @@ export interface CreateThreadInput {
 	triggerType?: AgentTriggerType;
 	triggerId?: string;
 	triggerPayload?: Record<string, unknown>;
+	/** Mark this thread as created by a workflow execution (non-chat trigger with workflowId) */
+	isWorkflowThread?: boolean;
 }
 
 export interface AppendMessageInput {
@@ -45,6 +47,7 @@ function rowToThread(row: typeof agentThreads.$inferSelect): AgentThread {
 		triggerId: row.triggerId ?? undefined,
 		triggerPayload: (row.triggerPayload as Record<string, unknown>) ?? undefined,
 		contextTokens: row.contextTokens ?? undefined,
+		isWorkflowThread: row.isWorkflowThread,
 		createdAt: row.createdAt,
 		updatedAt: row.updatedAt,
 	};
@@ -85,6 +88,7 @@ export class AgentSessionService {
 				triggerType: input.triggerType ?? 'chat',
 				triggerId: input.triggerId ?? null,
 				triggerPayload: input.triggerPayload ?? null,
+				isWorkflowThread: input.isWorkflowThread ?? false,
 				createdAt: now,
 				updatedAt: now,
 			})

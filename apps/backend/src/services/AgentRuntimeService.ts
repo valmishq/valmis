@@ -1,7 +1,14 @@
 import { spawn } from 'child_process';
 import { mkdirSync, rmSync } from 'fs';
 import { resolve, join } from 'path';
-import type { AgentTriggerType, AgentRuntimeConfig, Agent, CredentialMeta } from '@repo/types';
+import type {
+	AgentTriggerType,
+	AgentRuntimeConfig,
+	Agent,
+	CredentialMeta,
+	Workflow,
+	WorkflowTriggerContext,
+} from '@repo/types';
 import { getCredentialDefinition } from '@repo/utils';
 import { AgentSessionService } from './AgentSessionService.js';
 import { AgentProxyService } from './AgentProxyService.js';
@@ -10,6 +17,8 @@ import { LlmProviderService } from './llmProviderService.js';
 import { CredentialService } from './CredentialService.js';
 import { agentStreamBus } from './AgentStreamBus.js';
 import { logger } from '../config/logger.js';
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
 /**
  * Extract a clean, user-facing error message from child process output.
@@ -70,6 +79,17 @@ function extractUserErrorMessage(output: string): string {
 	return lastLine.slice(0, 300) || 'Agent process exited with an error. Please try again.';
 }
 
+// ─── Optional workflow config passed to spawnForThread ───────────────────────
+
+/** Workflow config injected into the sandbox for workflow runs */
+export interface WorkflowSpawnConfig {
+	runId: string;
+	definition: Workflow;
+	triggerContext: WorkflowTriggerContext;
+}
+
+// ─── Service ──────────────────────────────────────────────────────────────────
+
 /**
  * Manages agent execution by spawning a dedicated Node.js child process per turn.
  *
@@ -83,6 +103,11 @@ function extractUserErrorMessage(output: string): string {
  *   - The PROXY_TOKEN is a 15-min scoped JWT authorising only the agent's credential list.
  *   - File access is restricted to WORKSPACE_ROOT (<AGENT_WORKSPACES_PATH>/<agentId>/)
  *     by the resolveWorkspacePath() guard inside agent-runner.ts.
+ *
+ * Workflow execution:
+ *   When workflowConfig is provided, the RUNTIME_CONFIG includes a `workflow` field
+ *   containing the full workflow definition and trigger context. The child process
+ *   routes to workflow-runner.ts instead of agent-runner.ts.
  *
  * Process lifecycle:
  *   - spawnForThread() is non-blocking: it spawns the child and returns immediately.
@@ -140,6 +165,9 @@ export class AgentRuntimeService {
 	 *   3. A webhook trigger fires (triggerType = 'webhook')
 	 *   4. A manual trigger fires (triggerType = 'manual')
 	 *
+	 * When workflowConfig is provided, the runtime config includes the full workflow
+	 * definition and trigger context. The child process routes to workflow-runner.ts.
+	 *
 	 * The method is non-blocking — it spawns the child and returns immediately.
 	 */
 	async spawnForThread(
@@ -149,6 +177,7 @@ export class AgentRuntimeService {
 		triggerType: AgentTriggerType = 'chat',
 		triggerPayload?: Record<string, unknown>,
 		userDatetime?: string,
+		workflowConfig?: WorkflowSpawnConfig,
 	): Promise<void> {
 		// Fetch the agent once — reuse for both the proxy token and runtime config build.
 		const agent = await this.agentService.getById(agentId, ownerId);
@@ -165,6 +194,7 @@ export class AgentRuntimeService {
 			triggerType,
 			triggerPayload,
 			userDatetime,
+			workflowConfig,
 		);
 
 		// Issue a scoped PROXY_TOKEN for this child process session
@@ -207,7 +237,14 @@ export class AgentRuntimeService {
 		};
 
 		logger.info(
-			{ agentId, threadId, triggerType, entry: this.agentRuntimeEntry, workspacePath },
+			{
+				agentId,
+				threadId,
+				triggerType,
+				entry: this.agentRuntimeEntry,
+				workspacePath,
+				hasWorkflow: !!workflowConfig,
+			},
 			'[runtime] spawning agent process',
 		);
 
@@ -300,6 +337,8 @@ export class AgentRuntimeService {
 	 * Contains no secrets — API keys and credentials stay in the backend process.
 	 *
 	 * The agent object is passed in from spawnForThread to avoid a redundant DB fetch.
+	 * When workflowConfig is provided, the `workflow` field is included so the child
+	 * process routes to workflow-runner.ts.
 	 */
 	private async buildRuntimeConfig(
 		agent: Agent,
@@ -308,6 +347,7 @@ export class AgentRuntimeService {
 		triggerType: AgentTriggerType,
 		triggerPayload?: Record<string, unknown>,
 		userDatetime?: string,
+		workflowConfig?: WorkflowSpawnConfig,
 	): Promise<AgentRuntimeConfig> {
 		let modelProvider = '';
 		let modelId = '';
@@ -418,6 +458,17 @@ export class AgentRuntimeService {
 			// User's local datetime — used to inject current date/time context into the system prompt.
 			// Falls back to server time in agent-runner.ts when absent (cron/webhook/manual triggers).
 			...(userDatetime !== undefined ? { userDatetime } : {}),
+			// Workflow config — present only for workflow runs. Causes the child to route
+			// to workflow-runner.ts rather than agent-runner.ts.
+			...(workflowConfig !== undefined
+				? {
+						workflow: {
+							runId: workflowConfig.runId,
+							definition: workflowConfig.definition,
+							triggerContext: workflowConfig.triggerContext,
+						},
+					}
+				: {}),
 		};
 	}
 }

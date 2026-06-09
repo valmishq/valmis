@@ -10,7 +10,9 @@
 
 	let { data }: { data: PageData } = $props();
 
-	let threads = $state<AgentThread[]>(data.threads);
+	// Use $derived so the list stays in sync when invalidateAll() refreshes page data
+	// (e.g. when the workflow-thread toggle triggers a reload via invalidateAll).
+	let threads = $derived(data.threads);
 	let isCreatingThread = $state(false);
 	/** Mobile sidebar overlay open state */
 	let sidebarOpen = $state(false);

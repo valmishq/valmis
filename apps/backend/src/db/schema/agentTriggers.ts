@@ -10,6 +10,8 @@ import {
 } from 'drizzle-orm/pg-core';
 import { agents } from './agents.js';
 import { agentTriggerTypeEnum } from './agentThreads.js';
+// workflows imported lazily to avoid circular: workflows → agents, agentTriggers → agents + workflows
+import { workflows } from './workflows.js';
 
 /**
  * Agent triggers — defines what events wake up an agent to spawn a container.
@@ -60,11 +62,20 @@ export const agentTriggers = pgTable(
 		lastFiredAt: timestamp('last_fired_at'),
 		/** Optional human description of what this trigger does */
 		description: text('description'),
+		/**
+		 * Optional FK to the workflow this trigger executes when fired.
+		 * When set: trigger creates a workflow_run and executes the workflow pipeline.
+		 * When null: trigger has no workflow attached (inert until a workflow is assigned).
+		 * ON DELETE SET NULL — deleting a workflow disables the trigger's workflow execution
+		 * without removing the trigger itself.
+		 */
+		workflowId: uuid('workflow_id').references(() => workflows.id, { onDelete: 'set null' }),
 		createdAt: timestamp('created_at').defaultNow().notNull(),
 		updatedAt: timestamp('updated_at').defaultNow().notNull(),
 	},
 	(table) => [
 		index('agent_triggers_agent_id_idx').on(table.agentId),
 		index('agent_triggers_owner_id_idx').on(table.ownerId),
+		index('agent_triggers_workflow_id_idx').on(table.workflowId),
 	],
 );

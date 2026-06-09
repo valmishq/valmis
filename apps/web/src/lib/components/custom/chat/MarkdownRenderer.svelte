@@ -32,6 +32,11 @@
 						: (hljs.highlightAuto(text).language ?? 'plaintext');
 				const highlighted = hljs.highlight(text, { language }).value;
 				return `<pre><code class="hljs language-${language}">${highlighted}</code></pre>`;
+			},
+			// Open all links in a new tab with a safe rel attribute
+			link({ href, title, text }: { href: string; title?: string | null; text: string }): string {
+				const titleAttr = title ? ` title="${title}"` : '';
+				return `<a href="${href}"${titleAttr} target="_blank" rel="noopener noreferrer">${text}</a>`;
 			}
 		}
 	});

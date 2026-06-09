@@ -17,3 +17,6 @@ export {
 	getSkillCatalogEntry,
 	clearSkillCatalogCache,
 } from './skills/registry.js';
+
+export { validateWorkflowCreate, validateWorkflowUpdate } from './workflow/validator.js';
+export type { ValidatedWorkflowCreate, ValidatedWorkflowUpdate } from './workflow/validator.js';

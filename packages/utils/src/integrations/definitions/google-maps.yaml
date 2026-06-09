@@ -1,0 +1,35 @@
+id: googleMapsApi
+name: Google Maps
+brandName: Google Maps
+type: apiKey
+icon: /logos/google-maps.svg
+description: >
+  Connect to the Google Maps Platform APIs using an API key. Enables access
+  to the Maps JavaScript API, Geocoding API, Directions API, Places API,
+  Distance Matrix API, and other Google Maps services. The API key is
+  appended as the 'key' query parameter on every request.
+documentationUrl: https://developers.google.com/maps/documentation
+properties:
+  - name: apiKey
+    displayName: API Key
+    type: secret
+    required: true
+    description: >
+      Your Google Maps Platform API key. Create one at
+      https://console.cloud.google.com/google/maps-apis/credentials.
+      Make sure to enable the specific APIs you need (Geocoding, Directions,
+      Places, etc.) for your project and restrict the key to your server's
+      IP address for security.
+
+# Google Maps authenticates via a 'key' query parameter on every request.
+requestMapping:
+  qs:
+    key: '{{properties.apiKey}}'
+
+testRequest:
+  method: GET
+  # Geocoding API — looks up a well-known address to verify the key is valid
+  # and the Geocoding API is enabled. Returns a minimal JSON response.
+  url: https://maps.googleapis.com/maps/api/geocode/json?address=New+York
+  # 'status' is always present; 'results[0].place_id' identifies the matched place.
+  accountIdentifierKey: status

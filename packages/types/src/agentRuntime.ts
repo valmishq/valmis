@@ -1,4 +1,5 @@
 import type { ApiResponse } from './api.js';
+import type { Workflow, WorkflowTriggerContext } from './workflow.js';
 
 // ─── Enum mirrors (TypeScript unions matching the pgEnum values) ──────────────
 
@@ -29,6 +30,12 @@ export interface AgentThread {
 	 * Null for threads created before this field was introduced.
 	 */
 	contextTokens?: number;
+	/**
+	 * True when this thread was created automatically by a workflow execution
+	 * (cron / webhook / manual trigger with a workflowId).
+	 * False for interactive user chat threads.
+	 */
+	isWorkflowThread: boolean;
 	createdAt: Date;
 	updatedAt: Date;
 }
@@ -112,6 +119,12 @@ export interface AgentTrigger {
 	isEnabled: boolean;
 	lastFiredAt?: Date;
 	description?: string;
+	/**
+	 * Optional ID of the workflow this trigger executes when fired.
+	 * When set: trigger creates a workflow_run and executes the pipeline.
+	 * When null/undefined: trigger has no workflow attached.
+	 */
+	workflowId?: string;
 	createdAt: Date;
 	updatedAt: Date;
 }
@@ -251,6 +264,17 @@ export interface AgentRuntimeConfig {
 	 * Falls back to server time if absent (e.g. non-chat triggers like cron/webhook).
 	 */
 	userDatetime?: string;
+	/**
+	 * Present only for workflow runs (triggerType !== 'chat').
+	 * Contains the full workflow definition (steps, etc.) and the normalized
+	 * trigger context (type, triggerName, firedAt, payload) for the run.
+	 * When present, workflow-runner.ts handles execution instead of agent-runner.ts.
+	 */
+	workflow?: {
+		runId: string;
+		definition: Workflow;
+		triggerContext: WorkflowTriggerContext;
+	};
 }
 
 // ─── SSE Event types (host → browser) ────────────────────────────────────────
