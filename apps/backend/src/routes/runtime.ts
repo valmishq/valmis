@@ -410,14 +410,14 @@ export function createRuntimeRouter(
 			return;
 		}
 
-		// Verify ownership and agent-thread relationship
-		const thread = await sessionService.getThreadById(threadId, ownerId);
-		if (!thread || thread.agentId !== agentId) {
-			res.status(404).json({ success: false, error: 'Thread not found' });
-			return;
-		}
-
 		try {
+			// Verify ownership and agent-thread relationship
+			const thread = await sessionService.getThreadById(threadId, ownerId);
+			if (!thread || thread.agentId !== agentId) {
+				res.status(404).json({ success: false, error: 'Thread not found' });
+				return;
+			}
+
 			await sessionService.updateThreadTitle(threadId, ownerId, title.trim());
 			const updated = await sessionService.getThreadById(threadId, ownerId);
 			const body: AgentThreadResponse = { success: true, data: updated! };
@@ -446,14 +446,14 @@ export function createRuntimeRouter(
 			return;
 		}
 
-		// Verify ownership and agent-thread relationship
-		const thread = await sessionService.getThreadById(threadId, ownerId);
-		if (!thread || thread.agentId !== agentId) {
-			res.status(404).json({ success: false, error: 'Thread not found' });
-			return;
-		}
-
 		try {
+			// Verify ownership and agent-thread relationship
+			const thread = await sessionService.getThreadById(threadId, ownerId);
+			if (!thread || thread.agentId !== agentId) {
+				res.status(404).json({ success: false, error: 'Thread not found' });
+				return;
+			}
+
 			const updated = await sessionService.pinThread(threadId, ownerId, isPinned);
 			if (!updated) {
 				res.status(404).json({ success: false, error: 'Thread not found' });
@@ -479,22 +479,27 @@ export function createRuntimeRouter(
 			return;
 		}
 
-		// Verify ownership and agent-thread relationship
-		const thread = await sessionService.getThreadById(threadId, ownerId);
-		if (!thread || thread.agentId !== agentId) {
-			const body: AgentThreadDeleteResponse = { success: false, error: 'Thread not found' };
-			res.status(404).json(body);
-			return;
-		}
+		try {
+			// Verify ownership and agent-thread relationship
+			const thread = await sessionService.getThreadById(threadId, ownerId);
+			if (!thread || thread.agentId !== agentId) {
+				const body: AgentThreadDeleteResponse = { success: false, error: 'Thread not found' };
+				res.status(404).json(body);
+				return;
+			}
 
-		const deleted = await sessionService.deleteThread(threadId, ownerId);
-		if (!deleted) {
-			const body: AgentThreadDeleteResponse = { success: false, error: 'Thread not found' };
-			res.status(404).json(body);
-			return;
+			const deleted = await sessionService.deleteThread(threadId, ownerId);
+			if (!deleted) {
+				const body: AgentThreadDeleteResponse = { success: false, error: 'Thread not found' };
+				res.status(404).json(body);
+				return;
+			}
+			const body: AgentThreadDeleteResponse = { success: true, data: { deleted: true } };
+			res.json(body);
+		} catch (err) {
+			logger.error({ err, threadId }, '[runtime] failed to delete thread');
+			res.status(500).json({ success: false, error: 'Failed to delete thread' });
 		}
-		const body: AgentThreadDeleteResponse = { success: true, data: { deleted: true } };
-		res.json(body);
 	});
 
 	/**
@@ -509,9 +514,14 @@ export function createRuntimeRouter(
 			return;
 		}
 
-		const threads = await sessionService.listThreads(agentId, ownerId);
-		const body: AgentThreadsListResponse = { success: true, data: threads };
-		res.json(body);
+		try {
+			const threads = await sessionService.listThreads(agentId, ownerId);
+			const body: AgentThreadsListResponse = { success: true, data: threads };
+			res.json(body);
+		} catch (err) {
+			logger.error({ err, agentId }, '[runtime] failed to list threads');
+			res.status(500).json({ success: false, error: 'Failed to list threads' });
+		}
 	});
 
 	/**
@@ -532,25 +542,25 @@ export function createRuntimeRouter(
 			return;
 		}
 
-		// Verify thread belongs to the authenticated user
-		const thread = await sessionService.getThreadById(threadId, ownerId);
-		if (!thread) {
-			res.status(404).json({ success: false, error: 'Thread not found' });
-			return;
-		}
+		try {
+			// Verify thread belongs to the authenticated user
+			const thread = await sessionService.getThreadById(threadId, ownerId);
+			if (!thread) {
+				res.status(404).json({ success: false, error: 'Thread not found' });
+				return;
+			}
 
-		// Verify the thread belongs to the requested agent — prevents cross-agent URL tricks
-		if (thread.agentId !== agentId) {
-			res.status(404).json({ success: false, error: 'Thread not found' });
-			return;
-		}
+			// Verify the thread belongs to the requested agent — prevents cross-agent URL tricks
+			if (thread.agentId !== agentId) {
+				res.status(404).json({ success: false, error: 'Thread not found' });
+				return;
+			}
 
-		// If the thread is in a HITL waiting state, resolve the pending request instead
-		// of spawning a new child process. The child is still running and awaiting the
-		// response to its /internal/hitl/request long-poll.
-		if (proxyService.hasPendingHitl(threadId)) {
-			logger.info({ threadId }, '[runtime] resolving pending HITL request with user message');
-			try {
+			// If the thread is in a HITL waiting state, resolve the pending request instead
+			// of spawning a new child process. The child is still running and awaiting the
+			// response to its /internal/hitl/request long-poll.
+			if (proxyService.hasPendingHitl(threadId)) {
+				logger.info({ threadId }, '[runtime] resolving pending HITL request with user message');
 				const userMessage = await sessionService.appendMessage({
 					threadId,
 					role: 'user',
@@ -558,19 +568,14 @@ export function createRuntimeRouter(
 				});
 				proxyService.resolveHitlRequest(threadId, content);
 				res.status(201).json({ success: true, data: userMessage });
-			} catch (err) {
-				logger.error({ err, threadId }, '[runtime] failed to resolve HITL request');
-				res.status(500).json({ success: false, error: 'Failed to send message' });
+				return;
 			}
-			return;
-		}
 
-		if (thread.status === 'running') {
-			res.status(409).json({ success: false, error: 'Agent is currently processing' });
-			return;
-		}
+			if (thread.status === 'running') {
+				res.status(409).json({ success: false, error: 'Agent is currently processing' });
+				return;
+			}
 
-		try {
 			const userMessage = await sessionService.appendMessage({
 				threadId,
 				role: 'user',
@@ -639,16 +644,21 @@ export function createRuntimeRouter(
 			return;
 		}
 
-		// Verify thread ownership and that it belongs to the requested agent
-		const thread = await sessionService.getThreadById(threadId, ownerId);
-		if (!thread || thread.agentId !== agentId) {
-			res.status(404).json({ success: false, error: 'Thread not found' });
-			return;
-		}
+		try {
+			// Verify thread ownership and that it belongs to the requested agent
+			const thread = await sessionService.getThreadById(threadId, ownerId);
+			if (!thread || thread.agentId !== agentId) {
+				res.status(404).json({ success: false, error: 'Thread not found' });
+				return;
+			}
 
-		const messages = await sessionService.listMessages(threadId, ownerId);
-		const body: AgentMessagesListResponse = { success: true, data: messages };
-		res.json(body);
+			const messages = await sessionService.listMessages(threadId, ownerId);
+			const body: AgentMessagesListResponse = { success: true, data: messages };
+			res.json(body);
+		} catch (err) {
+			logger.error({ err, threadId }, '[runtime] failed to get messages');
+			res.status(500).json({ success: false, error: 'Failed to get messages' });
+		}
 	});
 
 	/**
@@ -668,33 +678,38 @@ export function createRuntimeRouter(
 			return;
 		}
 
-		// Verify ownership and agent match before opening the SSE connection
-		const thread = await sessionService.getThreadById(threadId, ownerId);
-		if (!thread || thread.agentId !== agentId) {
-			res.status(404).json({ success: false, error: 'Thread not found' });
-			return;
+		try {
+			// Verify ownership and agent match before opening the SSE connection
+			const thread = await sessionService.getThreadById(threadId, ownerId);
+			if (!thread || thread.agentId !== agentId) {
+				res.status(404).json({ success: false, error: 'Thread not found' });
+				return;
+			}
+
+			// SSE headers
+			res.setHeader('Content-Type', 'text/event-stream');
+			res.setHeader('Cache-Control', 'no-cache');
+			res.setHeader('Connection', 'keep-alive');
+			res.setHeader('X-Accel-Buffering', 'no'); // disable nginx buffering
+			res.flushHeaders();
+
+			// Heartbeat every 15s to keep the connection alive through proxies
+			const heartbeat = setInterval(() => {
+				res.write(': heartbeat\n\n');
+			}, 15_000);
+
+			const unsubscribe = agentStreamBus.subscribe(threadId, (event) => {
+				res.write(`data: ${JSON.stringify(event)}\n\n`);
+			});
+
+			req.on('close', () => {
+				clearInterval(heartbeat);
+				unsubscribe();
+			});
+		} catch (err) {
+			logger.error({ err, threadId }, '[runtime] failed to setup stream');
+			res.status(500).json({ success: false, error: 'Failed to setup stream' });
 		}
-
-		// SSE headers
-		res.setHeader('Content-Type', 'text/event-stream');
-		res.setHeader('Cache-Control', 'no-cache');
-		res.setHeader('Connection', 'keep-alive');
-		res.setHeader('X-Accel-Buffering', 'no'); // disable nginx buffering
-		res.flushHeaders();
-
-		// Heartbeat every 15s to keep the connection alive through proxies
-		const heartbeat = setInterval(() => {
-			res.write(': heartbeat\n\n');
-		}, 15_000);
-
-		const unsubscribe = agentStreamBus.subscribe(threadId, (event) => {
-			res.write(`data: ${JSON.stringify(event)}\n\n`);
-		});
-
-		req.on('close', () => {
-			clearInterval(heartbeat);
-			unsubscribe();
-		});
 	});
 
 	// ─── Trigger Routes ───────────────────────────────────────────────────────
@@ -750,9 +765,14 @@ export function createRuntimeRouter(
 			return;
 		}
 
-		const triggers = await triggerService.listByAgent(agentId, ownerId);
-		const body: AgentTriggersListResponse = { success: true, data: triggers };
-		res.json(body);
+		try {
+			const triggers = await triggerService.listByAgent(agentId, ownerId);
+			const body: AgentTriggersListResponse = { success: true, data: triggers };
+			res.json(body);
+		} catch (err) {
+			logger.error({ err, agentId }, '[runtime] failed to list triggers');
+			res.status(500).json({ success: false, error: 'Failed to list triggers' });
+		}
 	});
 
 	/**
@@ -797,14 +817,19 @@ export function createRuntimeRouter(
 			return;
 		}
 
-		const deleted = await triggerService.delete(triggerId, ownerId);
-		if (!deleted) {
-			const body: AgentTriggerDeleteResponse = { success: false, error: 'Trigger not found' };
-			res.status(404).json(body);
-			return;
+		try {
+			const deleted = await triggerService.delete(triggerId, ownerId);
+			if (!deleted) {
+				const body: AgentTriggerDeleteResponse = { success: false, error: 'Trigger not found' };
+				res.status(404).json(body);
+				return;
+			}
+			const body: AgentTriggerDeleteResponse = { success: true, data: { deleted: true } };
+			res.json(body);
+		} catch (err) {
+			logger.error({ err, triggerId }, '[runtime] failed to delete trigger');
+			res.status(500).json({ success: false, error: 'Failed to delete trigger' });
 		}
-		const body: AgentTriggerDeleteResponse = { success: true, data: { deleted: true } };
-		res.json(body);
 	});
 
 	/**
