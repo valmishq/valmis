@@ -1,0 +1,1 @@
+ALTER TABLE "agents" ADD COLUMN "allow_internet_access" boolean DEFAULT true NOT NULL;
