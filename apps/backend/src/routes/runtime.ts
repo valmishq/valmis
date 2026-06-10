@@ -7,11 +7,12 @@ import { AgentRuntimeService } from '../services/AgentRuntimeService.js';
 import { AgentProxyService } from '../services/AgentProxyService.js';
 import { AgentLlmProxyService } from '../services/AgentLlmProxyService.js';
 import { AgentMemoryService } from '../services/AgentMemoryService.js';
-import { AgentService } from '../services/AgentService.js';
 import { TriggerService } from '../services/TriggerService.js';
 import { WorkflowRunService } from '../services/WorkflowRunService.js';
 import { WorkflowService } from '../services/WorkflowService.js';
 import { agentStreamBus } from '../services/AgentStreamBus.js';
+import { MessagePipeline } from '../channels/pipeline.js';
+import { WebAdapter } from '../channels/web/adapter.js';
 import { logger } from '../config/logger.js';
 import type { AuthService } from '../services/AuthService.js';
 import type {
@@ -99,9 +100,10 @@ export function createRuntimeRouter(
 	llmProxyService: AgentLlmProxyService,
 	triggerService: TriggerService,
 	memoryService: AgentMemoryService,
-	agentService: AgentService,
 	workflowRunService: WorkflowRunService,
 	workflowService: WorkflowService,
+	messagePipeline: MessagePipeline,
+	webAdapter: WebAdapter,
 ): Router {
 	const router = Router();
 	const auth = requireAuth(authService);
@@ -340,13 +342,9 @@ export function createRuntimeRouter(
 	 * POST /v1/runtime/:agentId/threads
 	 * Create a new chat thread.
 	 *
-	 * After creating the thread, fire-and-forget: find the most recently created
-	 * previous thread for this agent and summarise its user messages into a
-	 * semantic memory entry. This gives the agent cross-session recall without
-	 * any additional user action.
-	 *
-	 * Skipped if the agent has no embeddingModelConfigId (memory write would fail)
-	 * or no modelConfigId (LLM summarisation would fail).
+	 * Previous-thread summarization into long-term memory is NOT triggered here —
+	 * the MessagePipeline fires it on the thread's first user message, so threads
+	 * created by any channel (web, telegram, discord) summarize exactly once.
 	 */
 	router.post('/:agentId/threads', auth, async (req: Request, res: Response) => {
 		const { agentId } = req.params as { agentId: string };
@@ -361,31 +359,6 @@ export function createRuntimeRouter(
 			const thread = await sessionService.createThread({ agentId, ownerId, title });
 			const body: AgentThreadResponse = { success: true, data: thread };
 			res.status(201).json(body);
-
-			// Fire-and-forget: summarize the previous thread into long-term memory.
-			// Done after responding so it never delays the client.
-			// Only runs when the agent has both an LLM and an embedding model configured.
-			(async () => {
-				try {
-					const agent = await agentService.getById(agentId, ownerId);
-					if (!agent?.modelConfigId || !agent.embeddingModelConfigId) return;
-
-					const prevThread = await sessionService.getLastThreadBeforeId(
-						agentId,
-						ownerId,
-						thread.id,
-					);
-					if (!prevThread) return;
-
-					await llmProxyService.summarizeThreadToMemory(agentId, ownerId, prevThread.id);
-				} catch (bgErr) {
-					// Non-fatal background task — log and swallow
-					logger.warn(
-						{ bgErr, agentId },
-						'[runtime] background thread summarization error (non-fatal)',
-					);
-				}
-			})();
 		} catch (err) {
 			logger.error({ err }, '[runtime] failed to create thread');
 			res.status(500).json({ success: false, error: 'Failed to create thread' });
@@ -527,6 +500,11 @@ export function createRuntimeRouter(
 	/**
 	 * POST /v1/runtime/:agentId/threads/:threadId/messages
 	 * Send a user message to a thread and spawn a container to process it.
+	 *
+	 * The web channel goes through the same MessagePipeline as every external
+	 * channel (HITL resolution, concurrency guard, persistence, auto-title,
+	 * previous-thread summarization, spawn). The route only does what the
+	 * adapters do for their platforms: authenticate and resolve identity.
 	 */
 	router.post('/:agentId/threads/:threadId/messages', auth, async (req: Request, res: Response) => {
 		const { agentId, threadId } = req.params as { agentId: string; threadId: string };
@@ -535,97 +513,36 @@ export function createRuntimeRouter(
 			res.status(401).json({ success: false, error: 'Unauthorized' });
 			return;
 		}
-		const { content, userDatetime } = req.body as { content?: string; userDatetime?: string };
-
-		if (!content) {
-			res.status(400).json({ success: false, error: 'content is required' });
-			return;
-		}
 
 		try {
-			// Verify thread belongs to the authenticated user
+			// Verify thread belongs to the authenticated user and to the requested
+			// agent — prevents cross-user/cross-agent access via URL manipulation.
 			const thread = await sessionService.getThreadById(threadId, ownerId);
-			if (!thread) {
+			if (!thread || thread.agentId !== agentId) {
 				res.status(404).json({ success: false, error: 'Thread not found' });
 				return;
 			}
 
-			// Verify the thread belongs to the requested agent — prevents cross-agent URL tricks
-			if (thread.agentId !== agentId) {
-				res.status(404).json({ success: false, error: 'Thread not found' });
-				return;
-			}
-
-			// If the thread is in a HITL waiting state, resolve the pending request instead
-			// of spawning a new child process. The child is still running and awaiting the
-			// response to its /internal/hitl/request long-poll.
-			if (proxyService.hasPendingHitl(threadId)) {
-				logger.info({ threadId }, '[runtime] resolving pending HITL request with user message');
-				const userMessage = await sessionService.appendMessage({
-					threadId,
-					role: 'user',
-					content: [{ type: 'text', text: content }],
-				});
-				proxyService.resolveHitlRequest(threadId, content);
-				res.status(201).json({ success: true, data: userMessage });
-				return;
-			}
-
-			if (thread.status === 'running') {
-				res.status(409).json({ success: false, error: 'Agent is currently processing' });
-				return;
-			}
-
-			const userMessage = await sessionService.appendMessage({
-				threadId,
-				role: 'user',
-				content: [{ type: 'text', text: content }],
+			const inbound = await webAdapter.handleInbound({
+				rawBody: req.body,
+				headers: req.headers,
+				params: { agentId, threadId, userId: ownerId },
+				query: {},
 			});
 
-			// After the 2nd user message and the thread has no custom title yet,
-			// generate a title non-blocking using the agent's LLM and emit it via SSE.
-			const allMessages = await sessionService.listMessages(threadId, ownerId);
-			const userMessages = allMessages.filter((m) => m.role === 'user');
-			if (userMessages.length === 2) {
-				const firstText =
-					userMessages[0].content.find((b) => b.type === 'text')?.type === 'text'
-						? (
-								userMessages[0].content.find((b) => b.type === 'text') as {
-									type: 'text';
-									text: string;
-								}
-							).text
-						: '';
-				const secondText = content;
-
-				// Fire-and-forget: title generation should not block the response
-				llmProxyService
-					.generateThreadTitle(threadId, ownerId, agentId, firstText, secondText)
-					.then((title) => {
-						if (title) {
-							agentStreamBus.emit(threadId, {
-								type: 'thread_title_updated',
-								threadId,
-								title,
-							});
-						}
-					})
-					.catch((err: Error) => {
-						logger.warn({ err, threadId }, '[runtime] thread title generation error (non-fatal)');
-					});
+			if (!inbound) {
+				res.status(400).json({ success: false, error: 'content is required' });
+				return;
 			}
 
-			// Spawn container (non-blocking), passing the user's local datetime for system prompt injection
-			await runtimeService.spawnForThread(
-				agentId,
-				threadId,
-				ownerId,
-				'chat',
-				undefined,
-				userDatetime,
-			);
+			const result = await messagePipeline.process(inbound, webAdapter);
 
-			res.status(201).json({ success: true, data: userMessage });
+			if (!result.ok) {
+				res.status(result.status).json({ success: false, error: result.error });
+				return;
+			}
+
+			res.status(201).json({ success: true, data: result.userMessage });
 		} catch (err) {
 			logger.error({ err, agentId, threadId }, '[runtime] failed to send message');
 			res.status(500).json({ success: false, error: 'Failed to send message' });

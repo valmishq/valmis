@@ -40,8 +40,14 @@ const resolverService = new CredentialResolverService(credentialService);
  *   PUT    /v1/credentials/:id               — update a credential (supports sentinel values)
  *   POST   /v1/credentials/:id/test          — test a credential (saves connectedAccount on success)
  *   DELETE /v1/credentials/:id               — delete a credential
+ *
+ * @param onCredentialDeleted - Invoked after a credential is deleted. Used to
+ *   stop channel bot pollers/gateways still running on the deleted token.
  */
-export function createCredentialsRouter(authService: AuthService): Router {
+export function createCredentialsRouter(
+	authService: AuthService,
+	onCredentialDeleted?: (credentialId: string) => void,
+): Router {
 	const router = Router();
 	const auth = requireAuth(authService);
 
@@ -428,6 +434,11 @@ export function createCredentialsRouter(authService: AuthService): Router {
 			res.status(404).json(body);
 			return;
 		}
+
+		// Notify listeners (e.g. channel bot managers) so anything running on the
+		// deleted credential's token is shut down immediately.
+		onCredentialDeleted?.(deleteId);
+
 		const body: CredentialDeleteResponse = { success: true, data: { deleted: true } };
 		res.json(body);
 	});

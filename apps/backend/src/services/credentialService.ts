@@ -183,6 +183,23 @@ export class CredentialService {
 		return JSON.parse(decrypted) as Record<string, unknown>;
 	}
 
+	/**
+	 * Decrypt credential data by ID alone — no ownership check.
+	 * INTERNAL USE ONLY — call only from trusted server-side contexts (e.g. poller startup).
+	 * Never expose this data to HTTP request handlers.
+	 */
+	async getDecryptedDataInternal(id: string): Promise<Record<string, unknown> | null> {
+		const rows = await db
+			.select({ data: credentials.data })
+			.from(credentials)
+			.where(eq(credentials.id, id))
+			.limit(1);
+
+		if (!rows[0]) return null;
+		const decrypted = this.encryption.decrypt(rows[0].data);
+		return JSON.parse(decrypted) as Record<string, unknown>;
+	}
+
 	/** Create a new credential, encrypting the data payload */
 	async create(input: CreateCredentialInput): Promise<CredentialMetadata> {
 		const id = uuidv4();

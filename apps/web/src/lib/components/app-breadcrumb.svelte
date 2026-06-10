@@ -194,6 +194,10 @@
 			return [{ label: 'Account', href: '/app/account/profile' }, { label: 'API Keys' }];
 		}
 
+		if (pathname === '/app/account/channels') {
+			return [{ label: 'Account', href: '/app/account/profile' }, { label: 'Channels' }];
+		}
+
 		// ── fallback: capitalise path segments ────────────────────────────────────
 		const parts = pathname.replace(/^\/app\//, '').split('/');
 		const fallback: BreadcrumbSegment[] = parts.map((part: string, i: number) => {

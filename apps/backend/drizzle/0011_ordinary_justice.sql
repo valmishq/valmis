@@ -1,0 +1,4 @@
+ALTER TABLE "channel_links" ADD COLUMN "credential_id" uuid;--> statement-breakpoint
+ALTER TABLE "channel_pairing_codes" ADD COLUMN "credential_id" uuid;--> statement-breakpoint
+ALTER TABLE "channel_links" ADD CONSTRAINT "channel_links_credential_id_credentials_id_fk" FOREIGN KEY ("credential_id") REFERENCES "public"."credentials"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "channel_pairing_codes" ADD CONSTRAINT "channel_pairing_codes_credential_id_credentials_id_fk" FOREIGN KEY ("credential_id") REFERENCES "public"."credentials"("id") ON DELETE cascade ON UPDATE no action;

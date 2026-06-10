@@ -18,6 +18,7 @@
 	import KeyIcon from '@lucide/svelte/icons/key';
 	import LogOutIcon from '@lucide/svelte/icons/log-out';
 	import MoonIcon from '@lucide/svelte/icons/moon';
+	import { MessageCircleMore } from '@lucide/svelte';
 	import ChevronsUpDownIcon from '@lucide/svelte/icons/chevrons-up-down';
 	import type { User } from '@repo/types';
 
@@ -210,6 +211,15 @@
 							>
 								<KeyIcon class="mr-2 size-4" />
 								API Keys
+							</DropdownMenu.Item>
+							<DropdownMenu.Item
+								onSelect={() => {
+									closeMobileIfNeeded();
+									goto('/app/account/channels');
+								}}
+							>
+								<MessageCircleMore class="mr-2 size-4" />
+								Channels
 							</DropdownMenu.Item>
 						</DropdownMenu.Group>
 

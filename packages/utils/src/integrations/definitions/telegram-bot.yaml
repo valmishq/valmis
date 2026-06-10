@@ -1,0 +1,32 @@
+id: telegram-bot
+name: Telegram Bot
+brandName: Telegram
+type: custom
+icon: /logos/telegram.svg
+description: >
+  Connect a Telegram Bot to receive and respond to messages via long polling.
+  Create a bot via @BotFather on Telegram to get your bot token.
+documentationUrl: https://core.telegram.org/bots#how-do-i-create-a-bot
+properties:
+  - name: botToken
+    displayName: Bot Token
+    type: secret
+    required: true
+    description: >
+      Go to https://t.me/BotFather on Telegram, send /newbot, follow the
+      instructions, then copy the token provided (format: 123456:ABC-DEF...).
+  - name: botUsername
+    displayName: Bot Username
+    type: string
+    required: true
+    description: >
+      The username of your bot without the @ prefix (e.g. my_agent_bot).
+      Found in the BotFather response after creating the bot.
+
+# Uses the bot token to call the Bot API directly (not via requestMapping —
+# the TelegramAdapter reads botToken from the decrypted credential data).
+# The testRequest verifies the token is valid by calling getMe.
+testRequest:
+  method: GET
+  url: 'https://api.telegram.org/bot{{properties.botToken}}/getMe'
+  accountIdentifierKey: result.username

@@ -109,6 +109,9 @@ importers:
       uuid:
         specifier: ^14.0.0
         version: 14.0.0
+      ws:
+        specifier: ^8.21.0
+        version: 8.21.0
       zod:
         specifier: ^4.4.3
         version: 4.4.3
@@ -140,6 +143,9 @@ importers:
       '@types/uuid':
         specifier: ^11.0.0
         version: 11.0.0
+      '@types/ws':
+        specifier: ^8.18.1
+        version: 8.18.1
       drizzle-kit:
         specifier: ^0.31.10
         version: 0.31.10
@@ -1603,6 +1609,9 @@ packages:
   '@types/uuid@11.0.0':
     resolution: {integrity: sha512-HVyk8nj2m+jcFRNazzqyVKiZezyhDKrGUA3jlEcg/nZ6Ms+qHwocba1Y/AaVaznJTAM9xpdFSh+ptbNrhOGvZA==}
     deprecated: This is a stub types definition. uuid provides its own type definitions, so you do not need this installed.
+
+  '@types/ws@8.18.1':
+    resolution: {integrity: sha512-ThVF6DCVhA8kUGy+aazFQ4kXQ7E1Ty7A3ypFOe0IcJV8O/M511G99AW24irKrW56Wt44yG9+ij8FaqoBGkuBXg==}
 
   '@ucast/core@2.0.0':
     resolution: {integrity: sha512-4XVx6LzPXZGvnZO5jp39cm/G4UvuwvEdtmg+9+4+zl6uFkCcB7UJacvtMYeBE56GJVT99Zqy6Pii7dGJq3Kz9Q==}
@@ -4051,6 +4060,10 @@ snapshots:
   '@types/uuid@11.0.0':
     dependencies:
       uuid: 14.0.0
+
+  '@types/ws@8.18.1':
+    dependencies:
+      '@types/node': 25.9.1
 
   '@ucast/core@2.0.0': {}
 

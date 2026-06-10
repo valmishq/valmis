@@ -17,3 +17,5 @@ export * from './agentTriggers.js';
 export * from './workflows.js';
 export * from './workflowRuns.js';
 export * from './workflowStepLogs.js';
+export * from './channelLinks.js';
+export * from './channelPairingCodes.js';

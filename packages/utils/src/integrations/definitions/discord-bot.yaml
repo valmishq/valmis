@@ -5,7 +5,16 @@ type: bearerToken
 icon: /logos/discord.svg
 description: >
   Connect to the Discord API using a Bot Token.
-  Send messages, manage channels, roles, and interact with servers as a bot.
+  The bot communicates via DM — users pair their account with /pair <CODE>.
+
+  Setup:
+  1. Go to https://discord.com/developers/applications and create an application.
+  2. Under "Bot", click "Reset Token" and copy the token.
+  3. Under "Bot → Privileged Gateway Intents", enable:
+     - Message Content Intent (required to read DM text)
+     - Direct Messages intent is enabled by default.
+  4. Paste the token here.
+
 documentationUrl: https://discord.com/developers/docs/intro
 properties:
   - name: token
@@ -15,6 +24,7 @@ properties:
     description: >
       Go to https://discord.com/developers/applications, open your app,
       select Bot from the left menu, then reset and copy the token.
+      Also enable "Message Content Intent" under Privileged Gateway Intents.
 
 # Discord Bot tokens use "Bot " prefix (not "Bearer ")
 requestMapping:

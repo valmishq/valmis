@@ -16,6 +16,13 @@ import { createSkillsRouter } from './routes/skills.js';
 import { createRuntimeRouter } from './routes/runtime.js';
 import { createWebhooksRouter } from './routes/webhooks.js';
 import { createWorkflowsRouter } from './routes/workflows.js';
+import { createChannelsRouter } from './routes/channels.js';
+import { ChannelService } from './services/ChannelService.js';
+import { MessagePipeline } from './channels/pipeline.js';
+import { ContentProcessor } from './channels/processor.js';
+import { WebAdapter } from './channels/web/adapter.js';
+import { TelegramPollerManager } from './channels/telegram/poller-manager.js';
+import { DiscordGatewayManager } from './channels/discord/gateway-manager.js';
 import { UserService } from './services/UserService.js';
 import { AuthService } from './services/AuthService.js';
 import { EncryptionService } from './services/EncryptionService.js';
@@ -77,6 +84,45 @@ const runtimeService = new AgentRuntimeService(
 	credentialService,
 );
 
+// --- Instantiate channel services ---
+const channelService = new ChannelService();
+const contentProcessor = new ContentProcessor();
+const webAdapter = new WebAdapter();
+// messagePipeline is constructed here so it is accessible to both the runtime
+// router (which calls pipeline.process() for the web POST /messages handler)
+// and the channel pollers/gateways. The pipeline holds no per-request state
+// so it is safe to share as a singleton. Each caller passes the adapter that
+// received the message, so responses route back through the correct bot.
+const messagePipeline = new MessagePipeline(
+	sessionService,
+	runtimeService,
+	proxyService,
+	llmProxyService,
+	agentService,
+	contentProcessor,
+);
+
+// TelegramPollerManager — starts long-polling loops for all active bot credentials.
+// Instantiated here (not in the route) because it needs access to the pipeline
+// which is wired before routes are mounted.
+const telegramPollerManager = new TelegramPollerManager(
+	credentialService,
+	channelService,
+	agentService,
+	sessionService,
+	messagePipeline,
+);
+
+// DiscordGatewayManager — starts Gateway WebSocket connections for all active bot credentials.
+// Same pattern as TelegramPollerManager but uses Discord's WebSocket Gateway instead of polling.
+const discordGatewayManager = new DiscordGatewayManager(
+	credentialService,
+	channelService,
+	agentService,
+	sessionService,
+	messagePipeline,
+);
+
 // --- Instantiate workflow services ---
 const workflowService = new WorkflowService();
 const workflowRunService = new WorkflowRunService();
@@ -132,7 +178,15 @@ app.use((req, res, next) => {
 
 // --- v1 routes ---
 app.use('/v1/health', healthRouter);
-app.use('/v1/credentials', createCredentialsRouter(authService));
+app.use(
+	'/v1/credentials',
+	createCredentialsRouter(authService, (credentialId) => {
+		// Stop any channel bot poller/gateway still running on the deleted
+		// credential's token. Both calls are no-ops if nothing is tracked.
+		telegramPollerManager.stopPoller(credentialId);
+		discordGatewayManager.stopGateway(credentialId);
+	}),
+);
 app.use('/v1/oauth2', createOAuth2Router(authService));
 app.use('/v1/llm-providers', createLlmProvidersRouter(authService));
 app.use('/v1/auth', createAuthRouter(authService));
@@ -153,9 +207,23 @@ app.use(
 		llmProxyService,
 		triggerService,
 		agentMemoryService,
-		agentService,
 		workflowRunService,
 		workflowService,
+		messagePipeline,
+		webAdapter,
+	),
+);
+
+// Channel management routes — pairing codes and channel links
+app.use(
+	'/v1/channels',
+	createChannelsRouter(
+		authService,
+		channelService,
+		agentService,
+		credentialService,
+		telegramPollerManager,
+		discordGatewayManager,
 	),
 );
 
@@ -178,6 +246,10 @@ app.listen(PORT, async () => {
 	logger.info({ port: PORT }, '[backend] server running');
 	// Load and schedule all enabled cron triggers on startup
 	await triggerService.loadAll();
+	// Start Telegram long-polling for all active bot credentials
+	await telegramPollerManager.loadActivePollers();
+	// Start Discord Gateway connections for all active bot credentials
+	await discordGatewayManager.loadActiveGateways();
 });
 
 export default app;
