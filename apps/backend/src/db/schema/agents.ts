@@ -1,4 +1,13 @@
-import { pgTable, uuid, varchar, text, timestamp, index, integer } from 'drizzle-orm/pg-core';
+import {
+	pgTable,
+	uuid,
+	varchar,
+	text,
+	timestamp,
+	index,
+	integer,
+	boolean,
+} from 'drizzle-orm/pg-core';
 import { llmProviderConfigs } from './llmProviderConfigs.js';
 
 /** Agents table — stores agent configuration and identity */
@@ -33,6 +42,12 @@ export const agents = pgTable(
 		 * Stored here to allow per-agent flexibility and to validate queries.
 		 */
 		embeddingDim: integer('embedding_dim'),
+		/**
+		 * Whether the agent's sandboxed runtime may reach the public internet.
+		 * Enforced by the docker execution driver via network selection —
+		 * credential-proxied call_api requests are unaffected.
+		 */
+		allowInternetAccess: boolean('allow_internet_access').notNull().default(true),
 		createdAt: timestamp('created_at').defaultNow().notNull(),
 		updatedAt: timestamp('updated_at').defaultNow().notNull(),
 	},

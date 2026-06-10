@@ -3,16 +3,23 @@
 # Architecture: single "app" container runs both frontend (port 3000) and backend (port 4000).
 #   - Only port 3000 is exposed to the internet.
 #   - Port 4000 is bound to the Docker network only (not published externally).
-#   - Agent turns run as Node.js child processes spawned by the backend (no Docker-in-Docker).
-#   - The agent-runtime compiled output is included in the container image at build time.
+#   - Agent turns run as hardened sibling Docker containers (AGENT_RUNTIME_DRIVER=docker)
+#     spawned through the docker-socket-proxy — the raw docker socket is never
+#     mounted into the app container.
+#   - The runtime container image is built separately (build profile, see below).
 #
 # Quick start:
 #   cp .env.example .env
 #   # fill in .env values, then:
+#   docker compose --profile build build agent-runtime
 #   docker compose up -d
 
 services:
   app:
+    # Published image (CI: .github/workflows/docker-publish.yml). Pull-based
+    # deployments use it directly; `docker compose build` tags a local build
+    # with the same name.
+    image: ${APP_IMAGE:-logiclabshq/agent-int:latest}
     build:
       context: .
       dockerfile: Dockerfile
@@ -23,16 +30,68 @@ services:
       # Port 4000 (backend) is NOT published — only reachable within the Docker network
     env_file: .env
     environment:
-      # Agent-runtime entry is at a fixed path inside the image (set in Dockerfile)
+      # Agent runs execute in sibling Docker containers (real OS-level isolation)
+      AGENT_RUNTIME_DRIVER: ${AGENT_RUNTIME_DRIVER:-docker}
+      AGENT_RUNTIME_IMAGE: ${AGENT_RUNTIME_IMAGE:-logiclabshq/agent-runtime:latest}
+      # Runtime containers reach the backend via the compose service name
+      AGENT_RUNTIME_PROXY_HOST: http://app:4000
+      AGENT_RUNTIME_NETWORK: openagent_runtime
+      AGENT_RUNTIME_NETWORK_INTERNAL: openagent_runtime_internal
+      # Per-agent workspace subpaths of this named volume are mounted into
+      # runtime containers (requires Docker Engine >= 26)
+      AGENT_RUNTIME_WORKSPACE_VOLUME: openagent_agent_workspaces
+      # The backend talks to the Docker daemon through the socket proxy below —
+      # never via a raw socket mount
+      DOCKER_HOST: tcp://docker-socket-proxy:2375
+      # Fallback path used by the process driver (AGENT_RUNTIME_DRIVER=process)
       AGENT_RUNTIME_ENTRY: /repo/apps/agent-runtime/dist/index.js
-      # Per-agent workspace storage — must be a named volume or bind mount for persistence
+      # Per-agent workspace storage as seen by the backend (same volume as above)
       AGENT_WORKSPACES_PATH: /opt/agent-workspaces
     volumes:
       # Persist per-agent workspaces across container restarts
       - agent_workspaces:/opt/agent-workspaces
+    networks:
+      - default
+      # The app must be reachable from BOTH runtime networks so locked-down
+      # (internal) runtimes can still call the backend proxy endpoints
+      - agent_runtime
+      - agent_runtime_internal
     depends_on:
       postgres:
         condition: service_healthy
+      docker-socket-proxy:
+        condition: service_started
+
+  # Restricted gateway to the host Docker daemon. The raw socket is
+  # root-equivalent on the host; this proxy exposes only the API groups the
+  # DockerDriver needs (container lifecycle, image inspect, network inspect).
+  # It must NEVER be attached to the agent runtime networks — a sandboxed
+  # agent that could reach it would control the host.
+  docker-socket-proxy:
+    image: tecnativa/docker-socket-proxy:latest
+    restart: unless-stopped
+    environment:
+      CONTAINERS: 1 # create/inspect/attach/wait/kill/remove runtime containers
+      IMAGES: 1 # runtime image presence check at startup
+      NETWORKS: 1 # runtime network inspect/create at startup
+      VOLUMES: 1 # workspace volume mounts
+      POST: 1 # required for create/start/kill/remove
+      VERSION: 1 # engine version check (volume subpath needs >= 26)
+      PING: 1
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - default
+
+  # Build-only definition for the agent runtime sandbox image. The "build"
+  # profile keeps it from ever being started as a service:
+  #   docker compose --profile build build agent-runtime
+  agent-runtime:
+    profiles: ['build']
+    build:
+      context: .
+      dockerfile: apps/agent-runtime/Dockerfile
+    image: ${AGENT_RUNTIME_IMAGE:-logiclabshq/agent-runtime:latest}
 
   postgres:
     # pgvector/pgvector includes the pgvector extension required for the vector column type
@@ -56,7 +115,19 @@ services:
 volumes:
   postgres_data:
   agent_workspaces:
+    # Stable name so the DockerDriver can reference it for subpath mounts
+    # regardless of the compose project prefix
+    name: openagent_agent_workspaces
 
 networks:
   default:
     name: openagentintegration_default
+  # Runtime network for agents WITH internet access (normal egress)
+  agent_runtime:
+    name: openagent_runtime
+  # Runtime network for agents WITHOUT internet access — internal: true blocks
+  # all egress except other containers on this network (i.e. the backend).
+  # Credential-proxied call_api requests still work; run_terminal curl/pip do not.
+  agent_runtime_internal:
+    name: openagent_runtime_internal
+    internal: true

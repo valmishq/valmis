@@ -10,6 +10,7 @@
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Label } from '$lib/components/ui/label/index.js';
 	import { Separator } from '$lib/components/ui/separator/index.js';
+	import { Switch } from '$lib/components/ui/switch/index.js';
 	import PageHeader from '$lib/components/page-header.svelte';
 	import AgentSkillsPanel from '$lib/components/custom/agent-skills-panel.svelte';
 	import AgentCredentialsPanel from '$lib/components/custom/agent-credentials-panel.svelte';
@@ -71,6 +72,8 @@
 	let selectedEmbeddingModelConfigId = $state<string>(agent?.embeddingModelConfigId ?? '');
 	/** Skill selections — same pattern as credential checkboxes */
 	let selectedSkillNames = $state<Set<string>>(new Set(data.assignedSkillNames ?? []));
+	/** Sandbox internet egress — only enforced when the backend runs the docker driver */
+	let allowInternetAccess = $state(agent?.allowInternetAccess ?? true);
 
 	// Auto-select first model on create mode when configs load
 	$effect(() => {
@@ -186,6 +189,8 @@
 		<input type="hidden" name="agentId" value={agent.id} />
 	{/if}
 	<input type="hidden" name="avatarUrl" value={avatarEmoji} />
+	<!-- Switch is not a native form control — serialise it through a hidden input -->
+	<input type="hidden" name="allowInternetAccess" value={allowInternetAccess ? 'true' : 'false'} />
 	<!-- Credential IDs: one hidden input per selected credential -->
 	{#each [...selectedCredentialIds] as credId (credId)}
 		<input type="hidden" name="credentialIds" value={credId} />
@@ -356,6 +361,33 @@
 						existing memory entries.
 					</p>
 				{/if}
+			</div>
+		</Card.Content>
+	</Card.Root>
+
+	<!-- ── Sandbox ───────────────────────────────────────────────────────────── -->
+	<Card.Root>
+		<Card.Header>
+			<Card.Title class="text-sm font-medium">Sandbox</Card.Title>
+			<Card.Description class="text-xs">
+				Control what the agent's isolated runtime environment can reach.
+			</Card.Description>
+		</Card.Header>
+		<Card.Content>
+			<div class="flex items-center justify-between gap-4">
+				<div class="space-y-0.5">
+					<Label for="allow-internet-access">Allow internet access</Label>
+					<p class="text-xs text-muted-foreground">
+						When off, shell and code execution inside the sandbox cannot reach the internet.
+						Credential-based API calls are proxied through the host and keep working either way.
+						Only enforced when the server runs agents in Docker isolation.
+					</p>
+				</div>
+				<Switch
+					id="allow-internet-access"
+					bind:checked={allowInternetAccess}
+					aria-label="Allow internet access"
+				/>
 			</div>
 		</Card.Content>
 	</Card.Root>

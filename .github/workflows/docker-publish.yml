@@ -1,0 +1,83 @@
+# Builds and publishes the two deployment images to Docker Hub:
+#
+#   logiclabshq/agent-int       — app image (frontend + backend), root Dockerfile
+#   logiclabshq/agent-runtime   — agent sandbox image, apps/agent-runtime/Dockerfile
+#
+# Both images are published with IDENTICAL tags from the same commit — they must
+# stay version-locked: the runtime's ProxyClient and the backend's
+# /v1/runtime/internal/* protocol evolve together, and DockerDriver auto-pulls
+# AGENT_RUNTIME_IMAGE at backend startup.
+#
+# Triggers:
+#   - Git tags matching v* (e.g. v1.2.0) → publishes 1.2.0, 1.2, latest
+#   - Manual run (workflow_dispatch)     → publishes the selected branch as "edge"
+#
+# Required repository secrets:
+#   DOCKERHUB_USERNAME — Docker Hub account with push access to logiclabshq/*
+#   DOCKERHUB_TOKEN    — Docker Hub access token (Read & Write)
+
+name: Publish Docker images
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - image: logiclabshq/agent-int
+            dockerfile: Dockerfile
+          - image: logiclabshq/agent-runtime
+            dockerfile: apps/agent-runtime/Dockerfile
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # The root Dockerfile COPYs .env into the builder stage so SvelteKit can
+      # read static env vars at build time. CI has no .env — the example file
+      # stands in (it never reaches the final image).
+      - name: Create build-time .env
+        run: cp .env.example .env
+
+      - name: Set up QEMU (arm64 emulation)
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      # Tag scheme: v1.2.0 → 1.2.0 + 1.2 + latest; manual runs → edge
+      - name: Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ matrix.image }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') }}
+            type=raw,value=edge,enable=${{ github.event_name == 'workflow_dispatch' }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=${{ matrix.image }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.image }}

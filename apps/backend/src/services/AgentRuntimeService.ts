@@ -1,5 +1,4 @@
-import { spawn } from 'child_process';
-import { mkdirSync, rmSync } from 'fs';
+import { rmSync } from 'fs';
 import { resolve, join } from 'path';
 import type {
 	AgentTriggerType,
@@ -17,6 +16,7 @@ import { LlmProviderService } from './llmProviderService.js';
 import { CredentialService } from './CredentialService.js';
 import { agentStreamBus } from './AgentStreamBus.js';
 import { logger } from '../config/logger.js';
+import type { ExecutionDriver, RuntimeHandle } from './runtime/ExecutionDriver.js';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -91,73 +91,86 @@ export interface WorkflowSpawnConfig {
 // ─── Service ──────────────────────────────────────────────────────────────────
 
 /**
- * Manages agent execution by spawning a dedicated Node.js child process per turn.
+ * Manages agent execution by spawning one isolated execution unit per turn
+ * through a pluggable ExecutionDriver:
  *
- * Security model (code-level isolation, no Docker required):
- *   - The child process receives only: AGENT_ID, THREAD_ID, PROXY_TOKEN, PROXY_HOST,
+ *   - ProcessDriver — plain Node.js child process (bare-metal dev default).
+ *     Code-level isolation only: sanitized env, no OS boundary.
+ *   - DockerDriver  — hardened sibling Docker container (production default
+ *     in docker-compose). OS-level isolation: namespaces, read-only rootfs,
+ *     non-root user, resource limits, per-agent network egress policy.
+ *
+ * Driver-independent security model:
+ *   - The runtime receives only: AGENT_ID, THREAD_ID, PROXY_TOKEN, PROXY_HOST,
  *     RUNTIME_CONFIG, WORKSPACE_ROOT.
- *   - DATABASE_URL, CREDENTIAL_ENCRYPTION_KEY, JWT_SECRET, and all other backend secrets
- *     are explicitly excluded from the child's environment.
- *   - Credentials and LLM keys are never passed to the child — all sensitive operations
- *     are proxied through the PROXY_TOKEN-authenticated /v1/runtime/internal/* endpoints.
- *   - The PROXY_TOKEN is a 15-min scoped JWT authorising only the agent's credential list.
- *   - File access is restricted to WORKSPACE_ROOT (<AGENT_WORKSPACES_PATH>/<agentId>/)
- *     by the resolveWorkspacePath() guard inside agent-runner.ts.
+ *   - DATABASE_URL, CREDENTIAL_ENCRYPTION_KEY, JWT_SECRET, and all other backend
+ *     secrets are never passed to the runtime.
+ *   - Credentials and LLM keys are never passed to the runtime — all sensitive
+ *     operations are proxied through the PROXY_TOKEN-authenticated
+ *     /v1/runtime/internal/* endpoints.
+ *   - The PROXY_TOKEN is a 15-min scoped JWT authorising only the agent's
+ *     credential list.
  *
  * Workflow execution:
  *   When workflowConfig is provided, the RUNTIME_CONFIG includes a `workflow` field
- *   containing the full workflow definition and trigger context. The child process
+ *   containing the full workflow definition and trigger context. The runtime
  *   routes to workflow-runner.ts instead of agent-runner.ts.
  *
- * Process lifecycle:
- *   - spawnForThread() is non-blocking: it spawns the child and returns immediately.
- *   - The child exits with code 0 on success, 1 on error.
+ * Lifecycle:
+ *   - spawnForThread() is non-blocking: it spawns the runtime and returns.
+ *   - The runtime exits with code 0 on success, 1 on error.
  *   - Thread status is updated to 'running' before spawn and to 'completed'/'error' on exit.
- *   - On non-zero exit an 'error' SSE event is emitted so the browser can unlock the UI.
+ *   - A hard timeout (AGENT_RUNTIME_TIMEOUT_MS, default 40 min) kills runaway runs.
+ *   - A global concurrency cap (AGENT_RUNTIME_MAX_CONCURRENT, default 20) bounds
+ *     simultaneous runs.
  */
 export class AgentRuntimeService {
 	/**
-	 * Absolute path to the compiled agent-runtime entrypoint on the local filesystem.
-	 * Default: apps/agent-runtime/dist/index.js (resolved relative to the repo root).
-	 * Override with AGENT_RUNTIME_ENTRY env var for custom builds or production deploys.
-	 */
-	private readonly agentRuntimeEntry: string;
-
-	/**
-	 * Base directory for per-agent persistent workspaces.
+	 * Base directory for per-agent persistent workspaces, as seen by the backend.
 	 * Each agent gets its own subdirectory: <workspacesBasePath>/<agentId>/
-	 * This directory is passed to the child as WORKSPACE_ROOT and used as the
-	 * base for all file tool operations inside agent-runner.ts.
 	 * Override with AGENT_WORKSPACES_PATH env var.
 	 */
 	private readonly workspacesBasePath: string;
 
-	/** Backend port — used to build the PROXY_HOST URL for the child process */
-	private readonly backendPort: string;
+	/** Hard wall-clock limit per run. Default 40 min — must exceed the 35-min HITL long-poll. */
+	private readonly runTimeoutMs: number;
+
+	/** Maximum simultaneous runs across all agents/owners */
+	private readonly maxConcurrent: number;
+
+	/** Live runtime handles, for the concurrency cap and shutdown() */
+	private readonly liveHandles = new Set<RuntimeHandle>();
 
 	constructor(
+		private readonly driver: ExecutionDriver,
 		private readonly sessionService: AgentSessionService,
 		private readonly proxyService: AgentProxyService,
 		private readonly agentService: AgentService,
 		private readonly llmProviderService: LlmProviderService,
 		private readonly credentialService: CredentialService,
 	) {
-		// Resolve agent-runtime entry relative to the repo root by default.
+		// Workspaces base: repo root sibling directory by default.
 		// process.cwd() is apps/backend/ so we go up two levels to reach the monorepo root.
-		// In production override with AGENT_RUNTIME_ENTRY env var.
-		this.agentRuntimeEntry =
-			process.env.AGENT_RUNTIME_ENTRY ??
-			resolve(process.cwd(), '../../apps/agent-runtime/dist/index.js');
-
-		// Workspaces base: repo root sibling directory by default (same reasoning).
 		this.workspacesBasePath =
 			process.env.AGENT_WORKSPACES_PATH ?? resolve(process.cwd(), '../../.agent-workspaces');
+		this.runTimeoutMs = parseInt(process.env.AGENT_RUNTIME_TIMEOUT_MS ?? '2400000', 10);
+		this.maxConcurrent = parseInt(process.env.AGENT_RUNTIME_MAX_CONCURRENT ?? '20', 10);
+	}
 
-		this.backendPort = process.env.BACKEND_PORT ?? '4000';
+	/** Validate driver configuration and reap orphaned runs. Call once at backend startup. */
+	async init(): Promise<void> {
+		await this.driver.init();
+	}
+
+	/** Kill all live runs. Call on backend shutdown (SIGTERM/SIGINT). */
+	async shutdown(): Promise<void> {
+		logger.info({ liveRuns: this.liveHandles.size }, '[runtime] shutting down live agent runs');
+		await this.driver.shutdown();
+		this.liveHandles.clear();
 	}
 
 	/**
-	 * Spawn a Node.js child process to execute one agent turn.
+	 * Spawn one isolated runtime to execute one agent turn.
 	 *
 	 * Called when:
 	 *   1. A user sends a chat message (triggerType = 'chat')
@@ -166,9 +179,9 @@ export class AgentRuntimeService {
 	 *   4. A manual trigger fires (triggerType = 'manual')
 	 *
 	 * When workflowConfig is provided, the runtime config includes the full workflow
-	 * definition and trigger context. The child process routes to workflow-runner.ts.
+	 * definition and trigger context. The runtime routes to workflow-runner.ts.
 	 *
-	 * The method is non-blocking — it spawns the child and returns immediately.
+	 * The method is non-blocking — it spawns the runtime and returns immediately.
 	 */
 	async spawnForThread(
 		agentId: string,
@@ -179,14 +192,28 @@ export class AgentRuntimeService {
 		userDatetime?: string,
 		workflowConfig?: WorkflowSpawnConfig,
 	): Promise<void> {
+		// Concurrency cap — reject before touching thread state or spawning.
+		if (this.liveHandles.size >= this.maxConcurrent) {
+			logger.warn(
+				{ agentId, threadId, liveRuns: this.liveHandles.size, max: this.maxConcurrent },
+				'[runtime] concurrency cap reached — rejecting spawn',
+			);
+			await this.sessionService.updateThreadStatus(threadId, 'error');
+			agentStreamBus.emit(threadId, {
+				type: 'error',
+				message: 'Too many agent runs are in progress. Please try again shortly.',
+			});
+			agentStreamBus.emit(threadId, { type: 'done' });
+			return;
+		}
+
 		// Fetch the agent once — reuse for both the proxy token and runtime config build.
 		const agent = await this.agentService.getById(agentId, ownerId);
 		if (!agent) {
 			throw new Error(`Agent not found: ${agentId}`);
 		}
 
-		// Build the runtime config (no secrets) for the child process.
-		// Agent is passed in directly to avoid a second DB round-trip.
+		// Build the runtime config (no secrets) for the runtime.
 		const runtimeConfig = await this.buildRuntimeConfig(
 			agent,
 			threadId,
@@ -197,7 +224,7 @@ export class AgentRuntimeService {
 			workflowConfig,
 		);
 
-		// Issue a scoped PROXY_TOKEN for this child process session
+		// Issue a scoped PROXY_TOKEN for this runtime session
 		const proxyToken = await this.proxyService.issueProxyToken({
 			agentId,
 			ownerId,
@@ -208,32 +235,22 @@ export class AgentRuntimeService {
 		// Mark thread as running before spawning
 		await this.sessionService.updateThreadStatus(threadId, 'running');
 
-		// Ensure per-agent workspace directory exists.
-		// Use path.join to safely construct the path and guard against non-UUID agent IDs.
+		// Ensure the per-agent workspace exists (driver also fixes ownership for
+		// the runtime user where needed).
 		const workspacePath = join(this.workspacesBasePath, agentId);
 		if (!workspacePath.startsWith(this.workspacesBasePath)) {
 			throw new Error(`Invalid agentId — workspace path escapes base: ${agentId}`);
 		}
-		mkdirSync(workspacePath, { recursive: true });
+		this.driver.prepareWorkspace(workspacePath);
 
-		// The child connects to the backend on localhost — no Docker networking needed
-		const proxyHostUrl = `http://localhost:${this.backendPort}`;
-
-		// Build a sanitised environment for the child:
-		// Strip all backend secrets and pass only what the agent runtime needs.
-		const childEnv: Record<string, string> = {
-			// Inherit PATH and Node.js internals so `node` can resolve modules
-			PATH: process.env.PATH ?? '',
-			HOME: process.env.HOME ?? '',
+		// Sanitized environment — no backend secrets. PROXY_HOST and
+		// WORKSPACE_ROOT are injected by the driver.
+		const env: Record<string, string> = {
 			NODE_ENV: process.env.NODE_ENV ?? 'development',
-			// Agent context — no secrets
 			AGENT_ID: agentId,
 			THREAD_ID: threadId,
 			PROXY_TOKEN: proxyToken,
-			PROXY_HOST: proxyHostUrl,
 			RUNTIME_CONFIG: JSON.stringify(runtimeConfig),
-			// Workspace root for this agent's persistent file storage
-			WORKSPACE_ROOT: workspacePath,
 		};
 
 		logger.info(
@@ -241,47 +258,73 @@ export class AgentRuntimeService {
 				agentId,
 				threadId,
 				triggerType,
-				entry: this.agentRuntimeEntry,
+				driver: this.driver.name,
 				workspacePath,
+				allowInternetAccess: agent.allowInternetAccess,
 				hasWorkflow: !!workflowConfig,
 			},
-			'[runtime] spawning agent process',
+			'[runtime] spawning agent runtime',
 		);
 
-		const child = spawn('node', [this.agentRuntimeEntry], {
-			env: childEnv,
-			stdio: ['ignore', 'pipe', 'pipe'],
-			detached: false,
-		});
+		let handle: RuntimeHandle;
+		try {
+			handle = await this.driver.spawn({
+				agentId,
+				threadId,
+				allowInternetAccess: agent.allowInternetAccess,
+				workspacePath,
+				env,
+			});
+		} catch (spawnErr) {
+			logger.error({ err: spawnErr, agentId, threadId }, '[runtime] failed to spawn runtime');
+			await this.sessionService.updateThreadStatus(threadId, 'error');
+			agentStreamBus.emit(threadId, {
+				type: 'error',
+				message: `Failed to start agent runtime: ${spawnErr instanceof Error ? spawnErr.message : String(spawnErr)}`,
+			});
+			agentStreamBus.emit(threadId, { type: 'done' });
+			return;
+		}
+		this.liveHandles.add(handle);
 
-		logger.debug({ agentId, threadId, pid: child.pid }, '[runtime] child process started');
+		logger.debug({ agentId, threadId, runtimeId: handle.id }, '[runtime] runtime started');
 
 		// Accumulate the last N chars of both stdout and stderr.
-		// The child process uses pino logger which writes structured JSON to stdout, not stderr.
-		// We capture both streams so extractUserErrorMessage can find the actual error regardless
-		// of which stream it appears on.
+		// The runtime uses pino logger which writes structured JSON to stdout, not stderr.
+		// We capture both streams so extractUserErrorMessage can find the actual error
+		// regardless of which stream it appears on.
 		const OUTPUT_CAP = 4096;
 		let stdoutTail = '';
 		let stderrTail = '';
 
-		// Stream child stdout/stderr to logger and keep rolling tails for error extraction
-		child.stdout?.on('data', (data: Buffer) => {
-			const text = data.toString();
+		handle.onStdout((text) => {
 			logger.info({ agentId, threadId }, `[agent] ${text.trim()}`);
 			stdoutTail = (stdoutTail + text).slice(-OUTPUT_CAP);
 		});
-		child.stderr?.on('data', (data: Buffer) => {
-			const text = data.toString();
+		handle.onStderr((text) => {
 			logger.warn({ agentId, threadId }, `[agent:stderr] ${text.trim()}`);
 			stderrTail = (stderrTail + text).slice(-OUTPUT_CAP);
 		});
 
-		// Update thread status based on exit code.
-		// On non-zero exit also emit an SSE error event so the browser can unlock the UI
-		// and see what went wrong (without this the isStreaming flag stays true indefinitely).
-		child.on('close', async (code) => {
+		// Hard timeout — kills runs that hang past the HITL window or loop forever.
+		// The PROXY_TOKEN expires after 15 min, but an idle/looping runtime would
+		// otherwise keep its slot (and container) alive indefinitely.
+		let timedOut = false;
+		const timeoutTimer = setTimeout(() => {
+			timedOut = true;
+			logger.warn(
+				{ agentId, threadId, runtimeId: handle.id, timeoutMs: this.runTimeoutMs },
+				'[runtime] run timed out — killing runtime',
+			);
+			void handle.kill();
+		}, this.runTimeoutMs);
+		timeoutTimer.unref();
+
+		handle.onClose(async (code) => {
+			clearTimeout(timeoutTimer);
+			this.liveHandles.delete(handle);
 			const status = code === 0 ? 'completed' : 'error';
-			logger.info({ agentId, threadId, code, status }, '[runtime] agent process exited');
+			logger.info({ agentId, threadId, code, status }, '[runtime] agent runtime exited');
 			try {
 				await this.sessionService.updateThreadStatus(threadId, status);
 			} catch (err) {
@@ -289,28 +332,26 @@ export class AgentRuntimeService {
 			}
 
 			if (code !== 0) {
-				// Try stderr first (raw Node errors), then fall back to stdout (pino JSON logs).
-				// Pino logs are structured JSON; extractUserErrorMessage parses the "message" field.
-				const combinedOutput = stderrTail || stdoutTail;
-				const userMessage = extractUserErrorMessage(combinedOutput);
-				agentStreamBus.emit(threadId, { type: 'error', message: userMessage });
+				if (timedOut) {
+					agentStreamBus.emit(threadId, {
+						type: 'error',
+						message: `Agent run timed out after ${Math.round(this.runTimeoutMs / 60000)} minutes.`,
+					});
+				} else {
+					// Try stderr first (raw Node errors), then fall back to stdout (pino JSON logs).
+					const combinedOutput = stderrTail || stdoutTail;
+					agentStreamBus.emit(threadId, {
+						type: 'error',
+						message: extractUserErrorMessage(combinedOutput),
+					});
+				}
 			}
 			// Always emit 'done' so the SSE subscriber can clean up
 			agentStreamBus.emit(threadId, { type: 'done' });
 		});
 
-		child.on('error', async (spawnErr) => {
-			logger.error({ err: spawnErr, agentId, threadId }, '[runtime] failed to spawn agent process');
-			try {
-				await this.sessionService.updateThreadStatus(threadId, 'error');
-			} catch (updateErr) {
-				logger.error({ updateErr, threadId }, '[runtime] failed to update thread status on error');
-			}
-			agentStreamBus.emit(threadId, {
-				type: 'error',
-				message: `Failed to start agent process: ${spawnErr.message}`,
-			});
-			agentStreamBus.emit(threadId, { type: 'done' });
+		handle.onError((err) => {
+			logger.error({ err, agentId, threadId, runtimeId: handle.id }, '[runtime] runtime error');
 		});
 	}
 
@@ -333,12 +374,12 @@ export class AgentRuntimeService {
 	}
 
 	/**
-	 * Build the AgentRuntimeConfig that is passed to the child via env var.
+	 * Build the AgentRuntimeConfig that is passed to the runtime via env var.
 	 * Contains no secrets — API keys and credentials stay in the backend process.
 	 *
 	 * The agent object is passed in from spawnForThread to avoid a redundant DB fetch.
-	 * When workflowConfig is provided, the `workflow` field is included so the child
-	 * process routes to workflow-runner.ts.
+	 * When workflowConfig is provided, the `workflow` field is included so the runtime
+	 * routes to workflow-runner.ts.
 	 */
 	private async buildRuntimeConfig(
 		agent: Agent,
@@ -458,7 +499,7 @@ export class AgentRuntimeService {
 			// User's local datetime — used to inject current date/time context into the system prompt.
 			// Falls back to server time in agent-runner.ts when absent (cron/webhook/manual triggers).
 			...(userDatetime !== undefined ? { userDatetime } : {}),
-			// Workflow config — present only for workflow runs. Causes the child to route
+			// Workflow config — present only for workflow runs. Causes the runtime to route
 			// to workflow-runner.ts rather than agent-runner.ts.
 			...(workflowConfig !== undefined
 				? {

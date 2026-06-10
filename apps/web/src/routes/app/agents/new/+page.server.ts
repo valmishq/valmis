@@ -126,6 +126,7 @@ export const actions: Actions = {
 			(formData.get('embeddingModelConfigId') as string | null) || null;
 		const credentialIds = formData.getAll('credentialIds') as string[];
 		const skillNames = formData.getAll('skillNames') as string[];
+		const allowInternetAccess = formData.get('allowInternetAccess') !== 'false';
 
 		// Step 1: Create or update agent
 		let savedAgentId: string;
@@ -140,7 +141,8 @@ export const actions: Actions = {
 					avatarUrl,
 					credentialIds,
 					modelConfigId,
-					embeddingModelConfigId
+					embeddingModelConfigId,
+					allowInternetAccess
 				})
 			});
 
@@ -161,7 +163,8 @@ export const actions: Actions = {
 					avatarUrl,
 					credentialIds,
 					modelConfigId,
-					embeddingModelConfigId
+					embeddingModelConfigId,
+					allowInternetAccess
 				})
 			});
 

@@ -34,6 +34,13 @@ export interface Agent {
 	 * Derived from the selected embedding model config.
 	 */
 	embeddingDim?: number;
+	/**
+	 * Whether the agent's sandboxed runtime may reach the public internet
+	 * (run_terminal/run_code egress). Only enforced when the backend runs the
+	 * docker execution driver — credential-proxied call_api requests are
+	 * unaffected either way. Default true.
+	 */
+	allowInternetAccess: boolean;
 	createdAt: Date;
 	updatedAt: Date;
 }
@@ -121,6 +128,7 @@ export interface CreateAgentRequestBody {
 	modelConfigId?: string;
 	embeddingModelConfigId?: string;
 	embeddingDim?: number;
+	allowInternetAccess?: boolean;
 }
 
 /** PUT /v1/agents/:id — update an existing agent */
@@ -134,6 +142,7 @@ export interface UpdateAgentRequestBody {
 	modelConfigId?: string;
 	embeddingModelConfigId?: string;
 	embeddingDim?: number;
+	allowInternetAccess?: boolean;
 }
 
 // ─── Run Summary (aggregated per-thread observability) ───────────────────────

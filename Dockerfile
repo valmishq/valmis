@@ -43,7 +43,10 @@ RUN pnpm build
 
 # ─── Runtime stage ─────────────────────────────────────────────────────────────
 # Lean production image — compiled outputs + production dependencies only.
-# No Docker CLI required — agent turns run as Node.js child processes.
+# No Docker CLI required — with AGENT_RUNTIME_DRIVER=docker the backend talks
+# to the Docker Engine API (via dockerode) through the docker-socket-proxy
+# service to spawn one hardened sibling container per agent turn. With
+# AGENT_RUNTIME_DRIVER=process, agent turns run as Node.js child processes.
 # ───────────────────────────────────────────────────────────────────────────────
 
 FROM node:22-slim AS runner
@@ -94,8 +97,9 @@ COPY --from=builder /repo/apps/backend/drizzle apps/backend/drizzle
 COPY --from=builder /repo/apps/web/build       apps/web/build
 
 # Agent-runtime compiled output (tsc → dist/).
-# AgentRuntimeService spawns this as a Node.js child process per agent turn.
-# AGENT_RUNTIME_ENTRY in docker-compose.yml points to this path.
+# Used only by the process driver (AGENT_RUNTIME_DRIVER=process) — the docker
+# driver runs the separate logiclabshq/agent-runtime image instead (built from
+# apps/agent-runtime/Dockerfile). AGENT_RUNTIME_ENTRY points to this path.
 COPY --from=builder /repo/apps/agent-runtime/dist  apps/agent-runtime/dist
 
 # PM2 process config — runs both processes under PM2's process manager

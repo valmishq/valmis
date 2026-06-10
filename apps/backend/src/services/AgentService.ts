@@ -18,6 +18,7 @@ export interface CreateAgentInput {
 	modelConfigId?: string;
 	embeddingModelConfigId?: string;
 	embeddingDim?: number;
+	allowInternetAccess?: boolean;
 }
 
 export interface UpdateAgentInput {
@@ -29,6 +30,7 @@ export interface UpdateAgentInput {
 	modelConfigId?: string | null;
 	embeddingModelConfigId?: string | null;
 	embeddingDim?: number | null;
+	allowInternetAccess?: boolean;
 }
 
 export interface AddMemoryInput {
@@ -66,6 +68,7 @@ function rowToAgent(row: typeof agents.$inferSelect, credentialIds: string[]): A
 		modelConfigId: row.modelConfigId ?? undefined,
 		embeddingModelConfigId: row.embeddingModelConfigId ?? undefined,
 		embeddingDim: row.embeddingDim ?? undefined,
+		allowInternetAccess: row.allowInternetAccess,
 		createdAt: row.createdAt,
 		updatedAt: row.updatedAt,
 	};
@@ -105,6 +108,7 @@ export class AgentService {
 				modelConfigId: input.modelConfigId ?? null,
 				embeddingModelConfigId: input.embeddingModelConfigId ?? null,
 				embeddingDim: input.embeddingDim ?? null,
+				allowInternetAccess: input.allowInternetAccess ?? true,
 				createdAt: now,
 				updatedAt: now,
 			})
@@ -186,6 +190,7 @@ export class AgentService {
 			modelConfigId: string | null;
 			embeddingModelConfigId: string | null;
 			embeddingDim: number | null;
+			allowInternetAccess: boolean;
 			updatedAt: Date;
 		}> = { updatedAt: new Date() };
 
@@ -198,6 +203,8 @@ export class AgentService {
 		if (input.embeddingModelConfigId !== undefined)
 			updates.embeddingModelConfigId = input.embeddingModelConfigId;
 		if (input.embeddingDim !== undefined) updates.embeddingDim = input.embeddingDim;
+		if (input.allowInternetAccess !== undefined)
+			updates.allowInternetAccess = input.allowInternetAccess;
 
 		await db
 			.update(agents)

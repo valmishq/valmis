@@ -101,6 +101,7 @@ export function createAgentsRouter(authService: AuthService): Router {
 			modelConfigId,
 			embeddingModelConfigId,
 			embeddingDim,
+			allowInternetAccess,
 		} = req.body as CreateAgentRequestBody;
 
 		if (!ownerId || !name) {
@@ -123,6 +124,7 @@ export function createAgentsRouter(authService: AuthService): Router {
 				modelConfigId,
 				embeddingModelConfigId,
 				embeddingDim,
+				allowInternetAccess,
 			});
 			const body: AgentResponse = { success: true, data: agent };
 			res.status(201).json(body);
@@ -149,6 +151,7 @@ export function createAgentsRouter(authService: AuthService): Router {
 			modelConfigId,
 			embeddingModelConfigId,
 			embeddingDim,
+			allowInternetAccess,
 		} = req.body as UpdateAgentRequestBody;
 
 		if (!ownerId) {
@@ -165,7 +168,8 @@ export function createAgentsRouter(authService: AuthService): Router {
 			credentialIds === undefined &&
 			modelConfigId === undefined &&
 			embeddingModelConfigId === undefined &&
-			embeddingDim === undefined
+			embeddingDim === undefined &&
+			allowInternetAccess === undefined
 		) {
 			const body: AgentResponse = {
 				success: false,
@@ -186,6 +190,7 @@ export function createAgentsRouter(authService: AuthService): Router {
 				modelConfigId,
 				embeddingModelConfigId,
 				embeddingDim,
+				allowInternetAccess,
 			});
 
 			if (!updated) {

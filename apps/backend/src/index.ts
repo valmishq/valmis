@@ -36,6 +36,9 @@ import { agentStreamBus } from './services/AgentStreamBus.js';
 import { AgentProxyService } from './services/AgentProxyService.js';
 import { AgentLlmProxyService } from './services/AgentLlmProxyService.js';
 import { AgentRuntimeService } from './services/AgentRuntimeService.js';
+import { ProcessDriver } from './services/runtime/ProcessDriver.js';
+import { DockerDriver } from './services/runtime/DockerDriver.js';
+import type { ExecutionDriver } from './services/runtime/ExecutionDriver.js';
 import { TriggerService } from './services/TriggerService.js';
 import { WorkflowService } from './services/WorkflowService.js';
 import { WorkflowRunService } from './services/WorkflowRunService.js';
@@ -76,7 +79,15 @@ const llmProxyService = new AgentLlmProxyService(
 	sessionService,
 	agentMemoryService,
 );
+// Execution driver — how agent runtimes are isolated:
+//   process (default) — plain Node.js child process, code-level isolation only.
+//   docker            — hardened sibling Docker container (recommended; set in
+//                       docker-compose). Requires the runtime image and a
+//                       reachable Docker daemon (DOCKER_HOST or docker.sock).
+const executionDriver: ExecutionDriver =
+	process.env.AGENT_RUNTIME_DRIVER === 'docker' ? new DockerDriver() : new ProcessDriver();
 const runtimeService = new AgentRuntimeService(
+	executionDriver,
 	sessionService,
 	proxyService,
 	agentService,
@@ -242,8 +253,13 @@ app.use(
 // Global error handler — must be registered last, after all routes
 app.use(errorHandler);
 
+// Validate the execution driver before accepting traffic — a misconfigured
+// docker driver (missing image, unreachable daemon) must fail the boot, not
+// the first user message.
+await runtimeService.init();
+
 app.listen(PORT, async () => {
-	logger.info({ port: PORT }, '[backend] server running');
+	logger.info({ port: PORT, runtimeDriver: executionDriver.name }, '[backend] server running');
 	// Load and schedule all enabled cron triggers on startup
 	await triggerService.loadAll();
 	// Start Telegram long-polling for all active bot credentials
@@ -251,5 +267,17 @@ app.listen(PORT, async () => {
 	// Start Discord Gateway connections for all active bot credentials
 	await discordGatewayManager.loadActiveGateways();
 });
+
+// Kill all live agent runtimes on shutdown so containers/processes are not
+// stranded across restarts (driver init() reaps any survivors as a backstop).
+let shuttingDown = false;
+const gracefulShutdown = (signal: string): void => {
+	if (shuttingDown) return;
+	shuttingDown = true;
+	logger.info({ signal }, '[backend] shutting down');
+	void runtimeService.shutdown().finally(() => process.exit(0));
+};
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 
 export default app;
