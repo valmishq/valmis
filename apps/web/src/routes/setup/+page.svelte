@@ -48,9 +48,9 @@
 	<title>Setup — Create Admin Account</title>
 	<meta
 		name="description"
-		content="Create your first admin account to get started with OpenAgent Integration Hub."
+		content="Create your first admin account to get started with AgentInt Integration Hub."
 	/>
-	<meta name="keywords" content="setup, admin, account, OpenAgent, integration hub" />
+	<meta name="keywords" content="setup, admin, account, AgentInt, integration hub" />
 </svelte:head>
 
 <div class="flex min-h-screen items-center justify-center bg-muted/40 p-4">

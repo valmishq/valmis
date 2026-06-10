@@ -337,14 +337,14 @@
 </script>
 
 <svelte:head>
-	<title>Credentials — OpenAgent Dashboard</title>
+	<title>Credentials — AgentInt Dashboard</title>
 	<meta
 		name="description"
-		content="Manage service credentials and API connections for your OpenAgent integrations. Set up API keys, OAuth2 accounts, and more."
+		content="Manage service credentials and API connections for your AgentInt integrations. Set up API keys, OAuth2 accounts, and more."
 	/>
 	<meta
 		name="keywords"
-		content="credentials, API keys, OAuth2, integrations, service connections, OpenAgent"
+		content="credentials, API keys, OAuth2, integrations, service connections, AgentInt"
 	/>
 </svelte:head>
 

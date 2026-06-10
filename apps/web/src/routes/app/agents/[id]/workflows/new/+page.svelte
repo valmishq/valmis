@@ -158,10 +158,10 @@
 
 <svelte:head>
 	{#if isEditMode && workflow}
-		<title>{workflow.name} — Edit Workflow — OpenAgent</title>
+		<title>{workflow.name} — Edit Workflow — AgentInt</title>
 		<meta name="description" content="Edit the workflow configuration for {agent.name}." />
 	{:else}
-		<title>New Workflow — {agent.name} — OpenAgent</title>
+		<title>New Workflow — {agent.name} — AgentInt</title>
 		<meta name="description" content="Create a new automated workflow for {agent.name}." />
 	{/if}
 </svelte:head>

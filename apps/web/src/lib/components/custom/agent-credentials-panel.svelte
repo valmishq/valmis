@@ -6,6 +6,7 @@
 	import PlusIcon from '@lucide/svelte/icons/plus';
 	import XIcon from '@lucide/svelte/icons/x';
 	import type { CredentialMetadata, CredentialDefinition } from '@repo/types';
+	import { fade } from 'svelte/transition';
 
 	interface Props {
 		/** Bindable Set — parent serialises this into hidden form inputs */
@@ -87,36 +88,41 @@
 				<p class="text-sm text-muted-foreground">No credentials selected.</p>
 			</div>
 		{:else}
-			<div class="space-y-2">
+			<!--
+				Responsive chip grid — uniform columns so every chip is the same width.
+				2 columns on small screens, 3 on sm+. Each chip is a fixed-height pill
+				with icon + truncated name + remove button.
+			-->
+			<div class="grid grid-cols-1 gap-2 md:grid-cols-2 lg:grid-cols-4">
 				{#each selectedCredentials as cred (cred.id)}
 					{@const def = getDefinition(cred.type)}
-					<div class="flex items-center gap-3 rounded-md border border-border px-3 py-2.5">
-						<!-- Icon -->
+					<div
+						class="flex h-9 items-center gap-2 rounded-md border border-border bg-muted/40 px-2.5 transition-colors hover:bg-muted/60"
+						transition:fade
+					>
+						<!-- Service icon -->
 						<div
-							class="flex size-6 shrink-0 items-center justify-center rounded bg-muted text-muted-foreground"
+							class="flex size-5 shrink-0 items-center justify-center rounded text-muted-foreground"
 						>
 							{#if def?.icon}
-								<img src={def.icon} alt={cred.type} class="size-4 object-contain" />
+								<img src={def.icon} alt={cred.type} class="size-3.5 object-contain" />
 							{:else}
-								<ShieldIcon class="size-3.5" />
+								<ShieldIcon class="size-3" />
 							{/if}
 						</div>
-						<!-- Label -->
-						<div class="min-w-0 flex-1">
-							<p class="truncate text-sm font-medium text-foreground">{cred.name}</p>
-							<p class="text-xs text-muted-foreground">{cred.type}</p>
-						</div>
+						<!-- Name — truncates if too long -->
+						<span class="min-w-0 flex-1 truncate text-xs font-medium text-foreground">
+							{cred.name}
+						</span>
 						<!-- Remove button -->
-						<Button
+						<button
 							type="button"
-							variant="ghost"
-							size="sm"
 							onclick={() => removeCredential(cred.id)}
-							class="shrink-0 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-							title="Remove credential"
+							class="shrink-0 rounded p-0.5 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+							title="Remove {cred.name}"
 						>
-							<XIcon class="size-3.5" />
-						</Button>
+							<XIcon class="size-3" />
+						</button>
 					</div>
 				{/each}
 			</div>

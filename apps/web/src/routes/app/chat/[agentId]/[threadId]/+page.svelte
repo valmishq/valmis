@@ -612,8 +612,8 @@
 </script>
 
 <svelte:head>
-	<title>{data.agent.name} — Chat — OpenAgent</title>
-	<meta name="description" content="Chatting with {data.agent.name} on OpenAgent." />
+	<title>{data.agent.name} — Chat — AgentInt</title>
+	<meta name="description" content="Chatting with {data.agent.name} on AgentInt." />
 </svelte:head>
 
 <div class="flex h-full overflow-hidden">

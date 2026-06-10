@@ -85,14 +85,14 @@
 </script>
 
 <svelte:head>
-	<title>Agents — OpenAgent Dashboard</title>
+	<title>Agents — AgentInt Dashboard</title>
 	<meta
 		name="description"
 		content="Create and manage your AI agents. Configure custom personas with unique instructions, knowledge, and service credentials."
 	/>
 	<meta
 		name="keywords"
-		content="AI agents, custom agents, personas, knowledge base, OpenAgent, agent management"
+		content="AI agents, custom agents, personas, knowledge base, AgentInt, agent management"
 	/>
 </svelte:head>
 
@@ -234,12 +234,12 @@
 								<Button
 									variant="ghost"
 									size="sm"
-									onclick={() => goto(`/app/agents/${agent.id}/runs`)}
+									onclick={() => goto(`/app/agents/${agent.id}/details`)}
 									class="text-muted-foreground hover:text-foreground"
-									title="View run history"
+									title="View details"
 								>
 									<ActivityIcon class="size-4" />
-									<span class="sr-only">View runs for {agent.name}</span>
+									<span class="sr-only">View details for {agent.name}</span>
 								</Button>
 
 								<!-- Memory -->

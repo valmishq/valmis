@@ -147,13 +147,13 @@
 </script>
 
 <svelte:head>
-	<title>{data.agent.name} — Workflows — OpenAgent</title>
+	<title>{data.agent.name} — Workflows — AgentInt</title>
 	<meta
 		name="description"
 		content="Create and manage automated workflows for {data.agent
 			.name}. Build multi-step automation pipelines triggered by cron, webhook, or manually."
 	/>
-	<meta name="keywords" content="workflows, automation, AI agent, pipeline, OpenAgent" />
+	<meta name="keywords" content="workflows, automation, AI agent, pipeline, AgentInt" />
 </svelte:head>
 
 <!-- ── Delete confirmation dialog ───────────────────────────────────────── -->

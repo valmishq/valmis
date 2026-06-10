@@ -333,9 +333,21 @@ export async function runAgent(
 		`hoping to stumble on useful information. Only call a tool when you have a clear, ` +
 		`specific reason to believe it will directly help answer the user's request.\n\n` +
 		`### run_code and run_terminal — Use with Caution\n` +
-		`- Only call run_code or run_terminal when the task genuinely cannot be accomplished ` +
-		`any other way (e.g. the user explicitly asked for code execution or file manipulation).\n` +
-		`Important: DO NOT use run_code tool to run unnecessary code, especially code that just print what you typed in the code. Only use this tool if you actually have a purpose. \n` +
+		`- Only call run_code or run_terminal when execution is genuinely required to ` +
+		`produce the answer (e.g. actual computation, file manipulation, data processing ` +
+		`the user explicitly requested, or running tests/scripts the user asked for).\n` +
+		`- **FORBIDDEN — "print-as-reasoning" pattern**: NEVER write code whose sole ` +
+		`purpose is to print or echo information you already know or have decided. ` +
+		`This pattern adds zero value and is prohibited:\n` +
+		`    BAD: print("The link is https://...")\n` +
+		`    BAD: print("Potential causes: DKIM missing, SPF...")\n` +
+		`    BAD: print("I will suggest the user to...")\n` +
+		`    In all of these cases, you already have the answer — just write it directly ` +
+		`in your reply text. Do NOT wrap known information in a print() call.\n` +
+		`- **Self-test before calling**: Ask yourself: "If I deleted this tool call, could ` +
+		`I still give the same answer from my own knowledge?" If YES, do not call the tool. ` +
+		`Only use run_code when the execution itself produces new information you do not ` +
+		`already have (e.g. computing a hash, parsing data, running a calculation).\n` +
 		`- Keep commands simple and scoped to the task. Do not write scripts that probe ` +
 		`system state, install packages, modify system configuration, or perform network ` +
 		`requests outside the workspace.\n` +

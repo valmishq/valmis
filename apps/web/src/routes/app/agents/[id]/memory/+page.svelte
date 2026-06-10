@@ -98,7 +98,7 @@
 </script>
 
 <svelte:head>
-	<title>{data.agent.name} — Memory — OpenAgent Dashboard</title>
+	<title>{data.agent.name} — Memory — AgentInt Dashboard</title>
 	<meta
 		name="description"
 		content="Manage long-term memory entries stored by {data.agent
@@ -106,7 +106,7 @@
 	/>
 	<meta
 		name="keywords"
-		content="agent memory, AI memory management, vector memory, long-term memory, OpenAgent"
+		content="agent memory, AI memory management, vector memory, long-term memory, AgentInt"
 	/>
 </svelte:head>
 

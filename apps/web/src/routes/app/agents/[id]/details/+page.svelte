@@ -92,7 +92,7 @@
 </script>
 
 <svelte:head>
-	<title>{data.agent.name} — Run History — OpenAgent</title>
+	<title>{data.agent.name} — Details — AgentInt</title>
 	<meta
 		name="description"
 		content="View execution history, token usage, and costs for {data.agent.name}."
@@ -101,7 +101,7 @@
 
 <!-- ── Page header ───────────────────────────────────────────────────────── -->
 <PageHeader
-	title="Run History"
+	title="Details - {data.agent.name}"
 	description="Execution history, token usage, and cost for {data.agent.name}."
 >
 	{#snippet actions()}
@@ -122,7 +122,7 @@
 				</div>
 				<div>
 					<p class="text-2xl leading-none font-semibold">{data.runs.length}</p>
-					<p class="mt-1 text-xs text-muted-foreground">Total runs</p>
+					<p class="mt-1 text-xs text-muted-foreground">Total sessions</p>
 				</div>
 			</div>
 		</Card.Content>
@@ -174,7 +174,7 @@
 <!-- ── Runs table ─────────────────────────────────────────────────────────── -->
 <Card.Root>
 	<Card.Header class="pb-3">
-		<Card.Title class="text-sm font-medium">Runs</Card.Title>
+		<Card.Title class="text-sm font-medium">Sessions</Card.Title>
 		<Card.Description class="text-xs">Click a row to open the conversation.</Card.Description>
 	</Card.Header>
 

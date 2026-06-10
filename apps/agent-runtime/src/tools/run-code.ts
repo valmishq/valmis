@@ -56,9 +56,10 @@ export function createRunCodeTool(ctx: ToolContext): AgentTool {
 		label: 'Run Code',
 		description:
 			'Execute a code snippet in a sandboxed subprocess and return stdout + stderr. ' +
-			'Ideal for complex calculations, data transformations, or string processing that ' +
-			'would be error-prone to compute manually. ' +
-			'Important: DO NOT use this tool to run unnecessary code, especially code that just print what you typed in the code. Only use this tool if you actually have a purpose.' +
+			'Use ONLY when execution is genuinely needed to produce a result you cannot derive from your own knowledge — ' +
+			'e.g. parsing data, computing a hash, running a calculation, file manipulation. ' +
+			'NEVER use this tool to echo or print information you already know. ' +
+			'If you could delete this tool call and still give the same answer in text, skip the tool call and write the answer directly. ' +
 			`Supported languages: ${Object.keys(RUNTIMES).join(', ')}. ` +
 			`Execution is killed after ${TIMEOUT_MS / 1000} seconds.`,
 		parameters: Type.Object({

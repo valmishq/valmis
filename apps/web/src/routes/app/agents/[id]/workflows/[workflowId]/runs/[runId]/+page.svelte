@@ -10,7 +10,7 @@
 </script>
 
 <svelte:head>
-	<title>Run {data.run.id.slice(0, 8)} — {data.workflow.name} — OpenAgent</title>
+	<title>Run {data.run.id.slice(0, 8)} — {data.workflow.name} — AgentInt</title>
 	<meta name="description" content="Step-by-step execution details for this workflow run." />
 </svelte:head>
 

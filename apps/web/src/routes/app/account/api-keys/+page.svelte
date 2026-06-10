@@ -125,12 +125,12 @@
 </script>
 
 <svelte:head>
-	<title>API Keys — OpenAgent Dashboard</title>
+	<title>API Keys — AgentInt Dashboard</title>
 	<meta
 		name="description"
-		content="Manage your OpenAgent API keys for secure programmatic access to integrations."
+		content="Manage your AgentInt API keys for secure programmatic access to integrations."
 	/>
-	<meta name="keywords" content="API keys, authentication, OpenAgent, integration, access tokens" />
+	<meta name="keywords" content="API keys, authentication, AgentInt, integration, access tokens" />
 </svelte:head>
 
 <!-- Delete confirmation dialog -->

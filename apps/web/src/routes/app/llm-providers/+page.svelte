@@ -317,14 +317,14 @@
 </script>
 
 <svelte:head>
-	<title>LLM Providers — OpenAgent Dashboard</title>
+	<title>LLM Providers — AgentInt Dashboard</title>
 	<meta
 		name="description"
-		content="Configure AI language model providers for your OpenAgent integrations. Connect OpenAI, Anthropic, Google Gemini, and more."
+		content="Configure AI language model providers for your AgentInt integrations. Connect OpenAI, Anthropic, Google Gemini, and more."
 	/>
 	<meta
 		name="keywords"
-		content="LLM, AI providers, OpenAI, Anthropic, Gemini, language models, OpenAgent"
+		content="LLM, AI providers, OpenAI, Anthropic, Gemini, language models, AgentInt"
 	/>
 </svelte:head>
 

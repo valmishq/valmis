@@ -18,12 +18,12 @@
 </script>
 
 <svelte:head>
-	<title>Dashboard — OpenAgent</title>
+	<title>Dashboard — AgentInt</title>
 	<meta
 		name="description"
-		content="Manage your OpenAgent integrations, API keys, and settings from the dashboard."
+		content="Manage your AgentInt integrations, API keys, and settings from the dashboard."
 	/>
-	<meta name="keywords" content="dashboard, integrations, API keys, OpenAgent" />
+	<meta name="keywords" content="dashboard, integrations, API keys, AgentInt" />
 </svelte:head>
 
 <PageHeader

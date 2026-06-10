@@ -64,7 +64,7 @@
 </script>
 
 <svelte:head>
-	<title>{data.workflow.name} — Runs — OpenAgent</title>
+	<title>{data.workflow.name} — Runs — AgentInt</title>
 	<meta
 		name="description"
 		content="View execution history for the workflow {data.workflow.name}."
@@ -77,10 +77,7 @@
 		<Button
 			variant="outline"
 			size="sm"
-			onclick={() =>
-				goto(
-					`/app/agents/${data.agent.id}/workflows/new?workflowId=${data.workflow.id}&editmode=true`
-				)}
+			onclick={() => goto(`/app/agents/${data.agent.id}/workflows`)}
 			class="gap-2"
 		>
 			<ArrowLeftIcon class="size-4" />

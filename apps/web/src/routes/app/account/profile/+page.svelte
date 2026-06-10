@@ -124,12 +124,12 @@
 </script>
 
 <svelte:head>
-	<title>Profile — OpenAgent Dashboard</title>
+	<title>Profile — AgentInt Dashboard</title>
 	<meta
 		name="description"
-		content="Manage your OpenAgent profile. Update your name and change your password."
+		content="Manage your AgentInt profile. Update your name and change your password."
 	/>
-	<meta name="keywords" content="profile, settings, account, password, OpenAgent" />
+	<meta name="keywords" content="profile, settings, account, password, AgentInt" />
 </svelte:head>
 
 <!-- Change password dialog -->
