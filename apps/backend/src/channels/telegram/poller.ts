@@ -25,6 +25,7 @@ export class TelegramPoller {
 	private running = false;
 	private offset: number | undefined = undefined;
 	private backoffMs = BACKOFF_MIN_MS;
+	private consecutiveFailures = 0;
 
 	constructor(
 		private readonly botApi: TelegramBotApi,
@@ -85,6 +86,17 @@ export class TelegramPoller {
 			try {
 				const updates = await this.botApi.getUpdates(this.offset, 30);
 
+				// Any successful poll — including an empty one — means the connection
+				// is healthy again, so reset the backoff and failure streak here.
+				if (this.consecutiveFailures > 0) {
+					logger.info(
+						{ credentialId: this.credentialId, failures: this.consecutiveFailures },
+						'[telegram-poller] recovered after consecutive getUpdates failures',
+					);
+					this.consecutiveFailures = 0;
+				}
+				this.backoffMs = BACKOFF_MIN_MS;
+
 				if (updates.length > 0) {
 					// Process updates sequentially to preserve message order per chat
 					for (const update of updates) {
@@ -92,16 +104,28 @@ export class TelegramPoller {
 					}
 					// Advance offset past the last processed update
 					this.offset = updates[updates.length - 1].update_id + 1;
-					// Reset backoff on success
-					this.backoffMs = BACKOFF_MIN_MS;
 				}
 			} catch (err: unknown) {
 				if (!this.running) break; // Stop was requested while we were polling
 
-				logger.warn(
-					{ err, credentialId: this.credentialId, backoffMs: this.backoffMs },
-					'[telegram-poller] getUpdates error — retrying',
-				);
+				this.consecutiveFailures++;
+				if (this.consecutiveFailures === 1) {
+					logger.warn(
+						{ err, credentialId: this.credentialId, backoffMs: this.backoffMs },
+						'[telegram-poller] getUpdates error — retrying',
+					);
+				} else {
+					// Repeats of the same outage: message only, no stack spam
+					logger.debug(
+						{
+							message: err instanceof Error ? err.message : String(err),
+							credentialId: this.credentialId,
+							failures: this.consecutiveFailures,
+							backoffMs: this.backoffMs,
+						},
+						'[telegram-poller] getUpdates error — retrying',
+					);
+				}
 
 				// Exponential backoff
 				await sleep(this.backoffMs);

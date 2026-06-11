@@ -1,3 +1,4 @@
+import dns from 'node:dns';
 import express from 'express';
 import { logger } from './config/logger.js';
 import { corsMiddleware } from './middleware/cors.js';
@@ -42,6 +43,11 @@ import type { ExecutionDriver } from './services/runtime/ExecutionDriver.js';
 import { TriggerService } from './services/TriggerService.js';
 import { WorkflowService } from './services/WorkflowService.js';
 import { WorkflowRunService } from './services/WorkflowRunService.js';
+
+// Prefer IPv4 for all outbound connections (fetch/undici, ws). Node's fetch does
+// not fall back to IPv4 when an IPv6 connect hangs (no Happy Eyeballs), so flaky
+// IPv6 routes cause 10s connect timeouts to dual-stack hosts like api.telegram.org.
+dns.setDefaultResultOrder('ipv4first');
 
 // --- Validate required environment variables at startup ---
 const { JWT_SECRET, JWT_EXPIRES_IN, PROXY_TOKEN_SECRET } = process.env;
