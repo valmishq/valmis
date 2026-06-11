@@ -1,4 +1,4 @@
-import { mkdirSync, chownSync } from 'fs';
+import { mkdirSync, chownSync, chmodSync } from 'fs';
 import { join } from 'path';
 import { PassThrough } from 'stream';
 import Docker from 'dockerode';
@@ -101,30 +101,34 @@ export class DockerDriver implements ExecutionDriver {
 			}
 		}
 
-		// Runtime image must exist. When missing locally, attempt ONE registry pull —
-		// at init time only, never during a user turn. This makes pull-and-run
-		// deployments of published images zero-step; from-source deployments fall
-		// back to the local build command in the error message.
+		// Refresh the runtime image from the registry ONCE per backend startup —
+		// never during a user turn (a per-spawn pull would add seconds to every
+		// message). A stale local tag (e.g. :latest) is otherwise never updated,
+		// so published runtime image updates would silently not deploy. When the
+		// local image is already current the pull is a fast no-op (digest check,
+		// no layer downloads). If the registry is unreachable but a local image
+		// exists, continue with it; fail the boot only when there is no image at
+		// all (from-source deployments get the local build command in the error).
 		try {
-			await this.docker.getImage(this.image).inspect();
-		} catch {
-			logger.info(
-				{ image: this.image },
-				'[runtime:docker] runtime image not found locally — pulling from registry',
-			);
+			const pullStream = await this.docker.pull(this.image);
+			await new Promise<void>((resolvePull, rejectPull) => {
+				this.docker.modem.followProgress(pullStream, (err) =>
+					err ? rejectPull(err) : resolvePull(),
+				);
+			});
+			logger.info({ image: this.image }, '[runtime:docker] runtime image up to date');
+		} catch (pullErr) {
 			try {
-				const pullStream = await this.docker.pull(this.image);
-				await new Promise<void>((resolvePull, rejectPull) => {
-					this.docker.modem.followProgress(pullStream, (err) =>
-						err ? rejectPull(err) : resolvePull(),
-					);
-				});
-				logger.info({ image: this.image }, '[runtime:docker] runtime image pulled');
-			} catch (pullErr) {
+				await this.docker.getImage(this.image).inspect();
+				logger.warn(
+					{ image: this.image, pullErr },
+					'[runtime:docker] registry pull failed — continuing with the local runtime image',
+				);
+			} catch {
 				throw new Error(
 					`[runtime:docker] agent runtime image "${this.image}" not found locally and could not be pulled ` +
 						`(${pullErr instanceof Error ? pullErr.message : String(pullErr)}). ` +
-						'For from-source deployments, build it with: docker compose --profile build build agent-runtime',
+						'For from-source deployments, build it with: docker compose -f docker-compose.build.yml build agent-runtime',
 				);
 			}
 		}
@@ -150,14 +154,34 @@ export class DockerDriver implements ExecutionDriver {
 
 	prepareWorkspace(workspacePath: string): void {
 		mkdirSync(workspacePath, { recursive: true });
-		// The runtime container runs as the non-root `agent` user — the workspace
-		// dir is created by the backend (root in the production image) and must be
-		// writable by that user. Non-fatal on hosts where the backend lacks
-		// CAP_CHOWN (e.g. macOS dev where the dir is already user-owned).
+		// The runtime container runs as the non-root `agent` user (RUNTIME_UID) —
+		// the workspace dir is created by the backend (root in the production
+		// image) and must be readable and writable by that user.
 		try {
 			chownSync(workspacePath, RUNTIME_UID, RUNTIME_UID);
-		} catch (err) {
-			logger.debug({ err, workspacePath }, '[runtime:docker] chown workspace skipped');
+		} catch (chownErr) {
+			// chown to an arbitrary uid fails on rootless/userns-remapped Docker
+			// daemons and on macOS dev. Fall back to world-writable — chmod only
+			// requires owning the dir, which the backend does in all of those
+			// environments. Exposure is minimal: this is a per-agent data dir that
+			// only the backend and that agent's own runtime containers ever mount.
+			try {
+				chmodSync(workspacePath, 0o777);
+				logger.warn(
+					{ workspacePath },
+					'[runtime:docker] workspace chown to runtime uid failed — fell back to chmod 777',
+				);
+			} catch (chmodErr) {
+				// Neither worked — the agent's file tools would fail with EACCES on
+				// every call. Fail the spawn loudly instead.
+				logger.error(
+					{ chownErr, chmodErr, workspacePath },
+					'[runtime:docker] cannot make workspace writable for the runtime user',
+				);
+				throw new Error(
+					`[runtime:docker] workspace "${workspacePath}" cannot be made writable for the runtime user (uid ${RUNTIME_UID})`,
+				);
+			}
 		}
 	}
 

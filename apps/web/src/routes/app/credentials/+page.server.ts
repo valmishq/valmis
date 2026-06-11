@@ -1,6 +1,6 @@
 import type { PageServerLoad } from './$types';
 import { api } from '$lib/server/api';
-import { APP_URL } from '$env/static/private';
+import { env } from '$env/dynamic/private';
 import type { CredentialMetadata, CredentialDefinition } from '@repo/types';
 
 /**
@@ -24,7 +24,9 @@ export const load: PageServerLoad = async (event) => {
 	const oauthMessage = event.url.searchParams.get('message') ?? undefined;
 
 	// Build the callback URL from APP_URL so the OAuth2 form can display it to the user.
-	const appUrl = APP_URL?.replace(/\/+$/, '') ?? '';
+	// Read via dynamic env (runtime process.env) so it always matches the value the
+	// backend uses for the actual OAuth redirect — never baked in at build time.
+	const appUrl = env.APP_URL?.replace(/\/+$/, '') ?? '';
 	const oauthCallbackUrl = appUrl ? `${appUrl}/oauth2/callback` : null;
 
 	return { definitions, credentials, oauthResult, oauthMessage, oauthCallbackUrl };

@@ -8,21 +8,21 @@
 #     mounted into the app container.
 #   - The runtime container image is built separately (build profile, see below).
 #
+# This file is PULL-ONLY (deployable with just this file + .env — no source
+# tree needed, and safe for tools that run `compose up --build`). To build the
+# images from source, use docker-compose.build.yml:
+#   docker compose -f docker-compose.build.yml build
+#
 # Quick start:
 #   cp .env.example .env
 #   # fill in .env values, then:
-#   docker compose --profile build build agent-runtime
 #   docker compose up -d
+# (the agent-runtime image is auto-pulled by the backend at startup)
 
 services:
   app:
-    # Published image (CI: .github/workflows/docker-publish.yml). Pull-based
-    # deployments use it directly; `docker compose build` tags a local build
-    # with the same name.
+    # Published image (CI: .github/workflows/docker-publish.yml)
     image: ${APP_IMAGE:-logiclabshq/agent-int:latest}
-    build:
-      context: .
-      dockerfile: Dockerfile
     restart: unless-stopped
     ports:
       # Only the frontend is exposed to the internet
@@ -82,16 +82,6 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock:ro
     networks:
       - default
-
-  # Build-only definition for the agent runtime sandbox image. The "build"
-  # profile keeps it from ever being started as a service:
-  #   docker compose --profile build build agent-runtime
-  agent-runtime:
-    profiles: ['build']
-    build:
-      context: .
-      dockerfile: apps/agent-runtime/Dockerfile
-    image: ${AGENT_RUNTIME_IMAGE:-logiclabshq/agent-runtime:latest}
 
   postgres:
     # pgvector/pgvector includes the pgvector extension required for the vector column type

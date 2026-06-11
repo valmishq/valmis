@@ -6,7 +6,7 @@
 #
 # Build from the REPO ROOT (workspace dependencies require the full monorepo
 # context):
-#   docker compose --profile build build agent-runtime
+#   docker compose -f docker-compose.build.yml build agent-runtime
 # or:
 #   docker build -f apps/agent-runtime/Dockerfile -t logiclabshq/agent-runtime:latest .
 # ────────────────────────────────────────────────────────────────────────────────
@@ -41,8 +41,18 @@ FROM node:22-slim AS runner
 
 # python3 enables the run_code tool's python language support; curl and git
 # are common run_terminal utilities. ca-certificates for outbound HTTPS.
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends python3 ca-certificates curl git \
+#
+# Plain-HTTP debian mirrors are prone to "Hash Sum mismatch" failures behind
+# transparent proxies/CDN caches, so: (1) disable apt's http pipelining/caching,
+# (2) bootstrap ca-certificates over HTTP (the slim base ships none, so HTTPS
+# apt is impossible at first), (3) switch the mirrors to HTTPS for everything else.
+RUN printf 'Acquire::http::Pipeline-Depth 0;\nAcquire::http::No-Cache true;\nAcquire::BrokenProxy true;\n' \
+        > /etc/apt/apt.conf.d/99fix-bad-proxy \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates \
+    && sed -i 's|http://deb.debian.org|https://deb.debian.org|g' /etc/apt/sources.list.d/debian.sources \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends python3 curl git \
     && rm -rf /var/lib/apt/lists/* \
     && corepack enable && corepack prepare pnpm@10.20.0 --activate
 
@@ -66,10 +76,11 @@ RUN pnpm install --frozen-lockfile --prod --filter @repo/agent-runtime...
 # but the symlinked package must exist for module resolution)
 COPY --from=builder /repo/packages/types/src   packages/types/src
 
-# packages/utils compiled output + data files resolved via __dirname at runtime
+# packages/utils compiled output + data files resolved via __dirname at runtime.
+# Both registries resolve ../../src/... from dist/, i.e. packages/utils/src/...
 COPY --from=builder /repo/packages/utils/dist  packages/utils/dist
-COPY --from=builder /repo/packages/utils/src/integrations/definitions  packages/utils/dist/integrations/definitions
-COPY --from=builder /repo/packages/utils/src/skills                    packages/utils/dist/skills
+COPY --from=builder /repo/packages/utils/src/integrations/definitions  packages/utils/src/integrations/definitions
+COPY --from=builder /repo/packages/utils/src/skills                    packages/utils/src/skills
 
 # Agent-runtime compiled output
 COPY --from=builder /repo/apps/agent-runtime/dist  apps/agent-runtime/dist
@@ -77,6 +88,14 @@ COPY --from=builder /repo/apps/agent-runtime/dist  apps/agent-runtime/dist
 # Non-root runtime user. The uid/gid must match RUNTIME_UID in the backend's
 # DockerDriver — the workspace dir is chown'd to it before each spawn.
 RUN groupadd --gid 10001 agent && useradd --uid 10001 --gid 10001 --create-home agent
+
+# Workspace mountpoint, owned by the runtime user. Docker's volume copy-up
+# stamps the IMAGE mountpoint's ownership onto an empty volume (sub)path at
+# every container create — without this dir the mountpoint is auto-created as
+# root:root and the daemon resets empty agent workspaces to root on each spawn,
+# silently undoing the backend's chown and making the workspace read-only for
+# the agent.
+RUN mkdir -p /workspace && chown agent:agent /workspace
 
 ENV NODE_ENV=production
 

@@ -1,11 +1,12 @@
 # ─── Build stage ───────────────────────────────────────────────────────────────
 # Builds the entire monorepo (frontend + backend + agent-runtime) from source.
 #
-# SvelteKit static env vars:
-#   svelte.config.js sets kit.env.dir = '../../' so Vite reads .env from the repo
-#   root at build time. We copy .env into the builder — it is NOT copied to the
-#   final runner image. Adding new vars to .env/.env.example requires no changes
-#   here.
+# Environment-agnostic build: NO env vars are baked in. The frontend reads all
+# private env via $env/dynamic/private (runtime process.env, injected by
+# docker-compose env_file). $env/static/private must never be used — static
+# values are inlined into the bundle at build time, embedding secrets in the
+# image and breaking deploy-time configuration. .env is excluded from the build
+# context via .dockerignore.
 #
 # SvelteKit adapter:
 #   svelte.config.js uses @sveltejs/adapter-node directly.
@@ -33,11 +34,6 @@ RUN pnpm install --frozen-lockfile
 
 # Copy source
 COPY . .
-
-# Copy .env so SvelteKit can read static private vars via kit.env.dir = '../../'
-# This file stays in the builder stage only — never enters the runner image.
-# Any new vars added to .env/.env.example are picked up automatically.
-COPY .env .env
 
 RUN pnpm build
 
@@ -75,16 +71,18 @@ RUN pnpm install --frozen-lockfile --prod
 COPY --from=builder /repo/packages/types/src   packages/types/src
 COPY --from=builder /repo/packages/ui/src      packages/ui/src
 
-# packages/models — pure static data, consumed directly from source
-COPY --from=builder /repo/packages/models/src  packages/models/src
+# packages/models compiled JS output — the backend imports it at runtime under
+# plain node, which cannot load the .ts source (type stripping does not remap
+# the .js specifiers inside it)
+COPY --from=builder /repo/packages/models/dist packages/models/dist
 
 # packages/utils compiled JS output
 COPY --from=builder /repo/packages/utils/dist  packages/utils/dist
 
 # Data files referenced at runtime via __dirname (tsc does not copy non-TS files).
-# registry.ts resolves: dist/integrations/definitions/ and dist/skills/<name>/SKILL.md
-COPY --from=builder /repo/packages/utils/src/integrations/definitions  packages/utils/dist/integrations/definitions
-COPY --from=builder /repo/packages/utils/src/skills                    packages/utils/dist/skills
+# Both registries resolve ../../src/... from dist/, i.e. packages/utils/src/...
+COPY --from=builder /repo/packages/utils/src/integrations/definitions  packages/utils/src/integrations/definitions
+COPY --from=builder /repo/packages/utils/src/skills                    packages/utils/src/skills
 
 # Backend compiled output (tsc → dist/)
 COPY --from=builder /repo/apps/backend/dist    apps/backend/dist

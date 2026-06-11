@@ -9,9 +9,11 @@
 # Turbo cache
 .turbo
 
-# Local dev files — .env IS included so the builder stage can bake SvelteKit
-# static private vars at build time. It does NOT get copied to the runner stage.
-# *.local files (e.g. .env.local) are excluded.
+# Env files — NEVER enter the build context. The build is environment-agnostic;
+# all env vars are injected at runtime via docker-compose env_file. Both
+# Dockerfiles run `COPY . .`, so anything not listed here lands in image layers.
+.env
+.env.*
 *.local
 
 # Git

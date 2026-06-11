@@ -1,0 +1,28 @@
+# Build-from-source definitions for the two deployment images.
+#
+# Kept SEPARATE from docker-compose.yml so the deployment file stays pull-only —
+# deployment tools that force `compose up --build` (Dokploy, Coolify, etc.)
+# would otherwise try to rebuild from a directory that has no source tree.
+#
+# Build both images:
+#   docker compose -f docker-compose.build.yml build
+# Build one:
+#   docker compose -f docker-compose.build.yml build agent-runtime
+#
+# The image names match docker-compose.yml, so a local build transparently
+# replaces the published image for `docker compose up`.
+
+services:
+  app:
+    image: ${APP_IMAGE:-logiclabshq/agent-int:latest}
+    build:
+      context: .
+      dockerfile: Dockerfile
+
+  # Agent runtime sandbox image — spawned per agent turn by the backend's
+  # DockerDriver, never started by compose itself.
+  agent-runtime:
+    image: ${AGENT_RUNTIME_IMAGE:-logiclabshq/agent-runtime:latest}
+    build:
+      context: .
+      dockerfile: apps/agent-runtime/Dockerfile
