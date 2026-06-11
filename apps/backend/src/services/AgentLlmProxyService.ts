@@ -7,7 +7,7 @@ import {
 } from '@earendil-works/pi-ai';
 import type { LlmProxyRequest, AgentStreamEvent, SandboxTokenPayload } from '@repo/types';
 import { AgentProxyService } from './AgentProxyService.js';
-import { LlmProviderService } from './llmProviderService.js';
+import { LlmProviderService } from './LlmProviderService.js';
 import { EncryptionService } from './EncryptionService.js';
 import { AgentService } from './AgentService.js';
 import { AgentStreamBus } from './AgentStreamBus.js';

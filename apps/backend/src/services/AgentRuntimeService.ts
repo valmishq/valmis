@@ -12,7 +12,7 @@ import { getCredentialDefinition } from '@repo/utils';
 import { AgentSessionService } from './AgentSessionService.js';
 import { AgentProxyService } from './AgentProxyService.js';
 import { AgentService } from './AgentService.js';
-import { LlmProviderService } from './llmProviderService.js';
+import { LlmProviderService } from './LlmProviderService.js';
 import { CredentialService } from './CredentialService.js';
 import { agentStreamBus } from './AgentStreamBus.js';
 import { logger } from '../config/logger.js';

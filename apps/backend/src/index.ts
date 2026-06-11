@@ -30,7 +30,7 @@ import { CredentialService } from './services/CredentialService.js';
 import { CredentialResolverService } from './services/CredentialResolverService.js';
 import { AgentService } from './services/AgentService.js';
 import { AgentMemoryService } from './services/AgentMemoryService.js';
-import { LlmProviderService } from './services/llmProviderService.js';
+import { LlmProviderService } from './services/LlmProviderService.js';
 import { AgentSessionService } from './services/AgentSessionService.js';
 import { agentStreamBus } from './services/AgentStreamBus.js';
 import { AgentProxyService } from './services/AgentProxyService.js';

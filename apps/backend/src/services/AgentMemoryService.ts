@@ -13,7 +13,7 @@ import type {
 	MemoryType,
 } from '@repo/types';
 import { AgentService } from './AgentService.js';
-import { LlmProviderService } from './llmProviderService.js';
+import { LlmProviderService } from './LlmProviderService.js';
 import { EncryptionService } from './EncryptionService.js';
 import { logger } from '../config/logger.js';
 
