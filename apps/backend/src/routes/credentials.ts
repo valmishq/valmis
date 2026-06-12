@@ -20,7 +20,6 @@ import type {
 	CredentialTestResponse,
 	CreateCredentialRequestBody,
 	UpdateCredentialRequestBody,
-	OwnerIdRequestBody,
 } from '@repo/types';
 
 const encryption = new EncryptionService();
@@ -29,6 +28,10 @@ const resolverService = new CredentialResolverService(credentialService);
 
 /**
  * Factory — creates the credentials router with an injected AuthService instance.
+ *
+ * All routes requireAuth; ownerId comes from the authenticated token
+ * (req.user.sub) — never from the client — so users can only act on
+ * their own credentials.
  *
  * Routes:
  *   GET    /v1/credentials/definitions       — list all credential definitions (public YAML registry)
@@ -82,17 +85,13 @@ export function createCredentialsRouter(
 
 	/**
 	 * GET /v1/credentials
-	 * List all credential instances for a given owner.
-	 * Requires `ownerId` query parameter.
+	 * List all credential instances owned by the authenticated user.
 	 */
 	router.get('/', auth, async (req: Request, res: Response) => {
-		const ownerId = req.query.ownerId as string | undefined;
+		const ownerId = req.user?.sub;
 		if (!ownerId) {
-			const body: CredentialsListResponse = {
-				success: false,
-				error: 'ownerId query parameter is required',
-			};
-			res.status(400).json(body);
+			const body: CredentialsListResponse = { success: false, error: 'Unauthorized' };
+			res.status(401).json(body);
 			return;
 		}
 
@@ -104,18 +103,15 @@ export function createCredentialsRouter(
 	/**
 	 * GET /v1/credentials/:id
 	 * Get a single credential's metadata (no decrypted data).
-	 * Requires `ownerId` query parameter.
-	 * Returns 404 if the record does not exist or does not belong to the given owner.
+	 * Returns 404 if the record does not exist or does not belong to the
+	 * authenticated user.
 	 */
 	router.get('/:id', auth, async (req: Request, res: Response) => {
 		const id = req.params.id as string;
-		const ownerId = req.query.ownerId as string | undefined;
+		const ownerId = req.user?.sub;
 		if (!ownerId) {
-			const body: CredentialResponse = {
-				success: false,
-				error: 'ownerId query parameter is required',
-			};
-			res.status(400).json(body);
+			const body: CredentialResponse = { success: false, error: 'Unauthorized' };
+			res.status(401).json(body);
 			return;
 		}
 
@@ -135,13 +131,12 @@ export function createCredentialsRouter(
 	 * Secret-typed properties and internal OAuth fields (accessToken, refreshToken,
 	 * codeVerifier) are replaced with the sentinel value "__REDACTED__".
 	 * This endpoint is used to pre-fill the edit form in the UI.
-	 * Requires `ownerId` query parameter.
 	 */
 	router.get('/:id/data', auth, async (req: Request, res: Response) => {
 		const id = req.params.id as string;
-		const ownerId = req.query.ownerId as string | undefined;
+		const ownerId = req.user?.sub;
 		if (!ownerId) {
-			res.status(400).json({ success: false, error: 'ownerId query parameter is required' });
+			res.status(401).json({ success: false, error: 'Unauthorized' });
 			return;
 		}
 
@@ -170,15 +165,22 @@ export function createCredentialsRouter(
 	/**
 	 * POST /v1/credentials
 	 * Create a new credential instance.
-	 * Body: { ownerId, name, type, data }
+	 * Body: { name, type, data }
 	 */
 	router.post('/', auth, async (req: Request, res: Response) => {
-		const { ownerId, name, type, data } = req.body as CreateCredentialRequestBody;
+		const ownerId = req.user?.sub;
+		if (!ownerId) {
+			const body: CredentialResponse = { success: false, error: 'Unauthorized' };
+			res.status(401).json(body);
+			return;
+		}
 
-		if (!ownerId || !name || !type || !data) {
+		const { name, type, data } = req.body as CreateCredentialRequestBody;
+
+		if (!name || !type || !data) {
 			const body: CredentialResponse = {
 				success: false,
-				error: 'ownerId, name, type, and data are required',
+				error: 'name, type, and data are required',
 			};
 			res.status(400).json(body);
 			return;
@@ -217,7 +219,7 @@ export function createCredentialsRouter(
 	/**
 	 * PUT /v1/credentials/:id
 	 * Update an existing credential (name and/or data).
-	 * Body: { ownerId, name?, data? }
+	 * Body: { name?, data? }
 	 *
 	 * When `data` is provided, any field containing the sentinel value "__REDACTED__"
 	 * is treated as "keep the existing stored value" — the real secret is restored
@@ -227,13 +229,14 @@ export function createCredentialsRouter(
 	 * Returns 404 if the record does not exist or does not belong to the given owner.
 	 */
 	router.put('/:id', auth, async (req: Request, res: Response) => {
-		const { ownerId, name, data } = req.body as UpdateCredentialRequestBody;
-
+		const ownerId = req.user?.sub;
 		if (!ownerId) {
-			const body: CredentialResponse = { success: false, error: 'ownerId is required' };
-			res.status(400).json(body);
+			const body: CredentialResponse = { success: false, error: 'Unauthorized' };
+			res.status(401).json(body);
 			return;
 		}
+
+		const { name, data } = req.body as UpdateCredentialRequestBody;
 
 		if (!name && !data) {
 			const body: CredentialResponse = {
@@ -278,16 +281,15 @@ export function createCredentialsRouter(
 	 * is extracted from the response and saved as `connectedAccount` in the credential data.
 	 * This makes connectedAccount work for API key types, not just OAuth2.
 	 *
-	 * Requires `ownerId` in the request body.
-	 * Returns 404 if the record does not exist or does not belong to the given owner.
+	 * Returns 404 if the record does not exist or does not belong to the
+	 * authenticated user.
 	 */
 	router.post('/:id/test', auth, async (req: Request, res: Response) => {
 		const testId = req.params.id as string;
-		const { ownerId } = req.body as OwnerIdRequestBody;
-
+		const ownerId = req.user?.sub;
 		if (!ownerId) {
-			const body: CredentialTestResponse = { success: false, error: 'ownerId is required' };
-			res.status(400).json(body);
+			const body: CredentialTestResponse = { success: false, error: 'Unauthorized' };
+			res.status(401).json(body);
 			return;
 		}
 
@@ -415,16 +417,15 @@ export function createCredentialsRouter(
 	/**
 	 * DELETE /v1/credentials/:id
 	 * Delete a credential by ID.
-	 * Body: { ownerId }
-	 * Returns 404 if the record does not exist or does not belong to the given owner.
+	 * Returns 404 if the record does not exist or does not belong to the
+	 * authenticated user.
 	 */
 	router.delete('/:id', auth, async (req: Request, res: Response) => {
 		const deleteId = req.params.id as string;
-		const { ownerId } = req.body as OwnerIdRequestBody;
-
+		const ownerId = req.user?.sub;
 		if (!ownerId) {
-			const body: CredentialDeleteResponse = { success: false, error: 'ownerId is required' };
-			res.status(400).json(body);
+			const body: CredentialDeleteResponse = { success: false, error: 'Unauthorized' };
+			res.status(401).json(body);
 			return;
 		}
 

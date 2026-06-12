@@ -164,9 +164,11 @@ export interface ExecuteRequestOptions {
 
 // ─── Request Bodies ───────────────────────────────────────────────────────────
 
-/** POST /v1/credentials — create a new credential */
+/**
+ * POST /v1/credentials — create a new credential.
+ * Ownership is derived from the authenticated token, never from the body.
+ */
 export interface CreateCredentialRequestBody {
-	ownerId: string;
 	name: string;
 	type: string;
 	data: Record<string, unknown>;
@@ -174,16 +176,6 @@ export interface CreateCredentialRequestBody {
 
 /** PUT /v1/credentials/:id — update an existing credential */
 export interface UpdateCredentialRequestBody {
-	ownerId: string;
 	name?: string;
 	data?: Record<string, unknown>;
-}
-
-/**
- * Shared single-field body carrying only an ownerId.
- * Used by: POST /v1/credentials/:id/test, DELETE /v1/credentials/:id,
- *          POST /v1/llm-providers/:id/set-default, DELETE /v1/llm-providers/:id
- */
-export interface OwnerIdRequestBody {
-	ownerId: string;
 }

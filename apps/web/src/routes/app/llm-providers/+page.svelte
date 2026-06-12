@@ -163,7 +163,6 @@
 			if (editingConfig) {
 				// Update existing config
 				const body: Record<string, unknown> = {
-					ownerId: user.id,
 					name: formName,
 					model: formModel,
 					isDefault: formIsDefault,
@@ -195,7 +194,6 @@
 				}
 
 				const body: Record<string, unknown> = {
-					ownerId: user.id,
 					provider: formProvider,
 					name: formName,
 					model: formModel,
@@ -238,8 +236,7 @@
 		settingDefault = config.id;
 		try {
 			const res = await api(`/llm-providers/${config.id}/set-default`, {
-				method: 'POST',
-				body: JSON.stringify({ ownerId: user.id })
+				method: 'POST'
 			});
 			if (res.ok) {
 				await refreshConfigs();
@@ -273,8 +270,7 @@
 
 		try {
 			const res = await api(`/llm-providers/${configToDelete.id}`, {
-				method: 'DELETE',
-				body: JSON.stringify({ ownerId: user.id })
+				method: 'DELETE'
 			});
 			if (res.ok) {
 				configs = configs.filter((c) => c.id !== configToDelete!.id);
@@ -293,7 +289,7 @@
 		const { user } = get(authStore);
 		if (!user) return;
 		try {
-			const res = await api(`/llm-providers?ownerId=${encodeURIComponent(user.id)}`);
+			const res = await api('/llm-providers');
 			if (res.ok) {
 				const body = await res.json();
 				configs = (body.data ?? []) as LlmProviderConfig[];

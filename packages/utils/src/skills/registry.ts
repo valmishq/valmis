@@ -30,13 +30,21 @@ interface SkillFrontmatter {
 	};
 }
 
-/**
- * Parses a SKILL.md file and extracts YAML frontmatter + body content.
- * Returns null if the file is malformed or missing required fields.
- */
-function parseSkillFile(filePath: string): { frontmatter: SkillFrontmatter; body: string } | null {
-	const content = fs.readFileSync(filePath, 'utf-8');
+/** Result of parsing a SKILL.md document */
+export interface ParsedSkillMarkdown {
+	frontmatter: SkillFrontmatter;
+	/** Raw YAML frontmatter as a generic record (all fields preserved) */
+	frontmatterRaw: Record<string, unknown>;
+	body: string;
+}
 
+/**
+ * Parses SKILL.md content and extracts YAML frontmatter + body.
+ * Returns null if the document is malformed or missing required fields.
+ * Exported so installed skills (stored in the DB) can be parsed with the
+ * exact same rules as builtin skills.
+ */
+export function parseSkillMarkdown(content: string): ParsedSkillMarkdown | null {
 	// YAML frontmatter is delimited by --- ... ---
 	const fmMatch = content.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n([\s\S]*)$/);
 	if (!fmMatch) return null;
@@ -52,8 +60,29 @@ function parseSkillFile(filePath: string): { frontmatter: SkillFrontmatter; body
 
 	return {
 		frontmatter: parsed as SkillFrontmatter,
+		frontmatterRaw: fm,
 		body,
 	};
+}
+
+/**
+ * Replaces the markdown body of a SKILL.md document while keeping the
+ * frontmatter intact. Used by the materializer to substitute evolved
+ * instructions. Returns null if the document has no valid frontmatter block.
+ */
+export function replaceSkillMarkdownBody(content: string, newBody: string): string | null {
+	const fmMatch = content.match(/^(---\r?\n[\s\S]*?\r?\n---\r?\n)[\s\S]*$/);
+	if (!fmMatch) return null;
+	return `${fmMatch[1]}\n${newBody.trim()}\n`;
+}
+
+/**
+ * Parses a SKILL.md file and extracts YAML frontmatter + body content.
+ * Returns null if the file is malformed or missing required fields.
+ */
+function parseSkillFile(filePath: string): ParsedSkillMarkdown | null {
+	const content = fs.readFileSync(filePath, 'utf-8');
+	return parseSkillMarkdown(content);
 }
 
 /**
@@ -100,6 +129,7 @@ export function loadSkillCatalog(): SkillCatalogEntry[] {
 			name: frontmatter.name,
 			description: frontmatter.description,
 			evolvable: frontmatter.metadata?.evolvable === true,
+			source: 'builtin',
 		});
 	}
 
@@ -124,6 +154,63 @@ export function getSkillInstructions(skillName: string): string | null {
  */
 export function getSkillCatalogEntry(skillName: string): SkillCatalogEntry | undefined {
 	return loadSkillCatalog().find((s) => s.name === skillName);
+}
+
+/**
+ * Returns the full raw SKILL.md content (frontmatter + body) for a builtin skill.
+ * Used by the materializer to write the file verbatim into agent workspaces.
+ * Returns null if the skill is not found.
+ */
+export function getSkillRawFile(skillName: string): string | null {
+	const skillMdPath = path.join(SKILLS_DIR, skillName, 'SKILL.md');
+	if (!fs.existsSync(skillMdPath)) return null;
+	return fs.readFileSync(skillMdPath, 'utf-8');
+}
+
+/** A bundled skill file with its path relative to the skill directory */
+export interface SkillBundleFile {
+	path: string;
+	content: string;
+}
+
+/**
+ * Returns all files bundled with a builtin skill (SKILL.md plus any
+ * references/scripts/assets), with paths relative to the skill directory.
+ * Symlinks are skipped (lstat check) so a symlinked file can never leak
+ * content from outside the skill directory. Returns [] if the skill is
+ * not found.
+ */
+export function getSkillBundleFiles(skillName: string): SkillBundleFile[] {
+	const skillDir = path.join(SKILLS_DIR, skillName);
+	if (!fs.existsSync(skillDir)) return [];
+
+	const files: SkillBundleFile[] = [];
+
+	const walk = (dir: string): void => {
+		let dirents: fs.Dirent[];
+		try {
+			dirents = fs.readdirSync(dir, { withFileTypes: true });
+		} catch {
+			return;
+		}
+		for (const dirent of dirents) {
+			const fullPath = path.join(dir, dirent.name);
+			// lstat so symlinks are detected as symlinks, not their targets
+			const stat = fs.lstatSync(fullPath);
+			if (stat.isSymbolicLink()) continue;
+			if (stat.isDirectory()) {
+				walk(fullPath);
+			} else if (stat.isFile()) {
+				files.push({
+					path: path.relative(skillDir, fullPath),
+					content: fs.readFileSync(fullPath, 'utf-8'),
+				});
+			}
+		}
+	};
+
+	walk(skillDir);
+	return files;
 }
 
 /**

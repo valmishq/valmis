@@ -175,6 +175,11 @@
 			return [{ label: 'Agents', href: '/app/agents' }, { label: 'New Agent' }];
 		}
 
+		// ── /app/skills ───────────────────────────────────────────────────────────
+		if (pathname === '/app/skills') {
+			return [{ label: 'Skills' }];
+		}
+
 		// ── /app/credentials ──────────────────────────────────────────────────────
 		if (pathname === '/app/credentials') {
 			return [{ label: 'Credentials' }];

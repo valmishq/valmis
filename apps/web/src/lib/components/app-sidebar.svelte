@@ -13,6 +13,7 @@
 	import BotIcon from '@lucide/svelte/icons/bot';
 	import MessageSquareIcon from '@lucide/svelte/icons/message-square';
 	import ShieldIcon from '@lucide/svelte/icons/shield';
+	import SparklesIcon from '@lucide/svelte/icons/sparkles';
 	import CpuIcon from '@lucide/svelte/icons/cpu';
 	import UserIcon from '@lucide/svelte/icons/user';
 	import KeyIcon from '@lucide/svelte/icons/key';
@@ -51,6 +52,7 @@
 		{ title: 'Home', url: '/app', icon: HouseIcon },
 		{ title: 'Chat', url: '/app/chat', icon: MessageSquareIcon },
 		{ title: 'Agents', url: '/app/agents', icon: BotIcon },
+		{ title: 'Skills', url: '/app/skills', icon: SparklesIcon },
 		{ title: 'LLM Providers', url: '/app/llm-providers', icon: CpuIcon },
 		{ title: 'Credentials', url: '/app/credentials', icon: ShieldIcon }
 	];

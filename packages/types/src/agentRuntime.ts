@@ -1,4 +1,5 @@
 import type { ApiResponse } from './api.js';
+import type { SkillRuntimeEntry } from './skill.js';
 import type { Workflow, WorkflowTriggerContext } from './workflow.js';
 
 // ─── Enum mirrors (TypeScript unions matching the pgEnum values) ──────────────
@@ -256,6 +257,13 @@ export interface AgentRuntimeConfig {
 	 * which service. Replaces the UUID-only credentialIds list in the prompt.
 	 */
 	credentials: CredentialMeta[];
+	/**
+	 * Skills assigned to this agent — compact index only (name, description,
+	 * workspace-relative SKILL.md path). Full instructions are materialized
+	 * into <workspace>/skills/<name>/ by the backend before spawn; the agent
+	 * reads them on demand via read_file (progressive disclosure).
+	 */
+	skills?: SkillRuntimeEntry[];
 	/**
 	 * LLM provider config ID used for memory embeddings.
 	 * Null/empty means memory tools are unavailable for this agent.

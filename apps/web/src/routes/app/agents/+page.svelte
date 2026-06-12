@@ -49,8 +49,7 @@
 
 		try {
 			const res = await api(`/agents/${agentToDelete.id}`, {
-				method: 'DELETE',
-				body: JSON.stringify({ ownerId: user.id })
+				method: 'DELETE'
 			});
 			if (res.ok) {
 				agents = agents.filter((a) => a.id !== agentToDelete!.id);

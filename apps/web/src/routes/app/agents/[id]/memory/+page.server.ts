@@ -16,8 +16,8 @@ export const load: PageServerLoad = async (event) => {
 	}
 
 	const [agentRes, memoryRes] = await Promise.all([
-		api(`/agents/${agentId}?ownerId=${encodeURIComponent(ownerId)}`, event),
-		api(`/agents/${agentId}/memory?ownerId=${encodeURIComponent(ownerId)}&limit=100`, event)
+		api(`/agents/${agentId}`, event),
+		api(`/agents/${agentId}/memory?limit=100`, event)
 	]);
 
 	if (!agentRes.ok) {

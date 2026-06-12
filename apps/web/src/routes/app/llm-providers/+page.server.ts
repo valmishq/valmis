@@ -12,7 +12,7 @@ export const load: PageServerLoad = async (event) => {
 	let configs: LlmProviderConfig[] = [];
 
 	if (ownerId) {
-		const res = await api(`/llm-providers?ownerId=${encodeURIComponent(ownerId)}`, event);
+		const res = await api('/llm-providers', event);
 		if (res.ok) {
 			const body = await res.json();
 			configs = (body.data ?? []) as LlmProviderConfig[];

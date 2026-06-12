@@ -155,6 +155,26 @@ export class AgentService {
 		return rows.map((row) => rowToAgent(row, credMap.get(row.id) ?? []));
 	}
 
+	/**
+	 * Get a single agent by ID WITHOUT ownership check.
+	 * Internal-only — used by background workers (e.g. the skill evolution
+	 * engine) that have no request context. Never expose to HTTP handlers.
+	 */
+	async getByIdInternal(id: string): Promise<Agent | null> {
+		const rows = await db.select().from(agents).where(eq(agents.id, id)).limit(1);
+		if (!rows[0]) return null;
+
+		const credLinks = await db
+			.select({ credentialId: agentCredentials.credentialId })
+			.from(agentCredentials)
+			.where(eq(agentCredentials.agentId, id));
+
+		return rowToAgent(
+			rows[0],
+			credLinks.map((l) => l.credentialId),
+		);
+	}
+
 	/** Get a single agent by ID with ownership check */
 	async getById(id: string, ownerId: string): Promise<Agent | null> {
 		const rows = await db

@@ -6,6 +6,8 @@
 	import PlusIcon from '@lucide/svelte/icons/plus';
 	import SparklesIcon from '@lucide/svelte/icons/sparkles';
 	import XIcon from '@lucide/svelte/icons/x';
+	import GitBranchIcon from '@lucide/svelte/icons/git-branch';
+	import TriangleAlertIcon from '@lucide/svelte/icons/triangle-alert';
 	import type { SkillCatalogEntry, AgentEvolvedSkill } from '@repo/types';
 
 	interface Props {
@@ -143,6 +145,15 @@
 						<div class="min-w-0 flex-1">
 							<div class="flex flex-wrap items-center gap-2">
 								<p class="text-sm font-medium text-foreground">{name}</p>
+								{#if entry?.source === 'installed'}
+									<span
+										class="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground"
+										title="Third-party skill installed from {entry.sourceRepo ?? 'GitHub'}"
+									>
+										<GitBranchIcon class="size-3" />
+										{entry.sourceRepo ?? 'Third-party'}
+									</span>
+								{/if}
 								{#if entry?.evolvable}
 									<span
 										class="inline-flex items-center gap-1 rounded-full bg-violet-100 px-2 py-0.5 text-xs font-medium text-violet-700 dark:bg-violet-950 dark:text-violet-300"
@@ -251,6 +262,15 @@
 							<div class="min-w-0 flex-1">
 								<div class="flex flex-wrap items-center gap-2">
 									<p class="text-sm font-medium text-foreground">{skill.name}</p>
+									{#if skill.source === 'installed'}
+										<span
+											class="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground"
+											title="Third-party skill installed from {skill.sourceRepo ?? 'GitHub'}"
+										>
+											<GitBranchIcon class="size-3" />
+											{skill.sourceRepo ?? 'Third-party'}
+										</span>
+									{/if}
 									{#if skill.evolvable}
 										<span
 											class="inline-flex items-center gap-1 rounded-full bg-violet-100 px-2 py-0.5 text-xs font-medium text-violet-700 dark:bg-violet-950 dark:text-violet-300"
@@ -261,6 +281,15 @@
 									{/if}
 								</div>
 								<p class="mt-0.5 text-xs text-muted-foreground">{skill.description}</p>
+								{#if skill.source === 'installed' && isDraft}
+									<p
+										class="mt-1.5 flex items-start gap-1.5 text-xs text-amber-700 dark:text-amber-400"
+									>
+										<TriangleAlertIcon class="mt-0.5 size-3 shrink-0" />
+										Installed from GitHub — the agent will follow these instructions and may use this
+										agent's credentials.
+									</p>
+								{/if}
 							</div>
 						</label>
 					{/each}
@@ -268,13 +297,21 @@
 			{/if}
 		</div>
 
-		<Dialog.Footer>
-			<Button type="button" variant="outline" onclick={() => (addDialogOpen = false)}>
-				Cancel
-			</Button>
-			<Button type="button" onclick={confirmSelection} disabled={catalogLoading || !!catalogError}>
-				Done
-			</Button>
+		<Dialog.Footer class="sm:justify-between">
+			<a
+				href="/app/skills"
+				class="self-center text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+			>
+				Manage installed skills
+			</a>
+			<div class="flex gap-2">
+				<Button type="button" variant="outline" onclick={() => (addDialogOpen = false)}>
+					Cancel
+				</Button>
+				<Button type="button" onclick={confirmSelection} disabled={catalogLoading || !!catalogError}>
+					Done
+				</Button>
+			</div>
 		</Dialog.Footer>
 	</Dialog.Content>
 </Dialog.Root>

@@ -11,6 +11,7 @@ import type {
 	MemorySearchRequest,
 	MemoryDeleteRequest,
 	MemoryDeleteResponse,
+	SkillTraceRequestBody,
 	AgentMemoryEntry,
 	AgentMemorySearchResult,
 	WorkflowRunStatus,
@@ -33,6 +34,7 @@ import type {
  *   POST /v1/runtime/internal/thread/:id/messages    — append a message
  *   POST /v1/runtime/internal/memory/write           — write a memory entry (host embeds + stores)
  *   POST /v1/runtime/internal/memory/search          — search memory by semantic similarity
+ *   POST /v1/runtime/internal/skills/trace           — record a skill execution trace
  *   POST /v1/runtime/internal/workflow/step-start    — log workflow step start
  *   POST /v1/runtime/internal/workflow/step-end      — log workflow step completion
  *   POST /v1/runtime/internal/workflow/run-complete  — mark workflow run complete
@@ -259,6 +261,26 @@ export class ProxyClient {
 			throw new Error(`Memory delete failed: ${json.error ?? 'unknown error'}`);
 		}
 		return json.data;
+	}
+
+	// ─── Skill traces ─────────────────────────────────────────────────────────
+
+	/**
+	 * Record one skill execution trace for the evolution engine.
+	 * The host enforces the agentId from the PROXY_TOKEN and validates that the
+	 * skill is actually assigned to this agent.
+	 */
+	async recordSkillTrace(request: SkillTraceRequestBody): Promise<void> {
+		const res = await fetch(`${this.baseUrl}/v1/runtime/internal/skills/trace`, {
+			method: 'POST',
+			headers: this.authHeaders(),
+			body: JSON.stringify(request),
+		});
+
+		const json = (await res.json()) as { success: boolean; error?: string };
+		if (!json.success) {
+			throw new Error(`Skill trace failed: ${json.error ?? 'unknown error'}`);
+		}
 	}
 
 	// ─── Workflow step logging ────────────────────────────────────────────────

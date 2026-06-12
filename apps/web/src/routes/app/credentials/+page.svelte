@@ -155,7 +155,6 @@
 			const res = await api('/credentials', {
 				method: 'POST',
 				body: JSON.stringify({
-					ownerId: user.id,
 					name: credentialName,
 					type: selectedDefinition.id,
 					data: payload
@@ -199,8 +198,7 @@
 
 		try {
 			const res = await api(`/credentials/${credToDelete.id}`, {
-				method: 'DELETE',
-				body: JSON.stringify({ ownerId: user.id })
+				method: 'DELETE'
 			});
 			if (res.ok) {
 				credentials = credentials.filter((c) => c.id !== credToDelete!.id);
@@ -226,8 +224,7 @@
 
 		try {
 			const res = await api(`/credentials/${cred.id}/test`, {
-				method: 'POST',
-				body: JSON.stringify({ ownerId: user.id })
+				method: 'POST'
 			});
 
 			const body = await res.json();
@@ -273,7 +270,7 @@
 		oauthLoading[cred.id] = true;
 
 		try {
-			const res = await api(`/oauth2/authorize/${cred.id}?ownerId=${encodeURIComponent(user.id)}`);
+			const res = await api(`/oauth2/authorize/${cred.id}`);
 			const body = await res.json();
 			if (body.success && body.data?.authorizationUrl) {
 				window.location.href = body.data.authorizationUrl as string;
@@ -290,7 +287,7 @@
 		const { user } = get(authStore);
 		if (!user) return;
 		try {
-			const res = await api(`/credentials?ownerId=${encodeURIComponent(user.id)}`);
+			const res = await api('/credentials');
 			if (res.ok) {
 				const body = await res.json();
 				credentials = (body.data ?? []) as CredentialMetadata[];

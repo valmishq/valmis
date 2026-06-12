@@ -15,10 +15,10 @@ export const load: PageServerLoad = async (event) => {
 		event.fetch('/api/v1/channels/links', {
 			headers: { Authorization: `Bearer ${event.cookies.get('accessToken') ?? ''}` }
 		}),
-		event.fetch(`/api/v1/agents?ownerId=${encodeURIComponent(ownerId)}`, {
+		event.fetch('/api/v1/agents', {
 			headers: { Authorization: `Bearer ${event.cookies.get('accessToken') ?? ''}` }
 		}),
-		event.fetch(`/api/v1/credentials?ownerId=${encodeURIComponent(ownerId)}`, {
+		event.fetch('/api/v1/credentials', {
 			headers: { Authorization: `Bearer ${event.cookies.get('accessToken') ?? ''}` }
 		})
 	]);

@@ -15,7 +15,7 @@ export const load: PageServerLoad = async (event) => {
 	}
 
 	const [agentRes, workflowRes, runsRes] = await Promise.all([
-		api(`/agents/${agentId}?ownerId=${encodeURIComponent(ownerId)}`, event),
+		api(`/agents/${agentId}`, event),
 		api(`/agents/${agentId}/workflows/${workflowId}`, event),
 		api(`/agents/${agentId}/workflows/${workflowId}/runs?limit=50&offset=0`, event)
 	]);

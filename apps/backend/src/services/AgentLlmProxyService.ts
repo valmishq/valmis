@@ -1,10 +1,4 @@
-import {
-	stream,
-	complete,
-	type Model,
-	type UserMessage,
-	type TextContent,
-} from '@earendil-works/pi-ai';
+import { stream, complete, type UserMessage, type TextContent } from '@earendil-works/pi-ai';
 import type { LlmProxyRequest, AgentStreamEvent, SandboxTokenPayload } from '@repo/types';
 import { AgentProxyService } from './AgentProxyService.js';
 import { LlmProviderService } from './LlmProviderService.js';
@@ -13,11 +7,10 @@ import { AgentService } from './AgentService.js';
 import { AgentStreamBus } from './AgentStreamBus.js';
 import { AgentSessionService } from './AgentSessionService.js';
 import { AgentMemoryService } from './AgentMemoryService.js';
+import { resolveAgentModel, type ResolvedAgentModel } from './llm/resolveAgentModel.js';
 import { logger } from '../config/logger.js';
 import { v4 as uuidv4 } from 'uuid';
 import type { ContentBlock, MessageTokenUsage } from '@repo/types';
-import { resolveProviderApi } from '@repo/utils';
-import { LLM_MODELS } from '@repo/models';
 
 /**
  * Handles LLM proxy requests from agent child processes.
@@ -632,86 +625,15 @@ export class AgentLlmProxyService {
 
 	/**
 	 * Resolve the pi-ai Model and decrypted API key for an agent.
-	 * The apiKey is returned separately — never stored on the model object —
-	 * to make it clear that it must be passed explicitly to stream() options.
+	 * Delegates to the shared resolveAgentModel helper (also used by the skill
+	 * evolution engine) so provider/API mapping stays consistent.
 	 */
-	private async resolveModel(
-		tokenPayload: SandboxTokenPayload,
-	): Promise<{ model: Model<string>; apiKey: string }> {
-		const agent = await this.agentService.getById(tokenPayload.agentId, tokenPayload.ownerId);
-		if (!agent) {
-			throw new Error(`Agent not found: ${tokenPayload.agentId}`);
-		}
-		if (!agent.modelConfigId) {
-			throw new Error(`Agent ${tokenPayload.agentId} has no model configured`);
-		}
-
-		const config = await this.llmProviderService.getById(agent.modelConfigId, tokenPayload.ownerId);
-		if (!config) {
-			throw new Error(`LLM config not found: ${agent.modelConfigId}`);
-		}
-
-		const secretData = await this.llmProviderService.getDecryptedData(
-			agent.modelConfigId,
+	private async resolveModel(tokenPayload: SandboxTokenPayload): Promise<ResolvedAgentModel> {
+		return resolveAgentModel(
+			this.agentService,
+			this.llmProviderService,
+			tokenPayload.agentId,
 			tokenPayload.ownerId,
 		);
-		if (!secretData) {
-			throw new Error(`Could not decrypt LLM config for agent ${tokenPayload.agentId}`);
-		}
-
-		logger.debug(
-			{ agentId: tokenPayload.agentId, provider: config.provider, model: config.model },
-			'[llm-proxy] resolved model config',
-		);
-
-		// Map the stored provider string to the pi-ai API identifier using the shared
-		// utility from @repo/utils. Centralising the map in one place ensures agent-runner
-		// and this service always agree on the api field of AssistantMessage.
-		const api = resolveProviderApi(config.provider);
-
-		// Catalog model IDs use OpenRouter-style "{provider}/{model}" slugs (e.g. "google/gemini-2.5-flash").
-		// Native provider APIs (Google, Anthropic, OpenAI, Mistral) expect the bare model name only.
-		// Manual entries without a slash (e.g. "gpt-4o") pass through unchanged.
-		const nativeModelId = config.model.includes('/')
-			? config.model.split('/').slice(1).join('/')
-			: config.model;
-
-		// Look up catalog pricing and context window for accurate cost tracking.
-		// Try exact match first (catalog uses "provider/model" slugs like "openai/gpt-4o").
-		// Fall back to bare model name match for agents configured without the provider prefix
-		// (e.g. model stored as "gpt-4o" → matches catalog entry "openai/gpt-4o").
-		const catalogEntry =
-			LLM_MODELS.find((m) => m.id === config.model) ??
-			LLM_MODELS.find((m) => m.id.endsWith('/' + config.model));
-
-		// IMPORTANT: The catalog stores pricing as cost-per-single-token (e.g. 0.000003).
-		// pi-ai expects cost-per-MILLION-tokens (e.g. 3.0).
-		// Multiply by 1_000_000 to convert.
-		const perMillion = (raw: string | undefined): number => {
-			if (!raw) return 0;
-			const v = parseFloat(raw);
-			return isNaN(v) ? 0 : v * 1_000_000;
-		};
-		const contextWindow = catalogEntry?.contextLength ?? 128000;
-
-		const model: Model<string> = {
-			id: nativeModelId,
-			api,
-			provider: config.provider,
-			name: config.model,
-			reasoning: false,
-			input: ['text'],
-			cost: {
-				input: perMillion(catalogEntry?.pricing.promptPerToken),
-				output: perMillion(catalogEntry?.pricing.completionPerToken),
-				cacheRead: perMillion(catalogEntry?.pricing.cacheReadPerToken),
-				cacheWrite: perMillion(catalogEntry?.pricing.cacheWritePerToken),
-			},
-			contextWindow,
-			maxTokens: 4096,
-			baseUrl: secretData.baseUrl ?? '',
-		};
-
-		return { model, apiKey: secretData.apiKey };
 	}
 }

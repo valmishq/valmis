@@ -34,8 +34,7 @@
 		deletingMemoryId = entryId;
 		try {
 			const res = await api(`/agents/${data.agent.id}/memory/${entryId}`, {
-				method: 'DELETE',
-				body: JSON.stringify({ ownerId: user.id })
+				method: 'DELETE'
 			});
 
 			if (res.ok) {

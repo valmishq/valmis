@@ -9,11 +9,9 @@ import type { CredentialMetadata, CredentialDefinition } from '@repo/types';
  * so the page can display a success/error alert after an OAuth2 callback redirect.
  */
 export const load: PageServerLoad = async (event) => {
-	const ownerId = event.locals.user?.id ?? '';
-
 	const [defsRes, credsRes] = await Promise.all([
 		api('/credentials/definitions', event),
-		api(`/credentials?ownerId=${encodeURIComponent(ownerId)}`, event)
+		api('/credentials', event)
 	]);
 
 	const definitions: CredentialDefinition[] = defsRes.ok ? ((await defsRes.json()).data ?? []) : [];

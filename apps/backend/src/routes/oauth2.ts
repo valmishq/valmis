@@ -121,18 +121,14 @@ export function createOAuth2Router(authService: AuthService): Router {
 	 * Protected. For authorization_code flow: builds and returns the OAuth2
 	 * authorization URL. For client_credentials flow: performs the token exchange
 	 * server-side (no browser redirect needed) and returns success immediately.
-	 * Requires `ownerId` query parameter.
+	 * ownerId comes from the authenticated token — never from the client.
 	 */
 	router.get('/authorize/:credentialId', auth, async (req: Request, res: Response) => {
 		const credentialId = req.params.credentialId as string;
-		const ownerId = req.query.ownerId as string | undefined;
-
+		const ownerId = req.user?.sub;
 		if (!ownerId) {
-			const body: OAuth2AuthorizeResponse = {
-				success: false,
-				error: 'ownerId query parameter is required',
-			};
-			res.status(400).json(body);
+			const body: OAuth2AuthorizeResponse = { success: false, error: 'Unauthorized' };
+			res.status(401).json(body);
 			return;
 		}
 

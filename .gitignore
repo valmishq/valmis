@@ -21,3 +21,6 @@ Thumbs.db
 # Editor
 .vscode/settings.json
 .dev
+# VitePress
+docs/.vitepress/cache
+docs/.vitepress/dist

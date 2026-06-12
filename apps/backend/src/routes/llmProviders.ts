@@ -12,7 +12,6 @@ import type {
 	LlmProviderDeleteResponse,
 	CreateLlmProviderRequestBody,
 	UpdateLlmProviderRequestBody,
-	OwnerIdRequestBody,
 } from '@repo/types';
 
 const encryption = new EncryptionService();
@@ -20,6 +19,10 @@ const llmProviderService = new LlmProviderService(encryption);
 
 /**
  * Factory — creates the LLM providers router with an injected AuthService instance.
+ *
+ * All routes requireAuth; ownerId comes from the authenticated token
+ * (req.user.sub) — never from the client — so users can only act on
+ * their own configs.
  *
  * Routes:
  *   GET    /v1/llm-providers                   — list configs for an owner
@@ -35,17 +38,14 @@ export function createLlmProvidersRouter(authService: AuthService): Router {
 
 	/**
 	 * GET /v1/llm-providers
-	 * List all LLM provider configs for a given owner (metadata only — no secrets).
-	 * Requires `ownerId` query parameter.
+	 * List all LLM provider configs owned by the authenticated user
+	 * (metadata only — no secrets).
 	 */
 	router.get('/', auth, async (req: Request, res: Response) => {
-		const ownerId = req.query.ownerId as string | undefined;
+		const ownerId = req.user?.sub;
 		if (!ownerId) {
-			const body: LlmProvidersListResponse = {
-				success: false,
-				error: 'ownerId query parameter is required',
-			};
-			res.status(400).json(body);
+			const body: LlmProvidersListResponse = { success: false, error: 'Unauthorized' };
+			res.status(401).json(body);
 			return;
 		}
 
@@ -57,18 +57,15 @@ export function createLlmProvidersRouter(authService: AuthService): Router {
 	/**
 	 * GET /v1/llm-providers/:id
 	 * Get a single LLM provider config metadata by ID (no decrypted secret).
-	 * Requires `ownerId` query parameter.
-	 * Returns 404 if the record does not exist or does not belong to the given owner.
+	 * Returns 404 if the record does not exist or does not belong to the
+	 * authenticated user.
 	 */
 	router.get('/:id', auth, async (req: Request, res: Response) => {
 		const id = req.params.id as string;
-		const ownerId = req.query.ownerId as string | undefined;
+		const ownerId = req.user?.sub;
 		if (!ownerId) {
-			const body: LlmProviderResponse = {
-				success: false,
-				error: 'ownerId query parameter is required',
-			};
-			res.status(400).json(body);
+			const body: LlmProviderResponse = { success: false, error: 'Unauthorized' };
+			res.status(401).json(body);
 			return;
 		}
 
@@ -88,16 +85,23 @@ export function createLlmProvidersRouter(authService: AuthService): Router {
 	/**
 	 * POST /v1/llm-providers
 	 * Create a new LLM provider config.
-	 * Body: { ownerId, provider, name, model, isDefault?, data: { apiKey, baseUrl? } }
+	 * Body: { provider, name, model, isDefault?, data: { apiKey, baseUrl? } }
 	 */
 	router.post('/', auth, async (req: Request, res: Response) => {
-		const { ownerId, provider, name, model, isDefault, isEmbeddingModel, data } =
+		const ownerId = req.user?.sub;
+		if (!ownerId) {
+			const body: LlmProviderResponse = { success: false, error: 'Unauthorized' };
+			res.status(401).json(body);
+			return;
+		}
+
+		const { provider, name, model, isDefault, isEmbeddingModel, data } =
 			req.body as CreateLlmProviderRequestBody;
 
-		if (!ownerId || !provider || !name || !model || !data?.apiKey) {
+		if (!provider || !name || !model || !data?.apiKey) {
 			const body: LlmProviderResponse = {
 				success: false,
-				error: 'ownerId, provider, name, model, and data.apiKey are required',
+				error: 'provider, name, model, and data.apiKey are required',
 			};
 			res.status(400).json(body);
 			return;
@@ -121,18 +125,20 @@ export function createLlmProvidersRouter(authService: AuthService): Router {
 	/**
 	 * PUT /v1/llm-providers/:id
 	 * Update an existing LLM provider config.
-	 * Body: { ownerId, name?, model?, isDefault?, data?: { apiKey, baseUrl? } }
-	 * Returns 404 if the record does not exist or does not belong to the given owner.
+	 * Body: { name?, model?, isDefault?, data?: { apiKey, baseUrl? } }
+	 * Returns 404 if the record does not exist or does not belong to the
+	 * authenticated user.
 	 */
 	router.put('/:id', auth, async (req: Request, res: Response) => {
-		const { ownerId, name, model, isDefault, isEmbeddingModel, data } =
-			req.body as UpdateLlmProviderRequestBody;
-
+		const ownerId = req.user?.sub;
 		if (!ownerId) {
-			const body: LlmProviderResponse = { success: false, error: 'ownerId is required' };
-			res.status(400).json(body);
+			const body: LlmProviderResponse = { success: false, error: 'Unauthorized' };
+			res.status(401).json(body);
 			return;
 		}
+
+		const { name, model, isDefault, isEmbeddingModel, data } =
+			req.body as UpdateLlmProviderRequestBody;
 
 		if (
 			name === undefined &&
@@ -174,16 +180,15 @@ export function createLlmProvidersRouter(authService: AuthService): Router {
 	/**
 	 * POST /v1/llm-providers/:id/set-default
 	 * Mark a config as the default for its owner.
-	 * Body: { ownerId }
-	 * Returns 404 if the record does not exist or does not belong to the given owner.
+	 * Returns 404 if the record does not exist or does not belong to the
+	 * authenticated user.
 	 */
 	router.post('/:id/set-default', auth, async (req: Request, res: Response) => {
 		const id = req.params.id as string;
-		const { ownerId } = req.body as OwnerIdRequestBody;
-
+		const ownerId = req.user?.sub;
 		if (!ownerId) {
-			const body: LlmProviderResponse = { success: false, error: 'ownerId is required' };
-			res.status(400).json(body);
+			const body: LlmProviderResponse = { success: false, error: 'Unauthorized' };
+			res.status(401).json(body);
 			return;
 		}
 
@@ -203,16 +208,15 @@ export function createLlmProvidersRouter(authService: AuthService): Router {
 	/**
 	 * DELETE /v1/llm-providers/:id
 	 * Delete an LLM provider config by ID.
-	 * Body: { ownerId }
-	 * Returns 404 if the record does not exist or does not belong to the given owner.
+	 * Returns 404 if the record does not exist or does not belong to the
+	 * authenticated user.
 	 */
 	router.delete('/:id', auth, async (req: Request, res: Response) => {
 		const deleteId = req.params.id as string;
-		const { ownerId } = req.body as OwnerIdRequestBody;
-
+		const ownerId = req.user?.sub;
 		if (!ownerId) {
-			const body: LlmProviderDeleteResponse = { success: false, error: 'ownerId is required' };
-			res.status(400).json(body);
+			const body: LlmProviderDeleteResponse = { success: false, error: 'Unauthorized' };
+			res.status(401).json(body);
 			return;
 		}
 

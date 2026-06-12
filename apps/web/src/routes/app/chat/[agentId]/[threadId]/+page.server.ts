@@ -26,10 +26,10 @@ export const load: PageServerLoad = async (event) => {
 	}
 
 	const [agentRes, threadsRes, messagesRes, credentialsRes, definitionsRes] = await Promise.all([
-		api(`/agents/${agentId}?ownerId=${encodeURIComponent(ownerId)}`, event),
+		api(`/agents/${agentId}`, event),
 		api(`/runtime/${agentId}/threads`, event),
 		api(`/runtime/${agentId}/threads/${threadId}/messages`, event),
-		api(`/credentials?ownerId=${encodeURIComponent(ownerId)}`, event),
+		api('/credentials', event),
 		api('/credentials/definitions', event)
 	]);
 
@@ -96,10 +96,7 @@ export const load: PageServerLoad = async (event) => {
 	// → catalog entry "openai/gpt-4o") for agents configured without the prefix.
 	let modelContextLength: number | null = null;
 	if (agent.modelConfigId) {
-		const llmRes = await api(
-			`/llm-providers/${agent.modelConfigId}?ownerId=${encodeURIComponent(ownerId)}`,
-			event
-		);
+		const llmRes = await api(`/llm-providers/${agent.modelConfigId}`, event);
 		if (llmRes.ok) {
 			const llmBody = await llmRes.json();
 			const modelId: string = llmBody.data?.model ?? '';

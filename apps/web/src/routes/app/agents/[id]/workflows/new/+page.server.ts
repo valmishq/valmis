@@ -22,8 +22,8 @@ export const load: PageServerLoad = async (event) => {
 
 	// Always need the agent + credentials + definitions in parallel
 	const [agentRes, credsRes, defsRes] = await Promise.all([
-		api(`/agents/${agentId}?ownerId=${encodeURIComponent(ownerId)}`, event),
-		api(`/credentials?ownerId=${encodeURIComponent(ownerId)}`, event),
+		api(`/agents/${agentId}`, event),
+		api('/credentials', event),
 		api('/credentials/definitions', event)
 	]);
 

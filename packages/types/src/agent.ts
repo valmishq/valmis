@@ -117,9 +117,11 @@ export interface MemoryDeleteResponse {
 
 // ─── Request Bodies ───────────────────────────────────────────────────────────
 
-/** POST /v1/agents — create a new agent */
+/**
+ * POST /v1/agents — create a new agent.
+ * Ownership is derived from the authenticated token, never from the body.
+ */
 export interface CreateAgentRequestBody {
-	ownerId: string;
 	name: string;
 	description?: string;
 	systemInstruction?: string;
@@ -133,7 +135,6 @@ export interface CreateAgentRequestBody {
 
 /** PUT /v1/agents/:id — update an existing agent */
 export interface UpdateAgentRequestBody {
-	ownerId: string;
 	name?: string;
 	description?: string;
 	systemInstruction?: string;

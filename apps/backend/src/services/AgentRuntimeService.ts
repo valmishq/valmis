@@ -5,6 +5,7 @@ import type {
 	AgentRuntimeConfig,
 	Agent,
 	CredentialMeta,
+	SkillRuntimeEntry,
 	Workflow,
 	WorkflowTriggerContext,
 } from '@repo/types';
@@ -14,6 +15,7 @@ import { AgentProxyService } from './AgentProxyService.js';
 import { AgentService } from './AgentService.js';
 import { LlmProviderService } from './LlmProviderService.js';
 import { CredentialService } from './CredentialService.js';
+import { SkillMaterializerService } from './SkillMaterializerService.js';
 import { agentStreamBus } from './AgentStreamBus.js';
 import { logger } from '../config/logger.js';
 import type { ExecutionDriver, RuntimeHandle } from './runtime/ExecutionDriver.js';
@@ -148,6 +150,7 @@ export class AgentRuntimeService {
 		private readonly agentService: AgentService,
 		private readonly llmProviderService: LlmProviderService,
 		private readonly credentialService: CredentialService,
+		private readonly skillMaterializer: SkillMaterializerService,
 	) {
 		// Workspaces base: repo root sibling directory by default.
 		// process.cwd() is apps/backend/ so we go up two levels to reach the monorepo root.
@@ -213,12 +216,26 @@ export class AgentRuntimeService {
 			throw new Error(`Agent not found: ${agentId}`);
 		}
 
+		// Ensure the per-agent workspace exists (driver also fixes ownership for
+		// the runtime user where needed). Prepared before the config build so the
+		// skill materializer can write into it.
+		const workspacePath = join(this.workspacesBasePath, agentId);
+		if (!workspacePath.startsWith(this.workspacesBasePath)) {
+			throw new Error(`Invalid agentId — workspace path escapes base: ${agentId}`);
+		}
+		this.driver.prepareWorkspace(workspacePath);
+
+		// Materialize assigned skills into <workspace>/skills/ (rewritten fresh
+		// every spawn) and get the compact index for the system prompt.
+		const skills = await this.skillMaterializer.materializeForAgent(agentId, workspacePath);
+
 		// Build the runtime config (no secrets) for the runtime.
 		const runtimeConfig = await this.buildRuntimeConfig(
 			agent,
 			threadId,
 			ownerId,
 			triggerType,
+			skills,
 			triggerPayload,
 			userDatetime,
 			workflowConfig,
@@ -234,14 +251,6 @@ export class AgentRuntimeService {
 
 		// Mark thread as running before spawning
 		await this.sessionService.updateThreadStatus(threadId, 'running');
-
-		// Ensure the per-agent workspace exists (driver also fixes ownership for
-		// the runtime user where needed).
-		const workspacePath = join(this.workspacesBasePath, agentId);
-		if (!workspacePath.startsWith(this.workspacesBasePath)) {
-			throw new Error(`Invalid agentId — workspace path escapes base: ${agentId}`);
-		}
-		this.driver.prepareWorkspace(workspacePath);
 
 		// Sanitized environment — no backend secrets. PROXY_HOST and
 		// WORKSPACE_ROOT are injected by the driver.
@@ -386,6 +395,7 @@ export class AgentRuntimeService {
 		threadId: string,
 		ownerId: string,
 		triggerType: AgentTriggerType,
+		skills: SkillRuntimeEntry[],
 		triggerPayload?: Record<string, unknown>,
 		userDatetime?: string,
 		workflowConfig?: WorkflowSpawnConfig,
@@ -493,6 +503,9 @@ export class AgentRuntimeService {
 			modelId,
 			credentialIds: agent.credentialIds,
 			credentials,
+			// Compact skill index only — full instructions are materialized into
+			// <workspace>/skills/ and read by the agent on demand.
+			...(skills.length > 0 ? { skills } : {}),
 			embeddingModelConfigId: agent.embeddingModelConfigId,
 			triggerType,
 			triggerPayload,

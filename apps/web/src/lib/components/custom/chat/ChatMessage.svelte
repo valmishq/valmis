@@ -6,6 +6,7 @@
 	import MarkdownRenderer from './MarkdownRenderer.svelte';
 	import ImageBlock from './ImageBlock.svelte';
 	import { TOOL_ICON_MAP, DEFAULT_TOOL_ICON } from './tool-icon-map.js';
+	import SparklesIcon from '@lucide/svelte/icons/sparkles';
 	import type { AgentMessage, ContentBlock } from '@repo/types';
 
 	/** Shape of one entry in credentialMetaMap */
@@ -87,6 +88,10 @@
 	 * For call_api with a credentialId present in credentialMetaMap:
 	 *   → returns integration logo URL + integration name for the label.
 	 *
+	 * For read_file on a path inside skills/<name>/ (progressive disclosure —
+	 * the agent reading a skill's instructions counts as using that skill):
+	 *   → returns SparklesIcon + "Using skill — <name>" for the label.
+	 *
 	 * For all other tools (or call_api with no/unknown credential):
 	 *   → returns a Lucide icon component from TOOL_ICON_MAP (fallback: DEFAULT_TOOL_ICON).
 	 *   → toolDisplayName is undefined so ToolCallIndicator uses its default snake_case formatter.
@@ -96,7 +101,7 @@
 		argsJson: string | undefined
 	):
 		| { type: 'img'; url: string; toolDisplayName: string }
-		| { type: 'icon'; component: typeof DEFAULT_TOOL_ICON; toolDisplayName?: undefined } {
+		| { type: 'icon'; component: typeof DEFAULT_TOOL_ICON; toolDisplayName?: string } {
 		if (toolName === 'call_api' && argsJson) {
 			try {
 				const args = JSON.parse(argsJson) as Record<string, unknown>;
@@ -110,6 +115,24 @@
 							toolDisplayName: `Call Api — ${meta.integrationName}`
 						};
 					}
+				}
+			} catch {
+				// malformed argsJson — fall through to icon
+			}
+		}
+		if (toolName === 'read_file' && argsJson) {
+			try {
+				const args = JSON.parse(argsJson) as Record<string, unknown>;
+				const path = typeof args.path === 'string' ? args.path : '';
+				// Any file under skills/<name>/ counts — same rule as the backend's
+				// skill activation detection (detectSkillRead in the agent runtime).
+				const skillMatch = path.match(/^skills\/([^/]+)\//);
+				if (skillMatch) {
+					return {
+						type: 'icon',
+						component: SparklesIcon,
+						toolDisplayName: `Using skill — ${skillMatch[1]}`
+					};
 				}
 			} catch {
 				// malformed argsJson — fall through to icon

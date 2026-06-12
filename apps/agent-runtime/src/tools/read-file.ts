@@ -3,7 +3,7 @@ import type { AgentTool } from '@earendil-works/pi-agent-core';
 import type { TextContent } from '@earendil-works/pi-ai';
 import { readFileSync } from 'fs';
 import { logger } from '@repo/utils';
-import { resolveWorkspacePath } from './types.js';
+import { resolveWorkspacePath, detectSkillRead } from './types.js';
 import type { ToolContext } from './types.js';
 
 /**
@@ -25,6 +25,10 @@ export function createReadFileTool(ctx: ToolContext): AgentTool {
 		execute: async (_toolCallId, params) => {
 			const { path: relativePath } = params as { path: string };
 			const resolved = resolveWorkspacePath(ctx.workspaceRoot, relativePath);
+
+			// Reading any file inside skills/<name>/ counts as activating that
+			// skill — feeds execution traces for the evolution engine.
+			detectSkillRead(ctx, resolved);
 
 			logger.debug({ path: relativePath }, '[agent-runner] read_file');
 

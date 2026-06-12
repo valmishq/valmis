@@ -109,9 +109,8 @@
 	/**
 	 * Evolved skills pre-loaded from server for edit mode.
 	 * Keyed by skill name for O(1) lookup in the panel component.
-	 * Currently empty — future: load from server via +page.server.ts.
 	 */
-	const evolvedSkills: Record<string, AgentEvolvedSkill> = {};
+	const evolvedSkills: Record<string, AgentEvolvedSkill> = $derived(data.evolvedSkills ?? {});
 </script>
 
 <svelte:head>

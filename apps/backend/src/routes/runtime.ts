@@ -10,6 +10,7 @@ import { AgentMemoryService } from '../services/AgentMemoryService.js';
 import { TriggerService } from '../services/TriggerService.js';
 import { WorkflowRunService } from '../services/WorkflowRunService.js';
 import { WorkflowService } from '../services/WorkflowService.js';
+import { SkillService } from '../services/SkillService.js';
 import { agentStreamBus } from '../services/AgentStreamBus.js';
 import { MessagePipeline } from '../channels/pipeline.js';
 import { WebAdapter } from '../channels/web/adapter.js';
@@ -33,6 +34,7 @@ import type {
 	MemoryWriteRequest,
 	MemorySearchRequest,
 	MemoryDeleteRequest,
+	SkillTraceRequestBody,
 	ContentBlock,
 	WorkflowSummary,
 	WorkflowTriggerContext,
@@ -104,6 +106,7 @@ export function createRuntimeRouter(
 	workflowService: WorkflowService,
 	messagePipeline: MessagePipeline,
 	webAdapter: WebAdapter,
+	skillService: SkillService,
 ): Router {
 	const router = Router();
 	const auth = requireAuth(authService);
@@ -1197,6 +1200,75 @@ export function createRuntimeRouter(
 		} catch (err) {
 			const message = err instanceof Error ? err.message : 'Memory delete failed';
 			logger.error({ err, agentId: sandboxToken.agentId }, '[runtime] memory delete failed');
+			res.status(400).json({ success: false, error: message });
+		}
+	});
+
+	// ─── Skill trace internal endpoint (PROXY_TOKEN auth) ─────────────────────
+
+	/**
+	 * POST /v1/runtime/internal/skills/trace
+	 * Sandbox records one skill execution trace per activated skill per turn,
+	 * mined later by the evolution engine.
+	 * agentId is taken from the PROXY_TOKEN — never from the body, so a sandbox
+	 * can only write traces for its own agent.
+	 *
+	 * Like the other /internal/ routes this bypasses the IP rate limiter
+	 * (PROXY_TOKEN is the gate). The runner caps writes at one trace per
+	 * activated skill per turn and executionLog is capped at 16 KB, so a
+	 * compromised runtime can at worst pollute its own agent's evolution data.
+	 */
+	router.post('/internal/skills/trace', async (req: Request, res: Response) => {
+		const sandboxToken = (req as Request & { sandboxToken: SandboxTokenPayload }).sandboxToken;
+		const body = req.body as SkillTraceRequestBody;
+
+		if (!body.skillName || typeof body.skillName !== 'string') {
+			res.status(400).json({ success: false, error: 'skillName is required' });
+			return;
+		}
+		if (typeof body.success !== 'boolean') {
+			res.status(400).json({ success: false, error: 'success (boolean) is required' });
+			return;
+		}
+		if (
+			!Number.isInteger(body.toolCallCount) ||
+			body.toolCallCount < 0 ||
+			body.toolCallCount > 1000
+		) {
+			res
+				.status(400)
+				.json({ success: false, error: 'toolCallCount must be an integer between 0 and 1000' });
+			return;
+		}
+		if (body.executionLog !== undefined) {
+			const logSize = Buffer.byteLength(JSON.stringify(body.executionLog), 'utf-8');
+			if (logSize > 16 * 1024) {
+				res.status(400).json({ success: false, error: 'executionLog exceeds the 16 KB limit' });
+				return;
+			}
+		}
+
+		try {
+			// The skill must actually be assigned to this agent
+			const assigned = await skillService.getAgentSkills(sandboxToken.agentId);
+			if (!assigned.includes(body.skillName)) {
+				res
+					.status(404)
+					.json({ success: false, error: 'Skill is not assigned to this agent' });
+				return;
+			}
+
+			await skillService.recordTrace({
+				agentId: sandboxToken.agentId,
+				skillName: body.skillName,
+				success: body.success,
+				toolCallCount: body.toolCallCount,
+				executionLog: body.executionLog,
+			});
+			res.status(201).json({ success: true, data: { recorded: true } });
+		} catch (err) {
+			const message = err instanceof Error ? err.message : 'Skill trace failed';
+			logger.error({ err, agentId: sandboxToken.agentId }, '[runtime] skill trace failed');
 			res.status(400).json({ success: false, error: message });
 		}
 	});

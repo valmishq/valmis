@@ -15,8 +15,13 @@ export {
 	loadSkillCatalog,
 	getSkillInstructions,
 	getSkillCatalogEntry,
+	getSkillRawFile,
+	getSkillBundleFiles,
+	parseSkillMarkdown,
+	replaceSkillMarkdownBody,
 	clearSkillCatalogCache,
 } from './skills/registry.js';
+export type { SkillBundleFile, ParsedSkillMarkdown } from './skills/registry.js';
 
 export { validateWorkflowCreate, validateWorkflowUpdate } from './workflow/validator.js';
 export type { ValidatedWorkflowCreate, ValidatedWorkflowUpdate } from './workflow/validator.js';

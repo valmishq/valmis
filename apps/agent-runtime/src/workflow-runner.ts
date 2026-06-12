@@ -13,6 +13,15 @@ import type { AgentRuntimeConfig, LlmProxyRequest, WorkflowStep } from '@repo/ty
 import { logger, resolveProviderApi } from '@repo/utils';
 import { ProxyClient } from './proxy-client.js';
 import { createAgentTools } from './tools/index.js';
+import { buildSkillsPromptSection } from './prompt-sections.js';
+import { recordSkillTraces, type ToolLogEntry } from './skill-trace.js';
+
+/** Run-level skill activation tracking shared across all steps of a workflow */
+interface SkillTracker {
+	activatedSkills: Set<string>;
+	toolLog: ToolLogEntry[];
+	toolCallCount: number;
+}
 
 /** Default max tool calls per step if not set on the step definition */
 const DEFAULT_MAX_TOOL_CALLS_PER_STEP = 20;
@@ -126,6 +135,10 @@ function buildStepSystemPrompt(
 		prompt += `\n\n## Credentials\nNo credentials are available for this step. Use public APIs only (pass empty credentialId).`;
 	}
 
+	// Skill index (progressive disclosure) — same section as agent-runner so
+	// workflow steps can use assigned skills too.
+	prompt += buildSkillsPromptSection(config.skills);
+
 	return prompt;
 }
 
@@ -148,12 +161,18 @@ async function executeStep(
 	config: AgentRuntimeConfig,
 	proxyClient: ProxyClient,
 	stepPrompt: string,
+	skillTracker: SkillTracker,
 ): Promise<Record<string, unknown>> {
 	const resolvedApi = resolveProviderApi(config.modelProvider ?? '');
 	const maxToolCalls = step.maxToolCallsPerStep ?? DEFAULT_MAX_TOOL_CALLS_PER_STEP;
 
 	// Filter tools to step-allowed subset (empty = all tools)
-	const allTools = createAgentTools({ proxyClient, workspaceRoot: WORKSPACE_ROOT });
+	const allTools = createAgentTools({
+		proxyClient,
+		workspaceRoot: WORKSPACE_ROOT,
+		skillNames: (config.skills ?? []).map((s) => s.name),
+		onSkillActivated: (skillName) => skillTracker.activatedSkills.add(skillName),
+	});
 	const effectiveTools =
 		step.allowedTools.length > 0
 			? allTools.filter((t) => step.allowedTools.includes(t.name))
@@ -261,6 +280,7 @@ async function executeStep(
 		streamFn,
 		beforeToolCall: async () => {
 			toolCallCount++;
+			skillTracker.toolCallCount++;
 			if (toolCallCount > maxToolCalls) {
 				logger.warn(
 					{ toolCallCount, stepId: step.id, stepName: step.name },
@@ -279,6 +299,10 @@ async function executeStep(
 	// Persist tool results to the thread via proxy
 	agent.subscribe(async (event) => {
 		if (event.type === 'tool_execution_end') {
+			skillTracker.toolLog.push({
+				name: event.toolName,
+				ok: !(event.result as { isError?: boolean }).isError,
+			});
 			const resultContent =
 				(event.result as { content?: (TextContent | ImageContent)[] }).content ?? [];
 			await proxyClient.appendToolResult({
@@ -351,6 +375,14 @@ export async function runWorkflow(
 	// stepOutputs[stepIndex] = parsed output of that step (for inputMapping of later steps)
 	const stepOutputs: Record<number, Record<string, unknown>> = {};
 
+	// Skill activation is tracked across ALL steps; one trace per activated
+	// skill is recorded when the run ends (success or failure).
+	const skillTracker: SkillTracker = {
+		activatedSkills: new Set<string>(),
+		toolLog: [],
+		toolCallCount: 0,
+	};
+
 	logger.info(
 		{ runId, workflowId: definition.id, stepCount: definition.steps.length },
 		'[workflow-runner] starting workflow',
@@ -386,7 +418,7 @@ export async function runWorkflow(
 
 		for (let attempt = 1; attempt <= maxRetries + 1; attempt++) {
 			try {
-				stepOutput = await executeStep(step, config, proxyClient, stepPrompt);
+				stepOutput = await executeStep(step, config, proxyClient, stepPrompt, skillTracker);
 				succeeded = true;
 				lastError = null;
 				break;
@@ -471,6 +503,13 @@ export async function runWorkflow(
 					status: 'error',
 					error: `Step "${step.name}" failed: ${errorMessage}`,
 				});
+				await recordSkillTraces(
+					proxyClient,
+					skillTracker.activatedSkills,
+					false,
+					skillTracker.toolCallCount,
+					skillTracker.toolLog,
+				);
 				logger.error(
 					{ runId, stepId: step.id, stepName: step.name, errorMessage },
 					'[workflow-runner] workflow stopped due to step failure',
@@ -482,5 +521,12 @@ export async function runWorkflow(
 
 	// All steps complete
 	await proxyClient.completeWorkflowRun({ runId, status: 'completed' });
+	await recordSkillTraces(
+		proxyClient,
+		skillTracker.activatedSkills,
+		true,
+		skillTracker.toolCallCount,
+		skillTracker.toolLog,
+	);
 	logger.info({ runId, workflowId: definition.id }, '[workflow-runner] workflow completed');
 }

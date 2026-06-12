@@ -12,8 +12,8 @@ export const load: PageServerLoad = async (event) => {
 
 	if (ownerId) {
 		const [agentsRes, credsRes] = await Promise.all([
-			api(`/agents?ownerId=${encodeURIComponent(ownerId)}`, event),
-			api(`/credentials?ownerId=${encodeURIComponent(ownerId)}`, event)
+			api('/agents', event),
+			api('/credentials', event)
 		]);
 
 		if (agentsRes.ok) {

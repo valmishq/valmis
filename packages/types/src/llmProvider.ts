@@ -49,9 +49,11 @@ export interface UpdateLlmProviderConfigInput {
 
 // ─── Request Bodies ───────────────────────────────────────────────────────────
 
-/** POST /v1/llm-providers — create a new LLM provider config */
+/**
+ * POST /v1/llm-providers — create a new LLM provider config.
+ * Ownership is derived from the authenticated token, never from the body.
+ */
 export interface CreateLlmProviderRequestBody {
-	ownerId: string;
 	provider: string;
 	name: string;
 	model: string;
@@ -62,7 +64,6 @@ export interface CreateLlmProviderRequestBody {
 
 /** PUT /v1/llm-providers/:id — update an existing LLM provider config */
 export interface UpdateLlmProviderRequestBody {
-	ownerId: string;
 	name?: string;
 	model?: string;
 	isDefault?: boolean;

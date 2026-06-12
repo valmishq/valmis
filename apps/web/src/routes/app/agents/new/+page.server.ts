@@ -4,6 +4,7 @@ import { api } from '$lib/server/api';
 import { error } from '@sveltejs/kit';
 import type {
 	Agent,
+	AgentEvolvedSkill,
 	CredentialMetadata,
 	CredentialDefinition,
 	LlmProviderConfig
@@ -29,9 +30,9 @@ export const load: PageServerLoad = async (event) => {
 	// Note: skill catalog is NOT loaded here — the AgentSkillsPanel component
 	// fetches it lazily when the "Add skill" dialog is opened.
 	const [credsRes, defsRes, llmRes] = await Promise.all([
-		api(`/credentials?ownerId=${encodeURIComponent(ownerId)}`, event),
+		api('/credentials', event),
 		api('/credentials/definitions', event),
-		api(`/llm-providers?ownerId=${encodeURIComponent(ownerId)}`, event)
+		api('/llm-providers', event)
 	]);
 
 	let credentials: CredentialMetadata[] = [];
@@ -52,14 +53,16 @@ export const load: PageServerLoad = async (event) => {
 		llmConfigs = (body.data ?? []) as LlmProviderConfig[];
 	}
 
-	// Edit mode — additionally fetch agent and assigned skills
+	// Edit mode — additionally fetch agent, assigned skills, and evolved skills
 	let agent: Agent | null = null;
 	let assignedSkillNames: string[] = [];
+	const evolvedSkills: Record<string, AgentEvolvedSkill> = {};
 
 	if (isEditMode) {
-		const [agentRes, agentSkillsRes] = await Promise.all([
-			api(`/agents/${agentId}?ownerId=${encodeURIComponent(ownerId)}`, event),
-			api(`/agents/${agentId}/skills?ownerId=${encodeURIComponent(ownerId)}`, event)
+		const [agentRes, agentSkillsRes, evolvedRes] = await Promise.all([
+			api(`/agents/${agentId}`, event),
+			api(`/agents/${agentId}/skills`, event),
+			api(`/agents/${agentId}/skills/evolved`, event)
 		]);
 
 		if (!agentRes.ok) {
@@ -73,6 +76,13 @@ export const load: PageServerLoad = async (event) => {
 			const body = await agentSkillsRes.json();
 			assignedSkillNames = (body.data ?? []) as string[];
 		}
+
+		if (evolvedRes.ok) {
+			const body = await evolvedRes.json();
+			for (const evolved of (body.data ?? []) as AgentEvolvedSkill[]) {
+				evolvedSkills[evolved.skillName] = evolved;
+			}
+		}
 	}
 
 	return {
@@ -81,7 +91,8 @@ export const load: PageServerLoad = async (event) => {
 		credentials,
 		definitions,
 		llmConfigs,
-		assignedSkillNames
+		assignedSkillNames,
+		evolvedSkills
 	};
 };
 
@@ -134,7 +145,6 @@ export const actions: Actions = {
 			const res = await api(`/agents/${agentId}`, event, {
 				method: 'PUT',
 				body: JSON.stringify({
-					ownerId,
 					name,
 					description,
 					systemInstruction,
@@ -156,7 +166,6 @@ export const actions: Actions = {
 			const res = await api('/agents', event, {
 				method: 'POST',
 				body: JSON.stringify({
-					ownerId,
 					name,
 					description,
 					systemInstruction,
@@ -179,10 +188,7 @@ export const actions: Actions = {
 
 		// Step 2: Sync skill assignments
 		// Fetch currently assigned skills so we can diff
-		const currentSkillsRes = await api(
-			`/agents/${savedAgentId}/skills?ownerId=${encodeURIComponent(ownerId)}`,
-			event
-		);
+		const currentSkillsRes = await api(`/agents/${savedAgentId}/skills`, event);
 		const currentSkills: string[] = currentSkillsRes.ok
 			? ((await currentSkillsRes.json()).data ?? [])
 			: [];
@@ -195,13 +201,12 @@ export const actions: Actions = {
 			...toAdd.map((skillName) =>
 				api(`/agents/${savedAgentId}/skills`, event, {
 					method: 'POST',
-					body: JSON.stringify({ ownerId, skillName })
+					body: JSON.stringify({ skillName })
 				})
 			),
 			...toRemove.map((skillName) =>
 				api(`/agents/${savedAgentId}/skills/${encodeURIComponent(skillName)}`, event, {
-					method: 'DELETE',
-					body: JSON.stringify({ ownerId })
+					method: 'DELETE'
 				})
 			)
 		]);

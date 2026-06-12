@@ -2,6 +2,7 @@ import { Router } from 'express';
 import type { Request, Response } from 'express';
 import { AgentService } from '../services/AgentService.js';
 import { AgentSessionService } from '../services/AgentSessionService.js';
+import { SkillService } from '../services/SkillService.js';
 import { requireAuth } from '../middleware/auth.js';
 import { logger } from '../config/logger.js';
 import type { AuthService } from '../services/AuthService.js';
@@ -15,7 +16,6 @@ import type {
 	AgentRunsListResponse,
 	CreateAgentRequestBody,
 	UpdateAgentRequestBody,
-	OwnerIdRequestBody,
 } from '@repo/types';
 
 const agentService = new AgentService();
@@ -23,6 +23,10 @@ const sessionService = new AgentSessionService();
 
 /**
  * Factory — creates the agents router with an injected AuthService instance.
+ *
+ * All routes requireAuth; ownerId comes from the authenticated token
+ * (req.user.sub) — never from the client — so users can only act on
+ * their own agents.
  *
  * Routes:
  *   GET    /v1/agents                       — list agents for an owner
@@ -33,23 +37,19 @@ const sessionService = new AgentSessionService();
  *   GET    /v1/agents/:id/memory            — list memory entries
  *   DELETE /v1/agents/:id/memory/:memoryId  — delete a memory entry
  */
-export function createAgentsRouter(authService: AuthService): Router {
+export function createAgentsRouter(authService: AuthService, skillService: SkillService): Router {
 	const router = Router();
 	const auth = requireAuth(authService);
 
 	/**
 	 * GET /v1/agents
-	 * List all agents for a given owner.
-	 * Requires `ownerId` query parameter.
+	 * List all agents owned by the authenticated user.
 	 */
 	router.get('/', auth, async (req: Request, res: Response) => {
-		const ownerId = req.query.ownerId as string | undefined;
+		const ownerId = req.user?.sub;
 		if (!ownerId) {
-			const body: AgentsListResponse = {
-				success: false,
-				error: 'ownerId query parameter is required',
-			};
-			res.status(400).json(body);
+			const body: AgentsListResponse = { success: false, error: 'Unauthorized' };
+			res.status(401).json(body);
 			return;
 		}
 
@@ -61,17 +61,13 @@ export function createAgentsRouter(authService: AuthService): Router {
 	/**
 	 * GET /v1/agents/:id
 	 * Get a single agent by ID with ownership check.
-	 * Requires `ownerId` query parameter.
 	 */
 	router.get('/:id', auth, async (req: Request, res: Response) => {
 		const id = req.params.id as string;
-		const ownerId = req.query.ownerId as string | undefined;
+		const ownerId = req.user?.sub;
 		if (!ownerId) {
-			const body: AgentResponse = {
-				success: false,
-				error: 'ownerId query parameter is required',
-			};
-			res.status(400).json(body);
+			const body: AgentResponse = { success: false, error: 'Unauthorized' };
+			res.status(401).json(body);
 			return;
 		}
 
@@ -88,11 +84,17 @@ export function createAgentsRouter(authService: AuthService): Router {
 	/**
 	 * POST /v1/agents
 	 * Create a new agent.
-	 * Body: { ownerId, name, description?, systemInstruction?, avatarUrl?, credentialIds? }
+	 * Body: { name, description?, systemInstruction?, avatarUrl?, credentialIds? }
 	 */
 	router.post('/', auth, async (req: Request, res: Response) => {
+		const ownerId = req.user?.sub;
+		if (!ownerId) {
+			const body: AgentResponse = { success: false, error: 'Unauthorized' };
+			res.status(401).json(body);
+			return;
+		}
+
 		const {
-			ownerId,
 			name,
 			description,
 			systemInstruction,
@@ -104,10 +106,10 @@ export function createAgentsRouter(authService: AuthService): Router {
 			allowInternetAccess,
 		} = req.body as CreateAgentRequestBody;
 
-		if (!ownerId || !name) {
+		if (!name) {
 			const body: AgentResponse = {
 				success: false,
-				error: 'ownerId and name are required',
+				error: 'name is required',
 			};
 			res.status(400).json(body);
 			return;
@@ -138,11 +140,17 @@ export function createAgentsRouter(authService: AuthService): Router {
 	/**
 	 * PUT /v1/agents/:id
 	 * Update an existing agent.
-	 * Body: { ownerId, name?, description?, systemInstruction?, avatarUrl?, credentialIds? }
+	 * Body: { name?, description?, systemInstruction?, avatarUrl?, credentialIds? }
 	 */
 	router.put('/:id', auth, async (req: Request, res: Response) => {
+		const ownerId = req.user?.sub;
+		if (!ownerId) {
+			const body: AgentResponse = { success: false, error: 'Unauthorized' };
+			res.status(401).json(body);
+			return;
+		}
+
 		const {
-			ownerId,
 			name,
 			description,
 			systemInstruction,
@@ -153,12 +161,6 @@ export function createAgentsRouter(authService: AuthService): Router {
 			embeddingDim,
 			allowInternetAccess,
 		} = req.body as UpdateAgentRequestBody;
-
-		if (!ownerId) {
-			const body: AgentResponse = { success: false, error: 'ownerId is required' };
-			res.status(400).json(body);
-			return;
-		}
 
 		if (
 			name === undefined &&
@@ -211,15 +213,13 @@ export function createAgentsRouter(authService: AuthService): Router {
 	/**
 	 * DELETE /v1/agents/:id
 	 * Delete an agent.
-	 * Body: { ownerId }
 	 */
 	router.delete('/:id', auth, async (req: Request, res: Response) => {
 		const deleteId = req.params.id as string;
-		const { ownerId } = req.body as OwnerIdRequestBody;
-
+		const ownerId = req.user?.sub;
 		if (!ownerId) {
-			const body: AgentDeleteResponse = { success: false, error: 'ownerId is required' };
-			res.status(400).json(body);
+			const body: AgentDeleteResponse = { success: false, error: 'Unauthorized' };
+			res.status(401).json(body);
 			return;
 		}
 
@@ -235,24 +235,21 @@ export function createAgentsRouter(authService: AuthService): Router {
 
 	// ─── Skills Sub-Router ────────────────────────────────────────────────────
 	// Mounted at /:id/skills — mergeParams is set in createAgentSkillsRouter
-	router.use('/:id/skills', createAgentSkillsRouter(authService));
+	router.use('/:id/skills', createAgentSkillsRouter(authService, skillService, agentService));
 
 	// ─── Memory Routes ────────────────────────────────────────────────────────
 
 	/**
 	 * GET /v1/agents/:id/memory
 	 * List memory entries for an agent (paginated).
-	 * Query: ownerId (required), limit? (default 50), offset? (default 0)
+	 * Query: limit? (default 50), offset? (default 0)
 	 */
 	router.get('/:id/memory', auth, async (req: Request, res: Response) => {
 		const agentId = req.params.id as string;
-		const ownerId = req.query.ownerId as string | undefined;
+		const ownerId = req.user?.sub;
 		if (!ownerId) {
-			const body: AgentMemoryListResponse = {
-				success: false,
-				error: 'ownerId query parameter is required',
-			};
-			res.status(400).json(body);
+			const body: AgentMemoryListResponse = { success: false, error: 'Unauthorized' };
+			res.status(401).json(body);
 			return;
 		}
 
@@ -274,17 +271,14 @@ export function createAgentsRouter(authService: AuthService): Router {
 	/**
 	 * GET /v1/agents/:id/runs
 	 * List aggregated run summaries (threads + token/cost stats) for an agent.
-	 * Query: ownerId (required), limit? (default 50), offset? (default 0)
+	 * Query: limit? (default 50), offset? (default 0)
 	 */
 	router.get('/:id/runs', auth, async (req: Request, res: Response) => {
 		const agentId = req.params.id as string;
-		const ownerId = req.query.ownerId as string | undefined;
+		const ownerId = req.user?.sub;
 		if (!ownerId) {
-			const body: AgentRunsListResponse = {
-				success: false,
-				error: 'ownerId query parameter is required',
-			};
-			res.status(400).json(body);
+			const body: AgentRunsListResponse = { success: false, error: 'Unauthorized' };
+			res.status(401).json(body);
 			return;
 		}
 
@@ -308,19 +302,14 @@ export function createAgentsRouter(authService: AuthService): Router {
 	/**
 	 * DELETE /v1/agents/:id/memory/:memoryId
 	 * Delete a specific memory entry.
-	 * Body: { ownerId }
 	 */
 	router.delete('/:id/memory/:memoryId', auth, async (req: Request, res: Response) => {
 		const agentId = req.params.id as string;
 		const memoryId = req.params.memoryId as string;
-		const { ownerId } = req.body as OwnerIdRequestBody;
-
+		const ownerId = req.user?.sub;
 		if (!ownerId) {
-			const body: AgentMemoryDeleteResponse = {
-				success: false,
-				error: 'ownerId is required',
-			};
-			res.status(400).json(body);
+			const body: AgentMemoryDeleteResponse = { success: false, error: 'Unauthorized' };
+			res.status(401).json(body);
 			return;
 		}
 

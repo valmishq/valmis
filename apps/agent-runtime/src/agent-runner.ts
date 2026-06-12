@@ -16,6 +16,8 @@ import type { AgentRuntimeConfig, LlmProxyRequest } from '@repo/types';
 import { logger, resolveProviderApi } from '@repo/utils';
 import { ProxyClient } from './proxy-client.js';
 import { createAgentTools } from './tools/index.js';
+import { buildSkillsPromptSection } from './prompt-sections.js';
+import { recordSkillTraces, type ToolLogEntry } from './skill-trace.js';
 
 /** Zero-value Usage for the placeholder AssistantMessage returned by the proxy streamFn */
 const zeroUsage: Usage = {
@@ -76,11 +78,20 @@ export async function runAgent(
 	// on the second turn (after a tool execution) for non-OpenAI providers.
 	const resolvedApi = resolveProviderApi(config.modelProvider ?? '');
 
+	// ── Skill activation tracking (evolution engine traces) ──────────────────
+	// A skill is "activated" when the agent reads any file under its
+	// skills/<name>/ folder. One trace per activated skill is recorded at the
+	// end of the turn.
+	const activatedSkills = new Set<string>();
+	const toolLog: ToolLogEntry[] = [];
+
 	// ── Build all tools ───────────────────────────────────────────────────────
 	const tools = createAgentTools({
 		proxyClient,
 		workspaceRoot: WORKSPACE_ROOT,
 		agentId: config.agentId,
+		skillNames: (config.skills ?? []).map((s) => s.name),
+		onSkillActivated: (skillName) => activatedSkills.add(skillName),
 	});
 
 	// ── streamFn: routes every LLM call through the host proxy ────────────────
@@ -269,6 +280,10 @@ export async function runAgent(
 			`without authentication.`;
 	}
 
+	// Inject the skill index (progressive disclosure) — full instructions live
+	// in <workspace>/skills/<name>/SKILL.md, read on demand via read_file.
+	effectiveSystemPrompt += buildSkillsPromptSection(config.skills);
+
 	// Inject memory guidance if an embedding model is configured.
 	// Provides clear rules for when and how to use memory tools.
 	if (config.embeddingModelConfigId) {
@@ -443,6 +458,11 @@ export async function runAgent(
 				{ toolName: event.toolName, toolCallId: event.toolCallId },
 				'[agent-runner] tool execution end, persisting result',
 			);
+			// Condensed per-tool outcome for the skill execution trace
+			toolLog.push({
+				name: event.toolName,
+				ok: !(event.result as { isError?: boolean }).isError,
+			});
 			const resultContent =
 				(event.result as { content?: (TextContent | ImageContent)[] }).content ?? [];
 			await proxyClient.appendToolResult({
@@ -462,22 +482,34 @@ export async function runAgent(
 		}
 	});
 
-	// Start execution
-	if (config.triggerType !== 'chat' && config.triggerPayload && agentMessages.length === 0) {
-		const triggerText = `Trigger type: ${config.triggerType}\nPayload:\n${JSON.stringify(config.triggerPayload, null, 2)}`;
-		logger.info({ triggerType: config.triggerType }, '[agent-runner] starting via trigger prompt');
-		await agent.prompt(triggerText);
-	} else if (agentMessages.length > 0) {
-		logger.info({ messageCount: agentMessages.length }, '[agent-runner] continuing from history');
-		await agent.continue();
-	}
+	// Start execution. Skill traces are recorded in the finally block so both
+	// success and failure outcomes feed the evolution engine.
+	let turnSucceeded = false;
+	try {
+		if (config.triggerType !== 'chat' && config.triggerPayload && agentMessages.length === 0) {
+			const triggerText = `Trigger type: ${config.triggerType}\nPayload:\n${JSON.stringify(config.triggerPayload, null, 2)}`;
+			logger.info(
+				{ triggerType: config.triggerType },
+				'[agent-runner] starting via trigger prompt',
+			);
+			await agent.prompt(triggerText);
+		} else if (agentMessages.length > 0) {
+			logger.info({ messageCount: agentMessages.length }, '[agent-runner] continuing from history');
+			await agent.continue();
+		}
 
-	// ── Tool limit follow-up ──────────────────────────────────────────────────
-	// If the hard tool-call cap was hit, steer the agent to produce a final
-	// response. The steer message is injected after the loop has already stopped
-	// (terminate:true was returned), so this triggers exactly one additional LLM
-	// call that generates an honest answer for the user.
-	await agent.waitForIdle();
+		// ── Tool limit follow-up ────────────────────────────────────────────────
+		// If the hard tool-call cap was hit, steer the agent to produce a final
+		// response. The steer message is injected after the loop has already stopped
+		// (terminate:true was returned), so this triggers exactly one additional LLM
+		// call that generates an honest answer for the user.
+		await agent.waitForIdle();
+		turnSucceeded = true;
+	} finally {
+		// Awaited (not fire-and-forget) — the process exits right after this
+		// function returns. Never throws.
+		await recordSkillTraces(proxyClient, activatedSkills, turnSucceeded, toolCallCount, toolLog);
+	}
 
 	logger.info({ threadId: config.threadId }, '[agent-runner] agent idle — turn complete');
 }

@@ -11,7 +11,7 @@ export const load: PageServerLoad = async (event) => {
 	let agents: Agent[] = [];
 
 	if (ownerId) {
-		const res = await api(`/agents?ownerId=${encodeURIComponent(ownerId)}`, event);
+		const res = await api('/agents', event);
 		if (res.ok) {
 			const body = await res.json();
 			agents = (body.data ?? []) as Agent[];

@@ -17,8 +17,8 @@ export const load: PageServerLoad = async (event) => {
 	}
 
 	const [agentRes, runsRes] = await Promise.all([
-		api(`/agents/${agentId}?ownerId=${encodeURIComponent(ownerId)}`, event),
-		api(`/agents/${agentId}/runs?ownerId=${encodeURIComponent(ownerId)}`, event)
+		api(`/agents/${agentId}`, event),
+		api(`/agents/${agentId}/runs`, event)
 	]);
 
 	if (!agentRes.ok) {
@@ -38,10 +38,7 @@ export const load: PageServerLoad = async (event) => {
 	// Falls back to null if the agent has no model or it's a custom/unknown entry.
 	let modelContextLength: number | null = null;
 	if (agent.modelConfigId) {
-		const llmRes = await api(
-			`/llm-providers/${agent.modelConfigId}?ownerId=${encodeURIComponent(ownerId)}`,
-			event
-		);
+		const llmRes = await api(`/llm-providers/${agent.modelConfigId}`, event);
 		if (llmRes.ok) {
 			const llmBody = await llmRes.json();
 			const modelId: string = llmBody.data?.model ?? '';

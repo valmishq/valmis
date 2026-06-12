@@ -24,6 +24,16 @@ export interface ToolContext {
 	 * that point to the agent's workflow and run pages.
 	 */
 	agentId?: string;
+	/**
+	 * Names of skills materialized under <workspaceRoot>/skills/.
+	 * Used by read_file to detect skill activation for trace recording.
+	 */
+	skillNames?: string[];
+	/**
+	 * Called when read_file reads any path inside skills/<name>/ — reading a
+	 * skill's SKILL.md (or a bundled file) counts as activating the skill.
+	 */
+	onSkillActivated?: (skillName: string) => void;
 }
 
 /**
@@ -42,4 +52,22 @@ export function resolveWorkspacePath(workspaceRoot: string, relativePath: string
 		throw new Error(`Path traversal not allowed: ${relativePath}`);
 	}
 	return resolved;
+}
+
+/**
+ * Fires ctx.onSkillActivated when a resolved (workspace-contained) path lies
+ * inside one of the materialized skill folders. Same separator-aware
+ * containment check as resolveWorkspacePath.
+ */
+export function detectSkillRead(ctx: ToolContext, resolvedPath: string): void {
+	if (!ctx.onSkillActivated || !ctx.skillNames || ctx.skillNames.length === 0) return;
+
+	for (const skillName of ctx.skillNames) {
+		const skillDir = resolve(ctx.workspaceRoot, 'skills', skillName);
+		const dirWithSep = skillDir.endsWith(sep) ? skillDir : skillDir + sep;
+		if (resolvedPath === skillDir || resolvedPath.startsWith(dirWithSep)) {
+			ctx.onSkillActivated(skillName);
+			return;
+		}
+	}
 }

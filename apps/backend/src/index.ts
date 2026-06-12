@@ -43,6 +43,10 @@ import type { ExecutionDriver } from './services/runtime/ExecutionDriver.js';
 import { TriggerService } from './services/TriggerService.js';
 import { WorkflowService } from './services/WorkflowService.js';
 import { WorkflowRunService } from './services/WorkflowRunService.js';
+import { SkillService } from './services/SkillService.js';
+import { SkillInstallService } from './services/SkillInstallService.js';
+import { SkillMaterializerService } from './services/SkillMaterializerService.js';
+import { SkillEvolutionService } from './services/SkillEvolutionService.js';
 
 // Prefer IPv4 for all outbound connections (fetch/undici, ws). Node's fetch does
 // not fall back to IPv4 when an IPv6 connect hangs (no Happy Eyeballs), so flaky
@@ -85,6 +89,20 @@ const llmProxyService = new AgentLlmProxyService(
 	sessionService,
 	agentMemoryService,
 );
+// --- Instantiate skill services ---
+// SkillService: merged catalog (builtin + installed) and assignment management.
+// SkillInstallService: GitHub fetch + validation + scan + install (preview/confirm).
+// SkillMaterializerService: writes assigned skills into agent workspaces at spawn.
+// SkillEvolutionService: background reflection worker (cron) over execution traces.
+const skillService = new SkillService();
+const skillInstallService = new SkillInstallService(skillService);
+const skillMaterializerService = new SkillMaterializerService(skillService);
+const skillEvolutionService = new SkillEvolutionService(
+	agentService,
+	llmProviderService,
+	skillService,
+);
+
 // Execution driver — how agent runtimes are isolated:
 //   process (default) — plain Node.js child process, code-level isolation only.
 //   docker            — hardened sibling Docker container (recommended; set in
@@ -99,6 +117,7 @@ const runtimeService = new AgentRuntimeService(
 	agentService,
 	llmProviderService,
 	credentialService,
+	skillMaterializerService,
 );
 
 // --- Instantiate channel services ---
@@ -210,8 +229,8 @@ app.use('/v1/auth', createAuthRouter(authService));
 app.use('/v1/users', createUsersRouter(authService));
 app.use('/v1/api-keys', createApiKeysRouter(authService));
 app.use('/v1/iam', createIamRouter(authService));
-app.use('/v1/agents', createAgentsRouter(authService));
-app.use('/v1/skills', createSkillsRouter(authService));
+app.use('/v1/agents', createAgentsRouter(authService, skillService));
+app.use('/v1/skills', createSkillsRouter(authService, skillService, skillInstallService));
 
 // Runtime routes — user-facing + sandbox-internal (PROXY_TOKEN auth)
 app.use(
@@ -228,6 +247,7 @@ app.use(
 		workflowService,
 		messagePipeline,
 		webAdapter,
+		skillService,
 	),
 );
 
@@ -272,6 +292,8 @@ app.listen(PORT, async () => {
 	await telegramPollerManager.loadActivePollers();
 	// Start Discord Gateway connections for all active bot credentials
 	await discordGatewayManager.loadActiveGateways();
+	// Schedule the skill evolution worker (SKILL_EVOLUTION_CRON, default every 6h)
+	skillEvolutionService.start();
 });
 
 // Kill all live agent runtimes on shutdown so containers/processes are not
