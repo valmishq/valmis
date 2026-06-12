@@ -12,3 +12,4 @@ export * from './skill.js';
 export * from './agentRuntime.js';
 export * from './workflow.js';
 export * from './channel.js';
+export * from './knowledge.js';

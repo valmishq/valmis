@@ -16,6 +16,7 @@ import { AgentService } from './AgentService.js';
 import { LlmProviderService } from './LlmProviderService.js';
 import { CredentialService } from './CredentialService.js';
 import { SkillMaterializerService } from './SkillMaterializerService.js';
+import { KnowledgeBaseService } from './KnowledgeBaseService.js';
 import { agentStreamBus } from './AgentStreamBus.js';
 import { logger } from '../config/logger.js';
 import type { ExecutionDriver, RuntimeHandle } from './runtime/ExecutionDriver.js';
@@ -151,6 +152,7 @@ export class AgentRuntimeService {
 		private readonly llmProviderService: LlmProviderService,
 		private readonly credentialService: CredentialService,
 		private readonly skillMaterializer: SkillMaterializerService,
+		private readonly knowledgeBaseService: KnowledgeBaseService,
 	) {
 		// Workspaces base: repo root sibling directory by default.
 		// process.cwd() is apps/backend/ so we go up two levels to reach the monorepo root.
@@ -493,6 +495,26 @@ export class AgentRuntimeService {
 			}
 		}
 
+		// Knowledge base summary — file names only, for the system-prompt note that
+		// tells the agent its knowledge is retrievable via memory_search. A lookup
+		// failure must never block a run.
+		const KB_PROMPT_MAX_FILE_NAMES = 20;
+		let knowledgeBase: AgentRuntimeConfig['knowledgeBase'];
+		try {
+			const fileNames = await this.knowledgeBaseService.listReadyFileNamesForAgent(agent.id);
+			if (fileNames.length > 0) {
+				knowledgeBase = {
+					fileCount: fileNames.length,
+					fileNames: fileNames.slice(0, KB_PROMPT_MAX_FILE_NAMES),
+				};
+			}
+		} catch (err) {
+			logger.warn(
+				{ agentId: agent.id, err },
+				'[runtime] failed to load knowledge base summary — omitting from prompt',
+			);
+		}
+
 		return {
 			agentId: agent.id,
 			ownerId,
@@ -506,6 +528,7 @@ export class AgentRuntimeService {
 			// Compact skill index only — full instructions are materialized into
 			// <workspace>/skills/ and read by the agent on demand.
 			...(skills.length > 0 ? { skills } : {}),
+			...(knowledgeBase !== undefined ? { knowledgeBase } : {}),
 			embeddingModelConfigId: agent.embeddingModelConfigId,
 			triggerType,
 			triggerPayload,

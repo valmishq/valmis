@@ -27,6 +27,10 @@ Entries are classified into four types, modeled on cognitive memory research:
 
 When you start a new thread, the platform reviews the previous thread in the background and extracts anything worth keeping into memory. Extraction is deduplication-aware — it searches existing memory first and only stores genuinely new information. This runs silently and never blocks your conversation.
 
+### Knowledge base files
+
+Documents assigned to the agent through the [knowledge base](/guide/knowledge-base) are also stored as memory entries — chunked, embedded, and tagged with their source file and location. They share the vector store and are found by the same `memory_search`, but they are managed through the knowledge pages and **do not appear in the memory browser**.
+
 ## How memories get used
 
 During conversations the agent calls `memory_search` to retrieve relevant entries by meaning (semantic similarity), not keywords — asking about "vacation plans" can recall an entry about "trip to Lisbon in July". The agent can also prune outdated entries with `memory_delete`.

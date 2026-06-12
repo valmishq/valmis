@@ -272,3 +272,34 @@ export function createWorkflowsRouter(
 
 	return router;
 }
+
+/**
+ * Global workflow routes — owner-wide listing across all agents.
+ *
+ *   GET /v1/workflows            — list every workflow for the authenticated owner
+ *   GET /v1/workflows?agentId=x  — filter the list to a single agent
+ *
+ * Mounted at /v1/workflows in index.ts. Create/update/delete remain on the
+ * agent-scoped router above — workflows are always managed under an agent.
+ */
+export function createGlobalWorkflowsRouter(
+	authService: AuthService,
+	workflowService: WorkflowService,
+): Router {
+	const router = Router();
+	const auth = requireAuth(authService);
+
+	router.get('/', auth, async (req: Request, res: Response) => {
+		const ownerId = req.user?.sub;
+		if (!ownerId) {
+			res.status(401).json({ success: false, error: 'Unauthorized' });
+			return;
+		}
+		const agentId = typeof req.query.agentId === 'string' ? req.query.agentId : undefined;
+
+		const workflows = await workflowService.listByOwner(ownerId, agentId);
+		res.json({ success: true, data: workflows });
+	});
+
+	return router;
+}

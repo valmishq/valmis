@@ -1,6 +1,6 @@
 # Dropbox
 
-Lets agents work with files in your Dropbox via an access token. Recommended for single-account, server-side use.
+Lets agents work with files in your Dropbox via an access token, and powers the [knowledge base](/guide/knowledge-base) cloud import. Recommended for single-account, server-side use.
 
 [Dropbox OAuth guide](https://developers.dropbox.com/oauth-guide)
 

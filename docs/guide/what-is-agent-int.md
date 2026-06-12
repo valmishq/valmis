@@ -36,15 +36,16 @@ When you send a message to an agent, the server spawns a short-lived, isolated *
 
 ## Core concepts
 
-| Concept                              | What it is                                                                                                                                     |
-| ------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------- |
-| [Agent](/guide/agents)               | A configured AI assistant: name, system instruction, chat model, optional embedding model, credentials, and skills.                            |
-| [LLM provider](/guide/llm-providers) | A stored API key + model selection (e.g. your OpenAI or Anthropic key). Agents pick a chat model and optionally an embedding model from these. |
-| [Credential](/guide/credentials)     | An encrypted set of secrets for a third-party service (API key, OAuth2 tokens, …) that agents can use through the `call_api` tool.             |
-| [Skill](/guide/skills)               | A markdown-defined behavioral profile assigned to an agent. Install community skills from GitHub or use the built-ins.                         |
-| [Memory](/guide/memory)              | A per-agent vector store with four memory types. The agent writes and searches it autonomously.                                                |
-| [Workflow](/guide/workflows)         | A multi-step pipeline attached to an agent, where each step is a full agent turn. Triggered manually, by cron, or by webhook.                  |
-| [Channel](/guide/channels)           | A pairing between an agent and your own Telegram or Discord bot, so you can talk to the agent outside the web UI.                              |
+| Concept                                 | What it is                                                                                                                                        |
+| --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [Agent](/guide/agents)                  | A configured AI assistant: name, system instruction, chat model, optional embedding model, credentials, and skills.                               |
+| [LLM provider](/guide/llm-providers)    | A stored API key + model selection (e.g. your OpenAI or Anthropic key). Agents pick a chat model and optionally an embedding model from these.    |
+| [Credential](/guide/credentials)        | An encrypted set of secrets for a third-party service (API key, OAuth2 tokens, …) that agents can use through the `call_api` tool.                |
+| [Skill](/guide/skills)                  | A markdown-defined behavioral profile assigned to an agent. Install community skills from GitHub or use the built-ins.                            |
+| [Knowledge base](/guide/knowledge-base) | A library of your documents (uploaded or imported from cloud storage), converted to searchable text and assigned to agents as reference material. |
+| [Memory](/guide/memory)                 | A per-agent vector store with four memory types. The agent writes and searches it autonomously.                                                   |
+| [Workflow](/guide/workflows)            | A multi-step pipeline attached to an agent, where each step is a full agent turn. Triggered manually, by cron, or by webhook.                     |
+| [Channel](/guide/channels)              | A pairing between an agent and your own Telegram or Discord bot, so you can talk to the agent outside the web UI.                                 |
 
 ## What Agent-Int is not
 

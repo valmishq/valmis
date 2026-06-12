@@ -21,22 +21,24 @@ Every OAuth2 integration requires registering the same redirect URI in the provi
 
 ## Productivity & docs
 
-| Service                                  | Auth method                     |
-| ---------------------------------------- | ------------------------------- |
-| [Airtable](/integrations/airtable)       | Personal access token or OAuth2 |
-| [Asana](/integrations/asana)             | Personal access token           |
-| [Cal.com](/integrations/cal-com)         | API key                         |
-| [Calendly](/integrations/calendly)       | Personal access token           |
-| [Canva](/integrations/canva)             | OAuth2                          |
-| [Dropbox](/integrations/dropbox)         | Access token                    |
-| [Google Calendar](/integrations/google)  | OAuth2 (Google)                 |
-| [Google Docs](/integrations/google)      | OAuth2 (Google)                 |
-| [Google Sheets](/integrations/google)    | OAuth2 (Google)                 |
-| [Google Workspace](/integrations/google) | OAuth2 (Google, custom scopes)  |
-| [Jira](/integrations/jira)               | Email + API token               |
-| [Notion](/integrations/notion)           | Integration token or OAuth2     |
-| [Tally](/integrations/tally)             | API key                         |
-| [Trello](/integrations/trello)           | API key + token                 |
+| Service                                                | Auth method                     |
+| ------------------------------------------------------ | ------------------------------- |
+| [Airtable](/integrations/airtable)                     | Personal access token or OAuth2 |
+| [Asana](/integrations/asana)                           | Personal access token           |
+| [Cal.com](/integrations/cal-com)                       | API key                         |
+| [Calendly](/integrations/calendly)                     | Personal access token           |
+| [Canva](/integrations/canva)                           | OAuth2                          |
+| [Dropbox](/integrations/dropbox)                       | Access token                    |
+| [Google Calendar](/integrations/google)                | OAuth2 (Google)                 |
+| [Google Docs](/integrations/google)                    | OAuth2 (Google)                 |
+| [Google Drive](/integrations/google)                   | OAuth2 (Google, custom scopes)  |
+| [Google Sheets](/integrations/google)                  | OAuth2 (Google)                 |
+| [Google Workspace](/integrations/google)               | OAuth2 (Google, custom scopes)  |
+| [Microsoft OneDrive](/integrations/microsoft-onedrive) | OAuth2 (Azure AD)               |
+| [Jira](/integrations/jira)                             | Email + API token               |
+| [Notion](/integrations/notion)                         | Integration token or OAuth2     |
+| [Tally](/integrations/tally)                           | API key                         |
+| [Trello](/integrations/trello)                         | API key + token                 |
 
 ## Business & commerce
 

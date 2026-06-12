@@ -1,0 +1,47 @@
+id: google-drive
+name: Google Drive (OAuth2)
+brandName: Google Drive
+type: oauth2
+icon: /logos/google-drive.svg
+description: >
+  Connect to Google Drive via Google OAuth2 to browse, read, and manage files.
+  You must create credentials in Google Cloud Console and enable the Google Drive API.
+documentationUrl: https://developers.google.com/drive/api/guides/about-sdk
+
+properties:
+  - name: clientId
+    displayName: Client ID
+    type: string
+    required: true
+  - name: clientSecret
+    displayName: Client Secret
+    type: secret
+    required: true
+  - name: scope
+    displayName: Scopes
+    type: string
+    required: true
+    description: >
+      Space-separated list of Google API scopes. The default grants full read/write
+      Drive access; use https://www.googleapis.com/auth/drive.readonly for read-only.
+    default: 'openid email https://www.googleapis.com/auth/drive'
+
+oauth2:
+  authorizationUrl: 'https://accounts.google.com/o/oauth2/v2/auth'
+  accessTokenUrl: 'https://oauth2.googleapis.com/token'
+  clientIdProperty: clientId
+  clientSecretProperty: clientSecret
+  authStyle: inBody
+  # Google requires these to issue a refresh_token on first authorization
+  extraAuthParams:
+    access_type: offline
+    prompt: consent
+
+requestMapping:
+  headers:
+    Authorization: 'Bearer {{properties.accessToken}}'
+
+testRequest:
+  method: GET
+  url: 'https://www.googleapis.com/oauth2/v3/userinfo'
+  accountIdentifierKey: email

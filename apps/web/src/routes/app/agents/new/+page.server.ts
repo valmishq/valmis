@@ -5,6 +5,7 @@ import { error } from '@sveltejs/kit';
 import type {
 	Agent,
 	AgentEvolvedSkill,
+	AgentKnowledgeAssignment,
 	CredentialMetadata,
 	CredentialDefinition,
 	LlmProviderConfig
@@ -53,16 +54,19 @@ export const load: PageServerLoad = async (event) => {
 		llmConfigs = (body.data ?? []) as LlmProviderConfig[];
 	}
 
-	// Edit mode — additionally fetch agent, assigned skills, and evolved skills
+	// Edit mode — additionally fetch agent, assigned skills, evolved skills,
+	// and knowledge assignments
 	let agent: Agent | null = null;
 	let assignedSkillNames: string[] = [];
 	const evolvedSkills: Record<string, AgentEvolvedSkill> = {};
+	let knowledgeAssignments: AgentKnowledgeAssignment[] = [];
 
 	if (isEditMode) {
-		const [agentRes, agentSkillsRes, evolvedRes] = await Promise.all([
+		const [agentRes, agentSkillsRes, evolvedRes, knowledgeRes] = await Promise.all([
 			api(`/agents/${agentId}`, event),
 			api(`/agents/${agentId}/skills`, event),
-			api(`/agents/${agentId}/skills/evolved`, event)
+			api(`/agents/${agentId}/skills/evolved`, event),
+			api(`/agents/${agentId}/knowledge`, event)
 		]);
 
 		if (!agentRes.ok) {
@@ -83,6 +87,11 @@ export const load: PageServerLoad = async (event) => {
 				evolvedSkills[evolved.skillName] = evolved;
 			}
 		}
+
+		if (knowledgeRes.ok) {
+			const body = await knowledgeRes.json();
+			knowledgeAssignments = (body.data ?? []) as AgentKnowledgeAssignment[];
+		}
 	}
 
 	return {
@@ -92,7 +101,8 @@ export const load: PageServerLoad = async (event) => {
 		definitions,
 		llmConfigs,
 		assignedSkillNames,
-		evolvedSkills
+		evolvedSkills,
+		knowledgeAssignments
 	};
 };
 
@@ -137,6 +147,7 @@ export const actions: Actions = {
 			(formData.get('embeddingModelConfigId') as string | null) || null;
 		const credentialIds = formData.getAll('credentialIds') as string[];
 		const skillNames = formData.getAll('skillNames') as string[];
+		const knowledgeFileIds = formData.getAll('knowledgeFileIds') as string[];
 		const allowInternetAccess = formData.get('allowInternetAccess') !== 'false';
 
 		// Step 1: Create or update agent
@@ -206,6 +217,35 @@ export const actions: Actions = {
 			),
 			...toRemove.map((skillName) =>
 				api(`/agents/${savedAgentId}/skills/${encodeURIComponent(skillName)}`, event, {
+					method: 'DELETE'
+				})
+			)
+		]);
+
+		// Step 3: Sync knowledge assignments (same diff pattern as skills).
+		// Assignment ingestion (chunk + embed) runs server-side in the background.
+		const currentKnowledgeRes = await api(`/agents/${savedAgentId}/knowledge`, event);
+		const currentAssignments: AgentKnowledgeAssignment[] = currentKnowledgeRes.ok
+			? (((await currentKnowledgeRes.json()).data ?? []) as AgentKnowledgeAssignment[])
+			: [];
+
+		const currentFileIds = currentAssignments.map((a) => a.knowledgeFileId);
+		const knowledgeToAdd = knowledgeFileIds.filter((id) => !currentFileIds.includes(id));
+		const assignmentsToRemove = currentAssignments.filter(
+			(a) => !knowledgeFileIds.includes(a.knowledgeFileId)
+		);
+
+		await Promise.allSettled([
+			...(knowledgeToAdd.length > 0
+				? [
+						api(`/agents/${savedAgentId}/knowledge`, event, {
+							method: 'POST',
+							body: JSON.stringify({ knowledgeFileIds: knowledgeToAdd })
+						})
+					]
+				: []),
+			...assignmentsToRemove.map((assignment) =>
+				api(`/agents/${savedAgentId}/knowledge/${assignment.id}`, event, {
 					method: 'DELETE'
 				})
 			)

@@ -1,0 +1,50 @@
+id: microsoft-onedrive
+name: Microsoft OneDrive (OAuth2)
+brandName: Microsoft OneDrive
+type: oauth2
+icon: /logos/microsoft-onedrive.svg
+description: >
+  Connect to Microsoft OneDrive and SharePoint via Azure AD OAuth2 to browse and
+  read files using the Microsoft Graph API.
+documentationUrl: https://learn.microsoft.com/en-us/graph/api/resources/onedrive
+properties:
+  - name: clientId
+    displayName: Client ID (Application ID)
+    type: string
+    required: true
+    description: >
+      Application (client) ID from your Azure AD app registration.
+      Found in Azure Portal → App registrations → your app → Overview.
+  - name: clientSecret
+    displayName: Client Secret
+    type: secret
+    required: true
+    description: >
+      Client secret value from Azure AD app registration.
+      Found in Azure Portal → App registrations → your app → Certificates & secrets.
+  - name: scope
+    displayName: Scopes
+    type: string
+    required: true
+    description: >
+      Space-separated Microsoft Graph scopes. Files.Read.All covers OneDrive files;
+      Sites.Read.All covers SharePoint document libraries. offline_access is required
+      to receive a refresh token.
+    default: 'openid email profile offline_access https://graph.microsoft.com/User.Read https://graph.microsoft.com/Files.Read.All https://graph.microsoft.com/Sites.Read.All'
+
+oauth2:
+  authorizationUrl: 'https://login.microsoftonline.com/common/oauth2/v2.0/authorize'
+  accessTokenUrl: 'https://login.microsoftonline.com/common/oauth2/v2.0/token'
+  clientIdProperty: clientId
+  clientSecretProperty: clientSecret
+  # Microsoft accepts client_secret in the POST body (inBody)
+  authStyle: inBody
+
+requestMapping:
+  headers:
+    Authorization: 'Bearer {{properties.accessToken}}'
+
+testRequest:
+  method: GET
+  url: 'https://graph.microsoft.com/v1.0/me'
+  accountIdentifierKey: userPrincipalName

@@ -1,6 +1,6 @@
 # Agents
 
-An agent is a configured AI assistant: a model, a personality, and a set of capabilities. You can create as many agents as you like, each with its own credentials, skills, memory, and workflows.
+An agent is a configured AI assistant: a model, a personality, and a set of capabilities. You can create as many agents as you like, each with its own credentials, skills, knowledge, memory, and workflows.
 
 ## Creating an agent
 
@@ -17,14 +17,22 @@ Go to **Agents → Create new agent**. The same form is used to edit an existing
 
 ### Models
 
-| Field               | Description                                                                                                              |
-| ------------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| **Chat model**      | Which [LLM provider config](/guide/llm-providers) the agent thinks with.                                                 |
-| **Embedding model** | Optional second config used to embed [memory](/guide/memory) entries. Without it, the agent's memory tools are disabled. |
+| Field               | Description                                                                                                                                                                                                        |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Chat model**      | Which [LLM provider config](/guide/llm-providers) the agent thinks with.                                                                                                                                           |
+| **Embedding model** | Optional second config used to embed [memory](/guide/memory) entries and [knowledge base](/guide/knowledge-base) files. Without it, the agent's memory tools are disabled and knowledge files cannot be processed. |
 
 ### Credentials
 
 Select which stored [credentials](/guide/credentials) this agent may use. The agent calls them through the `call_api` tool — it sees each credential's name and service, but never the secret itself. An agent can only use credentials explicitly attached to it.
+
+### Knowledge base
+
+Attach documents from your [knowledge library](/guide/knowledge-base) for the agent to reference. Click **Add knowledge** to select existing library files, or upload / import from cloud storage (Google Drive, Dropbox, OneDrive) directly in the dialog. Selections apply when you save the agent.
+
+After saving, each file is chunked and embedded into the agent's memory in the background — the card shows a per-file status (pending → processing → ready). The agent then retrieves relevant passages with `memory_search` during conversations and cites them by file name and location (e.g. "Page 3"). Requires an **embedding model** (above); see the [knowledge base guide](/guide/knowledge-base) for formats, limits, and how processing works.
+
+Removing a file here deletes this agent's chunks for it but keeps the file in your library for other agents.
 
 ### Skills
 

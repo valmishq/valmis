@@ -14,6 +14,7 @@
 	import PageHeader from '$lib/components/page-header.svelte';
 	import AgentSkillsPanel from '$lib/components/custom/agent-skills-panel.svelte';
 	import AgentCredentialsPanel from '$lib/components/custom/agent-credentials-panel.svelte';
+	import AgentKnowledgePanel from '$lib/components/custom/knowledge/agent-knowledge-panel.svelte';
 	import ChevronLeftIcon from '@lucide/svelte/icons/chevron-left';
 	import BrainIcon from '@lucide/svelte/icons/brain';
 	import type { PageData, ActionData } from './$types';
@@ -72,6 +73,10 @@
 	let selectedEmbeddingModelConfigId = $state<string>(agent?.embeddingModelConfigId ?? '');
 	/** Skill selections — same pattern as credential checkboxes */
 	let selectedSkillNames = $state<Set<string>>(new Set(data.assignedSkillNames ?? []));
+	/** Knowledge file selections — same pattern as skills (diffed + synced on save) */
+	let selectedKnowledgeFileIds = $state<Set<string>>(
+		new Set((data.knowledgeAssignments ?? []).map((a) => a.knowledgeFileId))
+	);
 	/** Sandbox internet egress — only enforced when the backend runs the docker driver */
 	let allowInternetAccess = $state(agent?.allowInternetAccess ?? true);
 
@@ -197,6 +202,10 @@
 	<!-- Skill names: one hidden input per selected skill -->
 	{#each [...selectedSkillNames] as skillName (skillName)}
 		<input type="hidden" name="skillNames" value={skillName} />
+	{/each}
+	<!-- Knowledge file IDs: one hidden input per selected file -->
+	{#each [...selectedKnowledgeFileIds] as knowledgeFileId (knowledgeFileId)}
+		<input type="hidden" name="knowledgeFileIds" value={knowledgeFileId} />
 	{/each}
 
 	<!-- ── Identity ──────────────────────────────────────────────────────────── -->
@@ -394,18 +403,18 @@
 	<!-- ── Credentials ───────────────────────────────────────────────────────── -->
 	<AgentCredentialsPanel bind:selectedCredentialIds {credentials} {definitions} />
 
-	<!-- ── Knowledge Base (stub) ─────────────────────────────────────────────── -->
-	<Card.Root>
-		<Card.Header>
-			<Card.Title class="text-sm font-medium">Knowledge Base</Card.Title>
-			<Card.Description class="text-xs">
-				Upload files or connect external sources for the agent to reference.
-			</Card.Description>
-		</Card.Header>
-		<Card.Content>
-			<p class="py-4 text-center text-sm text-muted-foreground">Coming soon</p>
-		</Card.Content>
-	</Card.Root>
+	<!-- ── Knowledge Base ────────────────────────────────────────────────────── -->
+	<!--
+		Checkboxes in the component update `selectedKnowledgeFileIds` (a Set).
+		Hidden inputs above serialise the set into repeated `knowledgeFileIds` fields.
+		The form action diffs against the current assignments and syncs via the
+		agent knowledge API; chunking + embedding runs server-side in the background.
+	-->
+	<AgentKnowledgePanel
+		bind:selectedKnowledgeFileIds
+		assignments={data.knowledgeAssignments ?? []}
+		embeddingConfigured={!!selectedEmbeddingModelConfigId}
+	/>
 
 	<!-- ── Skills ────────────────────────────────────────────────────────────── -->
 	<!--

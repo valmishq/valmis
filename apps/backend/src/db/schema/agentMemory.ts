@@ -1,7 +1,8 @@
-import { pgTable, uuid, text, timestamp, index, jsonb, pgEnum } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, text, timestamp, index, jsonb, pgEnum, boolean } from 'drizzle-orm/pg-core';
 import { customType } from 'drizzle-orm/pg-core';
 import { agents } from './agents.js';
 import { agentThreads } from './agentThreads.js';
+import { agentKnowledgeFiles } from './agentKnowledgeFiles.js';
 
 /**
  * Memory type classification — mirrors the four-layer memory model.
@@ -69,6 +70,20 @@ export const agentMemory = pgTable(
 		embedding: vector('embedding').notNull(),
 		/** Optional metadata (source, tags, confidence, etc.) */
 		metadata: jsonb('metadata'),
+		/**
+		 * True for chunks generated from a knowledge-base file. Knowledge chunks
+		 * are excluded from the memory management UI by default but remain fully
+		 * searchable via memory_search.
+		 */
+		isKnowledgeBase: boolean('is_knowledge_base').notNull().default(false),
+		/**
+		 * Owning knowledge assignment (agent_knowledge_files row). Unassigning a
+		 * file from the agent — or deleting it from the library — cascades and
+		 * removes the chunks automatically.
+		 */
+		agentKnowledgeFileId: uuid('agent_knowledge_file_id').references(() => agentKnowledgeFiles.id, {
+			onDelete: 'cascade',
+		}),
 		createdAt: timestamp('created_at').defaultNow().notNull(),
 	},
 	(table) => [
@@ -78,6 +93,8 @@ export const agentMemory = pgTable(
 		index('agent_memory_type_idx').on(table.memoryType),
 		/** B-tree index for thread-scoped working memory queries */
 		index('agent_memory_thread_id_idx').on(table.threadId),
+		/** B-tree index for per-assignment chunk deletion (reprocess path) */
+		index('agent_memory_agent_knowledge_file_id_idx').on(table.agentKnowledgeFileId),
 		// HNSW index is intentionally omitted — pgvector requires a fixed-dimension column
 		// (e.g. vector(1536)) to build an HNSW index, but this system supports multiple
 		// embedding models with different output dimensions. Exact cosine search via

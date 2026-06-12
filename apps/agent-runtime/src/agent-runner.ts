@@ -325,6 +325,22 @@ export async function runAgent(
 			`isolation). Write in third-person-neutral factual style, not as a diary ` +
 			`entry. Example: "User prefers responses in bullet-point format." not ` +
 			`"The user told me they like bullets."`;
+
+		// Knowledge base note — only when ready knowledge files are assigned.
+		// Content lives in agent_memory (chunked + embedded), retrieved via
+		// memory_search like any other memory; never injected into the prompt.
+		if (config.knowledgeBase) {
+			const { fileCount, fileNames } = config.knowledgeBase;
+			effectiveSystemPrompt +=
+				`\n\n### Knowledge Base\n` +
+				`This agent has a knowledge base of ${fileCount} file(s): ` +
+				`${fileNames.join(', ')}${fileCount > fileNames.length ? ', …' : ''}.\n` +
+				`Its contents are stored as memory entries — retrieve them with memory_search ` +
+				`(no special filter needed; search using terms related to the question). ` +
+				`Each result's metadata includes fileName and location.label (e.g. "Page 3", ` +
+				`"Slide 7", "Sheet 'Q1' rows 1–50"). When you use knowledge base content in ` +
+				`an answer, cite the source as "<fileName>, <location label>".`;
+		}
 	}
 
 	// ── Tool restrictions (workspace boundary + no host exploration) ──────────

@@ -41,6 +41,10 @@ export interface AddMemoryInput {
 	/** Optional thread scope — for 'working' memory entries */
 	threadId?: string;
 	metadata?: Record<string, unknown>;
+	/** True for chunks generated from a knowledge-base file */
+	isKnowledgeBase?: boolean;
+	/** Owning knowledge assignment (agent_knowledge_files row) — chunks cascade with it */
+	agentKnowledgeFileId?: string;
 }
 
 export interface SearchMemoryInput {
@@ -82,6 +86,8 @@ function rowToMemoryEntry(row: typeof agentMemory.$inferSelect): AgentMemoryEntr
 		memoryType: row.memoryType as MemoryType,
 		content: row.content,
 		metadata: (row.metadata as Record<string, unknown>) ?? undefined,
+		isKnowledgeBase: row.isKnowledgeBase,
+		agentKnowledgeFileId: row.agentKnowledgeFileId ?? undefined,
 		createdAt: row.createdAt,
 	};
 }
@@ -287,14 +293,54 @@ export class AgentService {
 				content: input.content,
 				embedding: input.embedding,
 				metadata: input.metadata ?? null,
+				isKnowledgeBase: input.isKnowledgeBase ?? false,
+				agentKnowledgeFileId: input.agentKnowledgeFileId ?? null,
 			})
 			.returning();
 
 		return rowToMemoryEntry(row);
 	}
 
-	/** List memory entries for an agent (most recent first) */
-	async listMemory(agentId: string, limit = 50, offset = 0): Promise<AgentMemoryEntry[]> {
+	/**
+	 * Add multiple memory entries in a single insert. Used by the knowledge-base
+	 * ingestion pipeline where one file produces many chunks.
+	 */
+	async addMemoryBatch(inputs: AddMemoryInput[]): Promise<number> {
+		if (inputs.length === 0) return 0;
+		const rows = await db
+			.insert(agentMemory)
+			.values(
+				inputs.map((input) => ({
+					agentId: input.agentId,
+					threadId: input.threadId ?? null,
+					memoryType: input.memoryType,
+					content: input.content,
+					embedding: input.embedding,
+					metadata: input.metadata ?? null,
+					isKnowledgeBase: input.isKnowledgeBase ?? false,
+					agentKnowledgeFileId: input.agentKnowledgeFileId ?? null,
+				})),
+			)
+			.returning({ id: agentMemory.id });
+		return rows.length;
+	}
+
+	/**
+	 * List memory entries for an agent (most recent first).
+	 * Knowledge-base chunks are excluded by default — they are managed through
+	 * the knowledge pages, not the memory UI.
+	 */
+	async listMemory(
+		agentId: string,
+		limit = 50,
+		offset = 0,
+		includeKnowledgeBase = false,
+	): Promise<AgentMemoryEntry[]> {
+		const conditions = [eq(agentMemory.agentId, agentId)];
+		if (!includeKnowledgeBase) {
+			conditions.push(eq(agentMemory.isKnowledgeBase, false));
+		}
+
 		const rows = await db
 			.select({
 				id: agentMemory.id,
@@ -303,10 +349,12 @@ export class AgentService {
 				memoryType: agentMemory.memoryType,
 				content: agentMemory.content,
 				metadata: agentMemory.metadata,
+				isKnowledgeBase: agentMemory.isKnowledgeBase,
+				agentKnowledgeFileId: agentMemory.agentKnowledgeFileId,
 				createdAt: agentMemory.createdAt,
 			})
 			.from(agentMemory)
-			.where(eq(agentMemory.agentId, agentId))
+			.where(and(...conditions))
 			.orderBy(sql`${agentMemory.createdAt} DESC`)
 			.limit(limit)
 			.offset(offset);
@@ -318,6 +366,8 @@ export class AgentService {
 			memoryType: row.memoryType as MemoryType,
 			content: row.content,
 			metadata: (row.metadata as Record<string, unknown>) ?? undefined,
+			isKnowledgeBase: row.isKnowledgeBase,
+			agentKnowledgeFileId: row.agentKnowledgeFileId ?? undefined,
 			createdAt: row.createdAt,
 		}));
 	}
@@ -348,6 +398,8 @@ export class AgentService {
 				memoryType: agentMemory.memoryType,
 				content: agentMemory.content,
 				metadata: agentMemory.metadata,
+				isKnowledgeBase: agentMemory.isKnowledgeBase,
+				agentKnowledgeFileId: agentMemory.agentKnowledgeFileId,
 				createdAt: agentMemory.createdAt,
 			})
 			.from(agentMemory)
@@ -362,6 +414,8 @@ export class AgentService {
 			memoryType: row.memoryType as MemoryType,
 			content: row.content,
 			metadata: (row.metadata as Record<string, unknown>) ?? undefined,
+			isKnowledgeBase: row.isKnowledgeBase,
+			agentKnowledgeFileId: row.agentKnowledgeFileId ?? undefined,
 			createdAt: row.createdAt,
 		}));
 	}
@@ -385,6 +439,23 @@ export class AgentService {
 		const result = await db
 			.delete(agentMemory)
 			.where(and(inArray(agentMemory.id, memoryIds), eq(agentMemory.agentId, agentId)));
+		return result.rowCount ?? 0;
+	}
+
+	/**
+	 * Delete all memory chunks belonging to one knowledge assignment.
+	 * Used by re-ingestion (the FK cascade only fires when the assignment row
+	 * itself is deleted). The agentId guard prevents cross-agent deletion.
+	 */
+	async deleteMemoryByAssignment(agentKnowledgeFileId: string, agentId: string): Promise<number> {
+		const result = await db
+			.delete(agentMemory)
+			.where(
+				and(
+					eq(agentMemory.agentKnowledgeFileId, agentKnowledgeFileId),
+					eq(agentMemory.agentId, agentId),
+				),
+			);
 		return result.rowCount ?? 0;
 	}
 }

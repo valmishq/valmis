@@ -175,6 +175,16 @@
 			return [{ label: 'Agents', href: '/app/agents' }, { label: 'New Agent' }];
 		}
 
+		// ── /app/workflows ────────────────────────────────────────────────────────
+		if (pathname === '/app/workflows') {
+			return [{ label: 'Workflows' }];
+		}
+
+		// ── /app/knowledge ────────────────────────────────────────────────────────
+		if (pathname === '/app/knowledge') {
+			return [{ label: 'Knowledge' }];
+		}
+
 		// ── /app/skills ───────────────────────────────────────────────────────────
 		if (pathname === '/app/skills') {
 			return [{ label: 'Skills' }];

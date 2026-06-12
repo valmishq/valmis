@@ -1,4 +1,4 @@
-import { eq, and } from 'drizzle-orm';
+import { eq, and, desc, inArray } from 'drizzle-orm';
 import { randomBytes } from 'crypto';
 import { db } from '../db/index.js';
 import { workflows, agents, agentTriggers } from '../db/schema/index.js';
@@ -190,6 +190,41 @@ export class WorkflowService {
 		const triggerMap = new Map<string, AgentTrigger>();
 		for (const t of triggerRows) {
 			if (t.workflowId && workflowIds.has(t.workflowId) && !triggerMap.has(t.workflowId)) {
+				triggerMap.set(t.workflowId, rowToTrigger(t));
+			}
+		}
+
+		return rows.map((row) => rowToWorkflow(row, triggerMap.get(row.id)));
+	}
+
+	/**
+	 * List all workflows belonging to an owner across all agents, newest first.
+	 * Optionally filtered to a single agent. Attaches trigger data to each workflow.
+	 * Used by the top-level workflows page.
+	 */
+	async listByOwner(ownerId: string, agentId?: string): Promise<Workflow[]> {
+		const conditions = [eq(workflows.ownerId, ownerId)];
+		if (agentId) conditions.push(eq(workflows.agentId, agentId));
+
+		const rows = await db
+			.select()
+			.from(workflows)
+			.where(and(...conditions))
+			.orderBy(desc(workflows.updatedAt));
+
+		if (rows.length === 0) return [];
+
+		const workflowIds = rows.map((r) => r.id);
+		const triggerRows = await db
+			.select()
+			.from(agentTriggers)
+			.where(
+				and(eq(agentTriggers.ownerId, ownerId), inArray(agentTriggers.workflowId, workflowIds)),
+			);
+
+		const triggerMap = new Map<string, AgentTrigger>();
+		for (const t of triggerRows) {
+			if (t.workflowId && !triggerMap.has(t.workflowId)) {
 				triggerMap.set(t.workflowId, rowToTrigger(t));
 			}
 		}

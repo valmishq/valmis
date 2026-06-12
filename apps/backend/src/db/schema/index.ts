@@ -21,3 +21,5 @@ export * from './workflowRuns.js';
 export * from './workflowStepLogs.js';
 export * from './channelLinks.js';
 export * from './channelPairingCodes.js';
+export * from './knowledgeFiles.js';
+export * from './agentKnowledgeFiles.js';

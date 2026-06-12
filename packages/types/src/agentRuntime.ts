@@ -269,6 +269,12 @@ export interface AgentRuntimeConfig {
 	 * Null/empty means memory tools are unavailable for this agent.
 	 */
 	embeddingModelConfigId?: string;
+	/**
+	 * Knowledge base summary — present when the agent has ready knowledge
+	 * assignments. fileNames is capped at 20 entries; used only to build the
+	 * system-prompt note telling the agent to retrieve content via memory_search.
+	 */
+	knowledgeBase?: { fileCount: number; fileNames: string[] };
 	triggerType: AgentTriggerType;
 	triggerPayload?: Record<string, unknown>;
 	/**

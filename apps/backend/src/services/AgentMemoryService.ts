@@ -1,4 +1,4 @@
-import { embed } from 'ai';
+import { embed, embedMany } from 'ai';
 import type { EmbeddingModel } from 'ai';
 import { createOpenAI } from '@ai-sdk/openai';
 import { createGoogleGenerativeAI } from '@ai-sdk/google';
@@ -141,6 +141,48 @@ export class AgentMemoryService {
 		});
 
 		return embedding;
+	}
+
+	/**
+	 * Generate embeddings for multiple texts in one provider call.
+	 * Used by the knowledge-base ingestion pipeline. Callers should pass
+	 * bounded batches (the pipeline uses slices of 32) to respect provider
+	 * payload limits.
+	 */
+	async embedBatch(
+		texts: string[],
+		embeddingModelConfigId: string,
+		ownerId: string,
+	): Promise<number[][]> {
+		if (texts.length === 0) return [];
+
+		const modelConfig = await this.llmProviderService.getById(embeddingModelConfigId, ownerId);
+		if (!modelConfig) {
+			throw new Error(`Embedding model config not found: ${embeddingModelConfigId}`);
+		}
+
+		const secretData = await this.llmProviderService.getDecryptedData(
+			embeddingModelConfigId,
+			ownerId,
+		);
+		if (!secretData?.apiKey) {
+			throw new Error(`No API key configured for embedding model: ${embeddingModelConfigId}`);
+		}
+
+		const embeddingModel = buildEmbeddingModel(
+			modelConfig.provider,
+			modelConfig.model,
+			secretData.apiKey,
+			secretData.baseUrl ?? undefined,
+		);
+
+		const { embeddings } = await embedMany({
+			model: embeddingModel,
+			values: texts,
+			maxRetries: 2,
+		});
+
+		return embeddings;
 	}
 
 	/**

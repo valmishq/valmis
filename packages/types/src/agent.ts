@@ -55,6 +55,10 @@ export interface AgentMemoryEntry {
 	memoryType: MemoryType;
 	content: string;
 	metadata?: Record<string, unknown>;
+	/** True for chunks generated from a knowledge-base file — hidden from the memory UI */
+	isKnowledgeBase?: boolean;
+	/** Owning knowledge assignment (agent_knowledge_files row) for knowledge-base chunks */
+	agentKnowledgeFileId?: string;
 	createdAt: Date;
 }
 
@@ -66,6 +70,8 @@ export interface AgentMemorySearchResult {
 	memoryType: MemoryType;
 	content: string;
 	metadata?: Record<string, unknown>;
+	isKnowledgeBase?: boolean;
+	agentKnowledgeFileId?: string;
 	createdAt: Date;
 	/** Cosine similarity score — higher is more similar (0–1 range) */
 	similarity: number;

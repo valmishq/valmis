@@ -16,8 +16,11 @@ import { createAgentsRouter } from './routes/agents.js';
 import { createSkillsRouter } from './routes/skills.js';
 import { createRuntimeRouter } from './routes/runtime.js';
 import { createWebhooksRouter } from './routes/webhooks.js';
-import { createWorkflowsRouter } from './routes/workflows.js';
+import { createWorkflowsRouter, createGlobalWorkflowsRouter } from './routes/workflows.js';
 import { createChannelsRouter } from './routes/channels.js';
+import { createKnowledgeRouter, createAgentKnowledgeRouter } from './routes/knowledge.js';
+import { KnowledgeBaseService } from './services/KnowledgeBaseService.js';
+import { CloudProviderRegistry } from './services/knowledge/providerRegistry.js';
 import { ChannelService } from './services/ChannelService.js';
 import { MessagePipeline } from './channels/pipeline.js';
 import { ContentProcessor } from './channels/processor.js';
@@ -103,6 +106,18 @@ const skillEvolutionService = new SkillEvolutionService(
 	skillService,
 );
 
+// --- Instantiate knowledge-base services ---
+// CloudProviderRegistry: pluggable cloud storage providers (Google Drive, Dropbox, OneDrive).
+// KnowledgeBaseService: user-level knowledge library + per-agent assignment ingestion
+// (extract → chunk → embed → agent_memory rows flagged isKnowledgeBase).
+const cloudProviderRegistry = new CloudProviderRegistry(credentialResolverService);
+const knowledgeBaseService = new KnowledgeBaseService(
+	agentService,
+	agentMemoryService,
+	cloudProviderRegistry,
+	credentialService,
+);
+
 // Execution driver — how agent runtimes are isolated:
 //   process (default) — plain Node.js child process, code-level isolation only.
 //   docker            — hardened sibling Docker container (recommended; set in
@@ -118,6 +133,7 @@ const runtimeService = new AgentRuntimeService(
 	llmProviderService,
 	credentialService,
 	skillMaterializerService,
+	knowledgeBaseService,
 );
 
 // --- Instantiate channel services ---
@@ -232,6 +248,22 @@ app.use('/v1/iam', createIamRouter(authService));
 app.use('/v1/agents', createAgentsRouter(authService, skillService));
 app.use('/v1/skills', createSkillsRouter(authService, skillService, skillInstallService));
 
+// Knowledge library routes — user-level files + cloud provider browsing
+app.use(
+	'/v1/knowledge',
+	createKnowledgeRouter(
+		authService,
+		knowledgeBaseService,
+		cloudProviderRegistry,
+		credentialService,
+	),
+);
+// Agent knowledge assignments — scoped under agents (mergeParams, like workflows)
+app.use(
+	'/v1/agents/:agentId/knowledge',
+	createAgentKnowledgeRouter(authService, knowledgeBaseService),
+);
+
 // Runtime routes — user-facing + sandbox-internal (PROXY_TOKEN auth)
 app.use(
 	'/v1/runtime',
@@ -276,6 +308,9 @@ app.use(
 	createWorkflowsRouter(authService, workflowService, workflowRunService, triggerService),
 );
 
+// Global workflow routes — owner-wide read-only listing for the top-level workflows page
+app.use('/v1/workflows', createGlobalWorkflowsRouter(authService, workflowService));
+
 // Global error handler — must be registered last, after all routes
 app.use(errorHandler);
 
@@ -286,6 +321,9 @@ await runtimeService.init();
 
 app.listen(PORT, async () => {
 	logger.info({ port: PORT, runtimeDriver: executionDriver.name }, '[backend] server running');
+	// Knowledge rows left 'processing' by a previous crash can never complete —
+	// flip them to 'error' so users get an actionable state instead of a stuck spinner
+	await knowledgeBaseService.failInterruptedProcessing();
 	// Load and schedule all enabled cron triggers on startup
 	await triggerService.loadAll();
 	// Start Telegram long-polling for all active bot credentials

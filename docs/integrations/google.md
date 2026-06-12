@@ -1,16 +1,17 @@
-# Google (Gmail, Calendar, Docs, Sheets, Workspace)
+# Google (Gmail, Calendar, Docs, Sheets, Drive, Workspace)
 
-Agent-Int has five Google OAuth2 integrations. They all authenticate the same way — an OAuth client you create once in Google Cloud Console — but each requests only the scopes it needs:
+Agent-Int has six Google OAuth2 integrations. They all authenticate the same way — an OAuth client you create once in Google Cloud Console — but each requests only the scopes it needs:
 
-| Integration          | What agents can do                                    | Scopes requested                                                                                                            |
-| -------------------- | ----------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| **Gmail**            | Read, send, compose, label, and manage email          | `https://mail.google.com/`, `gmail.readonly`, `gmail.send`, `gmail.compose`, `gmail.insert`, `gmail.labels`, `gmail.modify` |
-| **Google Calendar**  | Read, create, update, and delete events and calendars | `calendar`, `calendar.events`                                                                                               |
-| **Google Docs**      | Read, write, and manage documents                     | `documents`                                                                                                                 |
-| **Google Sheets**    | Read, write, and manage spreadsheets                  | `spreadsheets`                                                                                                              |
-| **Google Workspace** | Any Google API — **you choose the scopes**            | Your own list (default: `drive.readonly`)                                                                                   |
+| Integration          | What agents can do                                                                                             | Scopes requested                                                                                                            |
+| -------------------- | -------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| **Gmail**            | Read, send, compose, label, and manage email                                                                   | `https://mail.google.com/`, `gmail.readonly`, `gmail.send`, `gmail.compose`, `gmail.insert`, `gmail.labels`, `gmail.modify` |
+| **Google Calendar**  | Read, create, update, and delete events and calendars                                                          | `calendar`, `calendar.events`                                                                                               |
+| **Google Docs**      | Read, write, and manage documents                                                                              | `documents`                                                                                                                 |
+| **Google Sheets**    | Read, write, and manage spreadsheets                                                                           | `spreadsheets`                                                                                                              |
+| **Google Drive**     | Browse and manage Drive files — **scopes editable**; powers the [knowledge base](/guide/knowledge-base) import | Your own list (default: `drive` — full read/write; use `drive.readonly` for read-only)                                      |
+| **Google Workspace** | Any Google API — **you choose the scopes**                                                                     | Your own list (default: `drive.readonly`)                                                                                   |
 
-All five also request `openid email` (your identity) and offline access (`access_type=offline`, `prompt=consent`) so the credential keeps working without re-authorizing.
+All six also request `openid email` (your identity) and offline access (`access_type=offline`, `prompt=consent`) so the credential keeps working without re-authorizing.
 
 ::: tip One Cloud project can serve all of them
 You can create a **single Google Cloud project and OAuth client** and reuse its Client ID/Secret for every Google credential in Agent-Int. Enable all the APIs you'll use and add all their scopes to the consent screen — each Agent-Int integration still only requests its own scopes during authorization, so a Calendar credential never gets Gmail access. Or create separate projects per product if you prefer strict separation.
@@ -18,11 +19,11 @@ You can create a **single Google Cloud project and OAuth client** and reuse its 
 
 ## What you need (every Google integration)
 
-| Field         | Required       | Notes                                                                                                                                                           |
-| ------------- | -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Client ID     | Yes            | OAuth2 Client ID from Google Cloud Console                                                                                                                      |
-| Client Secret | Yes            | Secret — OAuth2 Client Secret from Google Cloud Console                                                                                                         |
-| Scopes        | Workspace only | Space-separated Google scope list ([reference](https://developers.google.com/identity/protocols/oauth2/scopes)). The other four integrations have fixed scopes. |
+| Field         | Required               | Notes                                                                                                                                                           |
+| ------------- | ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Client ID     | Yes                    | OAuth2 Client ID from Google Cloud Console                                                                                                                      |
+| Client Secret | Yes                    | Secret — OAuth2 Client Secret from Google Cloud Console                                                                                                         |
+| Scopes        | Drive & Workspace only | Space-separated Google scope list ([reference](https://developers.google.com/identity/protocols/oauth2/scopes)). The other four integrations have fixed scopes. |
 
 ## Step 1 — Create a Google Cloud project
 
@@ -38,6 +39,7 @@ You can create a **single Google Cloud project and OAuth client** and reuse its 
    - **Google Calendar API** (for Calendar)
    - **Google Docs API** (for Docs)
    - **Google Sheets API** (for Sheets)
+   - **Google Drive API** (for Google Drive — including knowledge base imports)
    - For the Workspace integration: whatever APIs your scopes belong to (e.g. **Google Drive API** for Drive scopes)
 
 Calls to an API that isn't enabled fail even when the scope was granted — enabling the API and granting the scope are two separate things.
@@ -71,9 +73,9 @@ While the consent screen is in _Testing_ status, Google expires refresh tokens a
 
 ## Step 5 — Create the credential in Agent-Int
 
-1. **Credentials → Add credential** → pick the Google integration you want (Gmail, Google Calendar, Google Docs, Google Sheets, or Google Workspace).
-2. Paste the **Client ID** and **Client Secret**. The same pair can be reused across all five integrations.
-3. Workspace integration only: set the space-separated scope list. Grant the narrowest scopes that cover the task (e.g. `https://www.googleapis.com/auth/drive.readonly` instead of full `drive`), and make sure each one was added to the consent screen in Step 3.
+1. **Credentials → Add credential** → pick the Google integration you want (Gmail, Google Calendar, Google Docs, Google Sheets, Google Drive, or Google Workspace).
+2. Paste the **Client ID** and **Client Secret**. The same pair can be reused across all six integrations.
+3. Drive and Workspace integrations only: set the space-separated scope list. Grant the narrowest scopes that cover the task (e.g. `https://www.googleapis.com/auth/drive.readonly` instead of full `drive` if agents only read files), and make sure each one was added to the consent screen in Step 3.
 4. Save, then click **Authorize** and grant access with the Google account you added as a test user.
 
 ::: warning Gmail grants full mailbox access
