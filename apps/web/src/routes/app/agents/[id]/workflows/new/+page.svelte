@@ -187,7 +187,7 @@
 		<Button
 			variant="outline"
 			size="sm"
-			onclick={() => goto(`/app/agents/${agent.id}/workflows`)}
+			onclick={() => goto(`/app/workflows?agentId=${agent.id}`)}
 			class="gap-2"
 		>
 			<ArrowLeftIcon class="size-4" />
@@ -531,7 +531,7 @@
 		<Button
 			type="button"
 			variant="outline"
-			onclick={() => goto(`/app/agents/${agent.id}/workflows`)}
+			onclick={() => goto(`/app/workflows?agentId=${agent.id}`)}
 			disabled={isSaving}
 		>
 			Cancel

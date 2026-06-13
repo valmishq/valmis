@@ -61,8 +61,28 @@
 		{ title: 'Credentials', url: '/app/credentials', icon: ShieldIcon }
 	];
 
+	/** Account dropdown items */
+	const accountItems = [
+		{ title: 'Profile', url: '/app/account/profile', icon: UserIcon },
+		{ title: 'API Keys', url: '/app/account/api-keys', icon: KeyIcon },
+		{ title: 'Channels', url: '/app/account/channels', icon: MessageCircleMore }
+	];
+
+	/** Navigate to a path, closing the mobile sidebar sheet first if open. */
+	function navigateTo(url: string) {
+		closeMobileIfNeeded();
+		goto(url);
+	}
+
+	/**
+	 * A nav item is active on its exact path and any nested path beneath it,
+	 * e.g. "Chat" (`/app/chat`) stays highlighted on `/app/chat/[agentId]/...`.
+	 * "Home" (`/app`) is matched exactly so it doesn't light up on every page.
+	 */
 	function isActive(url: string): boolean {
-		return page.url.pathname === url;
+		const path = page.url.pathname;
+		if (url === '/app') return path === '/app';
+		return path === url || path.startsWith(`${url}/`);
 	}
 
 	async function handleLogout() {
@@ -200,33 +220,12 @@
 						<DropdownMenu.Separator />
 
 						<DropdownMenu.Group>
-							<DropdownMenu.Item
-								onSelect={() => {
-									closeMobileIfNeeded();
-									goto('/app/account/profile');
-								}}
-							>
-								<UserIcon class="mr-2 size-4" />
-								Profile
-							</DropdownMenu.Item>
-							<DropdownMenu.Item
-								onSelect={() => {
-									closeMobileIfNeeded();
-									goto('/app/account/api-keys');
-								}}
-							>
-								<KeyIcon class="mr-2 size-4" />
-								API Keys
-							</DropdownMenu.Item>
-							<DropdownMenu.Item
-								onSelect={() => {
-									closeMobileIfNeeded();
-									goto('/app/account/channels');
-								}}
-							>
-								<MessageCircleMore class="mr-2 size-4" />
-								Channels
-							</DropdownMenu.Item>
+							{#each accountItems as item (item.title)}
+								<DropdownMenu.Item onSelect={() => navigateTo(item.url)}>
+									<item.icon class="mr-2 size-4" />
+									{item.title}
+								</DropdownMenu.Item>
+							{/each}
 						</DropdownMenu.Group>
 
 						<DropdownMenu.Separator />

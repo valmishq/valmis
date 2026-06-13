@@ -77,7 +77,7 @@
 		<Button
 			variant="outline"
 			size="sm"
-			onclick={() => goto(`/app/agents/${data.agent.id}/workflows`)}
+			onclick={() => goto(`/app/workflows?agentId=${data.agent.id}`)}
 			class="gap-2"
 		>
 			<ArrowLeftIcon class="size-4" />

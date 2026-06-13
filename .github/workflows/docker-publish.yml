@@ -28,6 +28,8 @@ on:
       - main
     tags:
       - 'v*'
+    paths-ignore:
+      - 'docs/**'
   workflow_dispatch:
 
 jobs:

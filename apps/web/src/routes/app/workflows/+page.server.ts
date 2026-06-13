@@ -28,5 +28,7 @@ export const load: PageServerLoad = async (event) => {
 		}
 	}
 
+	// The selected-agent filter is read client-side from the `?agentId=` query
+	// param (see +page.svelte), so it is shareable and the breadcrumb reflects it.
 	return { workflows, agents };
 };

@@ -221,7 +221,7 @@
 								<Button
 									variant="ghost"
 									size="sm"
-									onclick={() => goto(`/app/agents/${agent.id}/workflows`)}
+									onclick={() => goto(`/app/workflows?agentId=${agent.id}`)}
 									class="text-muted-foreground hover:text-foreground"
 									title="Manage workflows"
 								>

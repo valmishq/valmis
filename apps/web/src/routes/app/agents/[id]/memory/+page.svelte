@@ -5,6 +5,7 @@
 	import { get } from 'svelte/store';
 	import { setAlert } from '$lib/components/custom/alert/alert-state.svelte.js';
 	import * as Card from '$lib/components/ui/card/index.js';
+	import * as Dialog from '$lib/components/ui/dialog/index.js';
 	import { Badge } from '$lib/components/ui/badge/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import PageHeader from '$lib/components/page-header.svelte';
@@ -25,13 +26,22 @@
 
 	// ── Deletion ───────────────────────────────────────────────────────────────
 
-	let deletingMemoryId = $state<string | null>(null);
+	let deleteDialogOpen = $state(false);
+	let entryToDelete = $state<AgentMemoryEntry | null>(null);
+	let isDeleting = $state(false);
 
-	async function handleDeleteMemory(entryId: string) {
+	function requestDelete(entry: AgentMemoryEntry) {
+		entryToDelete = entry;
+		deleteDialogOpen = true;
+	}
+
+	async function confirmDeleteMemory() {
+		if (!entryToDelete) return;
 		const { user } = get(authStore);
 		if (!user) return;
 
-		deletingMemoryId = entryId;
+		const entryId = entryToDelete.id;
+		isDeleting = true;
 		try {
 			const res = await api(`/agents/${data.agent.id}/memory/${entryId}`, {
 				method: 'DELETE'
@@ -40,6 +50,13 @@
 			if (res.ok) {
 				// Optimistic removal from the local list
 				memory = memory.filter((m) => m.id !== entryId);
+				setAlert({
+					type: 'success',
+					title: 'Memory deleted',
+					message: 'The memory entry has been removed.',
+					duration: 4000,
+					show: true
+				});
 			} else {
 				setAlert({
 					type: 'error',
@@ -58,7 +75,9 @@
 				show: true
 			});
 		} finally {
-			deletingMemoryId = null;
+			isDeleting = false;
+			deleteDialogOpen = false;
+			entryToDelete = null;
 		}
 	}
 
@@ -95,6 +114,38 @@
 
 	const totalEntries = $derived(memory.length);
 </script>
+
+<!-- ── Delete confirmation dialog ───────────────────────────────────────── -->
+<Dialog.Root bind:open={deleteDialogOpen}>
+	<Dialog.Content class="sm:max-w-md">
+		<Dialog.Header>
+			<Dialog.Title>Delete memory entry</Dialog.Title>
+			<Dialog.Description>
+				Are you sure you want to delete this memory entry? This action cannot be undone.
+			</Dialog.Description>
+		</Dialog.Header>
+		{#if entryToDelete}
+			<div class="rounded-md border border-border bg-muted/30 px-3 py-2 text-sm text-foreground">
+				<p class="line-clamp-3">{entryToDelete.content}</p>
+			</div>
+		{/if}
+		<Dialog.Footer class="gap-2 sm:gap-0">
+			<Button
+				variant="outline"
+				onclick={() => {
+					deleteDialogOpen = false;
+					entryToDelete = null;
+				}}
+				disabled={isDeleting}
+			>
+				Cancel
+			</Button>
+			<Button variant="destructive" onclick={confirmDeleteMemory} disabled={isDeleting}>
+				{isDeleting ? 'Deleting…' : 'Delete entry'}
+			</Button>
+		</Dialog.Footer>
+	</Dialog.Content>
+</Dialog.Root>
 
 <svelte:head>
 	<title>{data.agent.name} — Memory — AgentInt Dashboard</title>
@@ -187,8 +238,8 @@
 							type="button"
 							variant="ghost"
 							size="sm"
-							onclick={() => handleDeleteMemory(entry.id)}
-							disabled={deletingMemoryId === entry.id}
+							onclick={() => requestDelete(entry)}
+							disabled={isDeleting && entryToDelete?.id === entry.id}
 							class="shrink-0 text-destructive hover:bg-destructive/10 hover:text-destructive"
 							title="Delete memory entry"
 						>

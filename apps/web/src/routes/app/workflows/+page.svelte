@@ -1,5 +1,6 @@
 <script lang="ts">
-	import { goto } from '$app/navigation';
+	import { goto, replaceState } from '$app/navigation';
+	import { page } from '$app/state';
 	import { api } from '$lib/api.client.js';
 	import { setAlert } from '$lib/components/custom/alert/alert-state.svelte.js';
 	import * as Card from '$lib/components/ui/card/index.js';
@@ -60,8 +61,22 @@
 	}
 
 	// ── Agent filter ──────────────────────────────────────────────────────────
+	// The selected agent lives in the `?agentId=` query param so the URL stays
+	// shareable and the breadcrumb can reflect it. The dropdown reads from / writes
+	// to the param — selecting an agent updates the URL (without a server refetch).
 	const ALL_AGENTS = 'all';
-	let agentFilter = $state(ALL_AGENTS);
+
+	let agentFilter = $derived.by(() => {
+		const id = page.url.searchParams.get('agentId');
+		return id && data.agents.some((a) => a.id === id) ? id : ALL_AGENTS;
+	});
+
+	/** Reflect the chosen agent into the URL query param. */
+	function onAgentFilterChange(value: string) {
+		const target = value === ALL_AGENTS ? '/app/workflows' : `/app/workflows?agentId=${value}`;
+		if (page.url.pathname + page.url.search === target) return;
+		replaceState(target, {});
+	}
 
 	let filteredWorkflows = $derived(
 		agentFilter === ALL_AGENTS ? workflows : workflows.filter((w) => w.agentId === agentFilter)
@@ -246,7 +261,12 @@
 		<!-- Agent filter -->
 		<div class="flex items-center gap-2">
 			<Label for="agent-filter" class="text-xs text-muted-foreground">Agent</Label>
-			<Select.Root type="single" bind:value={agentFilter} name="agentFilter">
+			<Select.Root
+				type="single"
+				value={agentFilter}
+				onValueChange={onAgentFilterChange}
+				name="agentFilter"
+			>
 				<Select.Trigger id="agent-filter" class="w-48" size="sm">
 					{agentFilterLabel}
 				</Select.Trigger>

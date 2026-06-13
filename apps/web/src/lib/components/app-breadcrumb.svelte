@@ -102,8 +102,8 @@
 			const workflowName = workflow?.name ?? 'Workflow';
 			return [
 				{ label: 'Agents', href: '/app/agents' },
-				{ label: agentName, href: `/app/agents/${agentId}/workflows` },
-				{ label: 'Workflows', href: `/app/agents/${agentId}/workflows` },
+				{ label: agentName, href: `/app/workflows?agentId=${agentId}` },
+				{ label: 'Workflows', href: `/app/workflows?agentId=${agentId}` },
 				{
 					label: workflowName,
 					href: `/app/agents/${agentId}/workflows/${workflowId}/runs`
@@ -122,8 +122,8 @@
 			const workflowName = workflow?.name ?? 'Workflow';
 			return [
 				{ label: 'Agents', href: '/app/agents' },
-				{ label: agentName, href: `/app/agents/${agentId}/workflows` },
-				{ label: 'Workflows', href: `/app/agents/${agentId}/workflows` },
+				{ label: agentName, href: `/app/workflows?agentId=${agentId}` },
+				{ label: 'Workflows', href: `/app/workflows?agentId=${agentId}` },
 				{
 					label: workflowName,
 					href: `/app/agents/${agentId}/workflows/${workflowId}/runs`
@@ -142,27 +142,15 @@
 				return [
 					{ label: 'Agents', href: '/app/agents' },
 					{ label: agentName, href: `/app/agents/new?id=${agentId}&editmode=true` },
-					{ label: 'Workflows', href: `/app/agents/${agentId}/workflows` },
+					{ label: 'Workflows', href: `/app/workflows?agentId=${agentId}` },
 					{ label: workflow.name }
 				];
 			}
 			return [
 				{ label: 'Agents', href: '/app/agents' },
 				{ label: agentName, href: `/app/agents/new?id=${agentId}&editmode=true` },
-				{ label: 'Workflows', href: `/app/agents/${agentId}/workflows` },
+				{ label: 'Workflows', href: `/app/workflows?agentId=${agentId}` },
 				{ label: 'New Workflow' }
-			];
-		}
-
-		// ── /app/agents/[id]/workflows (list) ─────────────────────────────────────
-		const workflowListMatch = pathname.match(/^\/app\/agents\/([^/]+)\/workflows$/);
-		if (workflowListMatch) {
-			const agentId = workflowListMatch[1];
-			const agentName = agent?.name ?? 'Agent';
-			return [
-				{ label: 'Agents', href: '/app/agents' },
-				{ label: agentName, href: `/app/agents/${agentId}/workflows` },
-				{ label: 'Workflows' }
 			];
 		}
 
@@ -177,6 +165,14 @@
 
 		// ── /app/workflows ────────────────────────────────────────────────────────
 		if (pathname === '/app/workflows') {
+			const selectedAgentId = searchParams.get('agentId');
+			const agents = ((page.data as Record<string, unknown>).agents as Agent[] | undefined) ?? [];
+			const selectedAgent = selectedAgentId
+				? agents.find((a) => a.id === selectedAgentId)
+				: undefined;
+			if (selectedAgent) {
+				return [{ label: 'Workflows', href: '/app/workflows' }, { label: selectedAgent.name }];
+			}
 			return [{ label: 'Workflows' }];
 		}
 

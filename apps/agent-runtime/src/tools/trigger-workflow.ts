@@ -68,7 +68,7 @@ export function createTriggerWorkflowTool(ctx: ToolContext): AgentTool {
 				? `\n\n**Track this run:**\n` +
 					`- [View run details](/app/agents/${agentId}/workflows/${workflowId}/runs/${result.runId})\n` +
 					`- [View all runs for this workflow](/app/agents/${agentId}/workflows/${workflowId}/runs)\n` +
-					`- [View all workflows](/app/agents/${agentId}/workflows)`
+					`- [View all workflows](/app/workflows?agentId=${agentId})`
 				: '';
 
 			const textContent: TextContent = {

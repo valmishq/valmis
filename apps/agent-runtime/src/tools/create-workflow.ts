@@ -180,7 +180,7 @@ export function createCreateWorkflowTool(ctx: ToolContext): AgentTool {
 			const linksSection = agentId
 				? `\n\n**Manage this workflow:**\n` +
 					`- [View & edit workflow](/app/agents/${agentId}/workflows/new?workflowId=${workflow.id}&editmode=true)\n` +
-					`- [View all workflows](/app/agents/${agentId}/workflows)\n` +
+					`- [View all workflows](/app/workflows?agentId=${agentId})\n` +
 					`- [View runs](/app/agents/${agentId}/workflows/${workflow.id}/runs)`
 				: '';
 
