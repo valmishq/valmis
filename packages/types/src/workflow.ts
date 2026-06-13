@@ -102,7 +102,8 @@ export interface WorkflowTriggerInput {
 	/**
 	 * Type-specific configuration.
 	 * cron:    { schedule: string, timezone?: string }
-	 * webhook: {} (secret is generated server-side)
+	 * webhook: { requireSignature?: boolean } (secret is generated server-side and
+	 *          preserved across updates — clients never send it)
 	 * manual:  {} (empty)
 	 */
 	config?: AgentTriggerConfig;
@@ -245,6 +246,21 @@ export interface UpdateWorkflowRequestBody {
 	 */
 	trigger?: WorkflowTriggerInput;
 }
+
+// ─── Webhook Endpoint Response ────────────────────────────────────────────────
+
+/**
+ * Data returned to external webhook callers on a successful (202 Accepted) delivery.
+ * runId/workflowId are null when the trigger has no workflow attached
+ * (legacy standalone triggers that spawn a plain chat thread).
+ */
+export interface WebhookAccepted {
+	received: true;
+	runId: string | null;
+	workflowId: string | null;
+}
+
+export type WebhookAcceptedResponse = ApiResponse<WebhookAccepted>;
 
 // ─── API Response Envelopes ───────────────────────────────────────────────────
 

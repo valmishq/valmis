@@ -52,7 +52,31 @@ A cron trigger that fails 5 times in a row is automatically disabled to prevent 
 
 ### Webhook
 
-Gives the workflow an HTTP endpoint. In edit mode the builder shows the **webhook URL** and an **HMAC secret**, both with copy buttons. Callers must sign requests with HMAC-SHA256 using that secret — unsigned or incorrectly signed requests are rejected. The request body becomes <code v-pre>{{trigger.payload}}</code>.
+Gives the workflow an HTTP endpoint. In edit mode the builder shows the **webhook URL** and an **HMAC secret**, both with copy buttons. The JSON request body and request headers become <code v-pre>{{trigger.payload}}</code> (as `body` and `headers`).
+
+By default, callers must sign requests with HMAC-SHA256 using the secret — unsigned or incorrectly signed requests are rejected:
+
+```sh
+SIGNATURE=$(printf '%s' "$BODY" | openssl dgst -sha256 -hmac "$SECRET" -hex | sed 's/^.* //')
+curl -X POST "$WEBHOOK_URL" \
+  -H 'Content-Type: application/json' \
+  -H "X-Hub-Signature-256: sha256=$SIGNATURE" \
+  -d "$BODY"
+```
+
+If the service calling your webhook cannot sign requests, switch off **Require signed requests** in the builder's trigger card. The endpoint then accepts any request to the URL.
+
+::: warning Unsigned webhooks
+With signature verification off, anyone who knows the webhook URL can trigger the workflow. Treat the URL itself as a secret.
+:::
+
+A successful delivery returns `202 Accepted` with the started run's ID:
+
+```json
+{ "success": true, "data": { "received": true, "runId": "…", "workflowId": "…" } }
+```
+
+Rejected requests return `401` (unknown trigger, disabled workflow, or bad signature), `400` for a non-JSON body, and `503` if the runtime could not be started (safe to retry).
 
 ## Runs and observability
 

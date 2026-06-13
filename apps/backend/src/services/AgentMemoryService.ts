@@ -266,14 +266,13 @@ export class AgentMemoryService {
 			limit: topK,
 		});
 
-		// pgvector <=> returns cosine distance (0=identical, 2=opposite).
-		// The Drizzle SELECT does not expose the raw distance column.
-		// We assign rank-based pseudo-similarity descending from 1.0 for now.
-		// A follow-up can add a raw SQL select with the actual distance value.
-		const results: AgentMemorySearchResult[] = entries.map((entry, idx) => ({
-			...entry,
-			similarity: Math.max(0, 1 - idx * 0.05),
-		}));
+		// pgvector <=> returns cosine distance (0 = identical, up to 2 = opposite).
+		// Cosine similarity is the complement: 1 - distance. Reported raw — values for
+		// highly dissimilar entries may be slightly negative.
+		const results: AgentMemorySearchResult[] = entries.map((entry) => {
+			const { distance, ...rest } = entry;
+			return { ...rest, similarity: 1 - distance };
+		});
 
 		logger.info(
 			{ agentId, resultCount: results.length, memoryType: request.memoryType },

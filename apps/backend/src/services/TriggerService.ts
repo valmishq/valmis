@@ -45,6 +45,41 @@ function rowToTrigger(row: typeof agentTriggers.$inferSelect): AgentTrigger {
  */
 const MAX_CONSECUTIVE_CRON_FAILURES = 5;
 
+// ─── Errors & Results ─────────────────────────────────────────────────────────
+
+/** Machine-readable reason a trigger fire was rejected or failed. */
+export type TriggerFireErrorCode =
+	| 'not_found'
+	| 'disabled'
+	| 'wrong_kind'
+	| 'bad_signature'
+	| 'spawn_failed';
+
+/**
+ * Typed error thrown by the trigger firing paths so route handlers can map
+ * failures to HTTP status codes without string-matching error messages.
+ * The message stays internal (logged) — routes send their own generic text.
+ */
+export class TriggerFireError extends Error {
+	constructor(
+		message: string,
+		public readonly code: TriggerFireErrorCode,
+	) {
+		super(message);
+		this.name = 'TriggerFireError';
+	}
+}
+
+/** Identifiers of what a successful trigger fire started. */
+export interface TriggerFireResult {
+	/** Workflow run ID — null for standalone triggers with no workflow attached */
+	runId: string | null;
+	/** Workflow ID — null for standalone triggers with no workflow attached */
+	workflowId: string | null;
+	/** The thread housing the spawned runtime */
+	threadId: string;
+}
+
 // ─── Service ──────────────────────────────────────────────────────────────────
 
 /**
@@ -98,10 +133,16 @@ export class TriggerService {
 		description?: string;
 		workflowId?: string;
 	}): Promise<AgentTrigger> {
-		// For webhook triggers, generate a secret if not provided
+		// For webhook triggers, generate a secret if not provided and default to
+		// requiring signed requests unless the caller explicitly opted out.
 		let config = input.config;
-		if (input.kind === 'webhook' && !(config as WebhookTriggerConfig).secret) {
-			config = { secret: randomBytes(32).toString('hex') } as WebhookTriggerConfig;
+		if (input.kind === 'webhook') {
+			const webhookInput = config as WebhookTriggerConfig;
+			const webhookConfig: WebhookTriggerConfig = {
+				secret: webhookInput.secret || randomBytes(32).toString('hex'),
+				requireSignature: webhookInput.requireSignature ?? true,
+			};
+			config = webhookConfig;
 		}
 
 		const now = new Date();
@@ -233,50 +274,61 @@ export class TriggerService {
 	 * Fire a webhook trigger after verifying the HMAC signature.
 	 * Called by the webhook route handler.
 	 *
+	 * Signature verification is skipped when the trigger's config has
+	 * requireSignature === false (absent means required — the safe default).
+	 *
 	 * @param triggerId  The trigger ID from the URL
-	 * @param signature  X-Hub-Signature-256 header value (e.g. "sha256=<hex>")
+	 * @param signature  X-Hub-Signature-256 header value (e.g. "sha256=<hex>"), if sent
 	 * @param rawBody    Raw request body as a Buffer (for accurate HMAC)
-	 * @param payload    Parsed request body
+	 * @param body       Parsed request body
+	 * @param headers    Sanitized request headers (auth/signature headers already stripped)
 	 */
 	async fireWebhookTrigger(
 		triggerId: string,
-		signature: string,
+		signature: string | undefined,
 		rawBody: Buffer,
-		payload: Record<string, unknown>,
-	): Promise<void> {
+		body: Record<string, unknown>,
+		headers: Record<string, string> = {},
+	): Promise<TriggerFireResult> {
 		const trigger = await this.getByIdInternal(triggerId);
 		if (!trigger) {
-			throw new Error(`Trigger not found: ${triggerId}`);
+			throw new TriggerFireError(`Trigger not found: ${triggerId}`, 'not_found');
 		}
 		if (!trigger.isEnabled) {
-			throw new Error(`Trigger ${triggerId} is disabled`);
+			throw new TriggerFireError(`Trigger ${triggerId} is disabled`, 'disabled');
 		}
 		if (trigger.kind !== 'webhook') {
-			throw new Error(`Trigger ${triggerId} is not a webhook trigger`);
+			throw new TriggerFireError(`Trigger ${triggerId} is not a webhook trigger`, 'wrong_kind');
 		}
 
-		// Verify HMAC signature using a constant-time comparison to prevent timing attacks.
-		const secret = (trigger.config as WebhookTriggerConfig).secret;
-		const expectedSig = `sha256=${createHmac('sha256', secret).update(rawBody).digest('hex')}`;
-		const expectedBuf = Buffer.from(expectedSig);
-		const receivedBuf = Buffer.from(signature);
-		const signaturesMatch =
-			expectedBuf.length === receivedBuf.length && timingSafeEqual(expectedBuf, receivedBuf);
-		if (!signaturesMatch) {
-			throw new Error('Invalid webhook signature');
+		const config = trigger.config as WebhookTriggerConfig;
+		if (config.requireSignature !== false) {
+			if (!signature) {
+				throw new TriggerFireError('Missing X-Hub-Signature-256 header', 'bad_signature');
+			}
+			// Verify HMAC signature using a constant-time comparison to prevent timing attacks.
+			const expectedSig = `sha256=${createHmac('sha256', config.secret).update(rawBody).digest('hex')}`;
+			const expectedBuf = Buffer.from(expectedSig);
+			const receivedBuf = Buffer.from(signature);
+			const signaturesMatch =
+				expectedBuf.length === receivedBuf.length && timingSafeEqual(expectedBuf, receivedBuf);
+			if (!signaturesMatch) {
+				throw new TriggerFireError('Invalid webhook signature', 'bad_signature');
+			}
 		}
 
-		await this.fireTrigger(trigger, { headers: {}, body: payload });
+		return this.fireTrigger(trigger, { headers, body });
 	}
 
 	/** Fire a manual trigger (user-initiated) */
-	async fireManualTrigger(triggerId: string, ownerId: string): Promise<void> {
+	async fireManualTrigger(triggerId: string, ownerId: string): Promise<TriggerFireResult> {
 		const trigger = await this.getById(triggerId, ownerId);
-		if (!trigger) throw new Error(`Trigger not found: ${triggerId}`);
-		if (!trigger.isEnabled) throw new Error(`Trigger ${triggerId} is disabled`);
-		if (trigger.kind !== 'manual') throw new Error(`Trigger ${triggerId} is not a manual trigger`);
+		if (!trigger) throw new TriggerFireError(`Trigger not found: ${triggerId}`, 'not_found');
+		if (!trigger.isEnabled) throw new TriggerFireError(`Trigger ${triggerId} is disabled`, 'disabled');
+		if (trigger.kind !== 'manual')
+			throw new TriggerFireError(`Trigger ${triggerId} is not a manual trigger`, 'wrong_kind');
 
-		await this.fireTrigger(trigger, { firedAt: new Date().toISOString() });
+		return this.fireTrigger(trigger, { firedAt: new Date().toISOString() });
 	}
 
 	// ─── Public scheduling helpers ────────────────────────────────────────
@@ -361,7 +413,7 @@ export class TriggerService {
 	private async fireTrigger(
 		trigger: AgentTrigger,
 		payload: Record<string, unknown>,
-	): Promise<void> {
+	): Promise<TriggerFireResult> {
 		logger.info(
 			{
 				triggerId: trigger.id,
@@ -373,15 +425,19 @@ export class TriggerService {
 		);
 
 		const firedAt = new Date().toISOString();
+		let result: TriggerFireResult;
 
 		if (trigger.workflowId) {
 			// ── Workflow execution path ───────────────────────────────────────────
 			const workflow = await this.workflowService.getByIdInternal(trigger.workflowId);
 			if (!workflow) {
-				throw new Error(`Workflow ${trigger.workflowId} not found for trigger ${trigger.id}`);
+				throw new TriggerFireError(
+					`Workflow ${trigger.workflowId} not found for trigger ${trigger.id}`,
+					'not_found',
+				);
 			}
 			if (!workflow.isEnabled) {
-				throw new Error(`Workflow ${trigger.workflowId} is disabled`);
+				throw new TriggerFireError(`Workflow ${trigger.workflowId} is disabled`, 'disabled');
 			}
 
 			// Create the run record
@@ -394,40 +450,63 @@ export class TriggerService {
 				triggerPayload: payload,
 			});
 
-			// Build normalized trigger context for the sandbox
-			const triggerContext: WorkflowTriggerContext = {
-				type: trigger.kind,
-				triggerName: trigger.name,
-				firedAt,
-				payload,
-			};
+			// The run row was created with status 'running' — anything that prevents the
+			// runtime from starting must mark it 'error' or it would stay 'running' forever.
+			try {
+				// Build normalized trigger context for the sandbox
+				const triggerContext: WorkflowTriggerContext = {
+					type: trigger.kind,
+					triggerName: trigger.name,
+					firedAt,
+					payload,
+				};
 
-			// Create a thread to house the sandbox spawn.
-			// Marked as a workflow thread so users can filter it out in the chat history.
-			const thread = await this.sessionService.createThread({
-				agentId: trigger.agentId,
-				ownerId: trigger.ownerId,
-				title: `${workflow.name} — ${firedAt}`,
-				triggerType: trigger.kind,
-				triggerId: trigger.id,
-				triggerPayload: payload,
-				isWorkflowThread: true,
-			});
+				// Create a thread to house the sandbox spawn.
+				// Marked as a workflow thread so users can filter it out in the chat history.
+				const thread = await this.sessionService.createThread({
+					agentId: trigger.agentId,
+					ownerId: trigger.ownerId,
+					title: `${workflow.name} — ${firedAt}`,
+					triggerType: trigger.kind,
+					triggerId: trigger.id,
+					triggerPayload: payload,
+					isWorkflowThread: true,
+				});
 
-			// Spawn sandbox with workflow config embedded in AgentRuntimeConfig
-			await this.runtimeService.spawnForThread(
-				trigger.agentId,
-				thread.id,
-				trigger.ownerId,
-				trigger.kind,
-				payload,
-				undefined, // no userDatetime for automated triggers
-				{
-					runId: run.id,
-					definition: workflow,
-					triggerContext,
-				},
-			);
+				// Spawn sandbox with workflow config embedded in AgentRuntimeConfig
+				const spawned = await this.runtimeService.spawnForThread(
+					trigger.agentId,
+					thread.id,
+					trigger.ownerId,
+					trigger.kind,
+					payload,
+					undefined, // no userDatetime for automated triggers
+					{
+						runId: run.id,
+						definition: workflow,
+						triggerContext,
+					},
+				);
+				if (!spawned) {
+					throw new TriggerFireError(
+						`Runtime could not be started for workflow run ${run.id}`,
+						'spawn_failed',
+					);
+				}
+
+				result = { runId: run.id, workflowId: workflow.id, threadId: thread.id };
+			} catch (err) {
+				const message = err instanceof Error ? err.message : 'Workflow run failed to start';
+				try {
+					await this.workflowRunService.completeRun(run.id, 'error', message);
+				} catch (completeErr) {
+					logger.error(
+						{ completeErr, runId: run.id },
+						'[triggers] failed to mark workflow run as errored',
+					);
+				}
+				throw err;
+			}
 		} else {
 			// ── Legacy / standalone trigger path ─────────────────────────────────
 			const thread = await this.sessionService.createThread({
@@ -439,13 +518,21 @@ export class TriggerService {
 				triggerPayload: payload,
 			});
 
-			await this.runtimeService.spawnForThread(
+			const spawned = await this.runtimeService.spawnForThread(
 				trigger.agentId,
 				thread.id,
 				trigger.ownerId,
 				trigger.kind,
 				payload,
 			);
+			if (!spawned) {
+				throw new TriggerFireError(
+					`Runtime could not be started for trigger ${trigger.id}`,
+					'spawn_failed',
+				);
+			}
+
+			result = { runId: null, workflowId: null, threadId: thread.id };
 		}
 
 		// Update lastFiredAt regardless of path
@@ -453,6 +540,8 @@ export class TriggerService {
 			.update(agentTriggers)
 			.set({ lastFiredAt: new Date(), updatedAt: new Date() })
 			.where(eq(agentTriggers.id, trigger.id));
+
+		return result;
 	}
 
 	/** Register a node-cron job for a trigger */

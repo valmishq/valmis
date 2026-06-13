@@ -93,7 +93,8 @@ export function createMemorySearchTool(ctx: ToolContext): AgentTool {
 			const formatted = results
 				.map((r, idx) => {
 					const date = new Date(r.createdAt).toLocaleDateString();
-					return `${idx + 1}. id: ${r.id}\n   [${r.memoryType.toUpperCase()}] (${date})\n   ${r.content}`;
+					const score = r.similarity.toFixed(3);
+					return `${idx + 1}. id: ${r.id}\n   [${r.memoryType.toUpperCase()}] (${date}, similarity: ${score})\n   ${r.content}`;
 				})
 				.join('\n\n');
 

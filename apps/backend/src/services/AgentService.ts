@@ -57,6 +57,11 @@ export interface SearchMemoryInput {
 	limit?: number;
 }
 
+export interface AgentMemorySearchRow extends AgentMemoryEntry {
+	/** Raw pgvector cosine distance (0 = identical, up to 2 = opposite). */
+	distance: number;
+}
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 /** Map a DB row + credentialIds array to the Agent API type */
@@ -377,7 +382,7 @@ export class AgentService {
 	 * Returns the closest entries to the query embedding.
 	 * Optional filters: memoryType, threadId.
 	 */
-	async searchMemory(input: SearchMemoryInput): Promise<AgentMemoryEntry[]> {
+	async searchMemory(input: SearchMemoryInput): Promise<AgentMemorySearchRow[]> {
 		const { agentId, queryEmbedding, memoryType, threadId, limit = 10 } = input;
 		const vectorStr = `[${queryEmbedding.join(',')}]`;
 
@@ -401,6 +406,7 @@ export class AgentService {
 				isKnowledgeBase: agentMemory.isKnowledgeBase,
 				agentKnowledgeFileId: agentMemory.agentKnowledgeFileId,
 				createdAt: agentMemory.createdAt,
+				distance: sql<number>`${agentMemory.embedding} <=> ${vectorStr}::vector`,
 			})
 			.from(agentMemory)
 			.where(and(...conditions))
@@ -417,6 +423,7 @@ export class AgentService {
 			isKnowledgeBase: row.isKnowledgeBase,
 			agentKnowledgeFileId: row.agentKnowledgeFileId ?? undefined,
 			createdAt: row.createdAt,
+			distance: row.distance,
 		}));
 	}
 

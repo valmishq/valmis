@@ -9,6 +9,7 @@
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Label } from '$lib/components/ui/label/index.js';
 	import { Separator } from '$lib/components/ui/separator/index.js';
+	import { Switch } from '$lib/components/ui/switch/index.js';
 	import PageHeader from '$lib/components/page-header.svelte';
 	import WorkflowStepCard from '$lib/components/custom/workflow/WorkflowStepCard.svelte';
 	import CronSchedulePicker from '$lib/components/custom/workflow/CronSchedulePicker.svelte';
@@ -52,6 +53,13 @@
 		triggerKind === 'cron'
 			? ((workflow?.trigger?.config as { timezone?: string } | undefined)?.timezone ?? 'UTC')
 			: 'UTC'
+	);
+	/** Whether incoming webhook requests must be HMAC-signed (default: required) */
+	let webhookRequireSignature = $state<boolean>(
+		workflow?.trigger?.kind === 'webhook'
+			? ((workflow.trigger.config as { requireSignature?: boolean } | undefined)
+					?.requireSignature ?? true)
+			: true
 	);
 	/** Webhook secret — shown read-only in edit mode if already provisioned */
 	const webhookSecret = $derived(
@@ -146,10 +154,13 @@
 			trigger: {
 				kind: triggerKind,
 				name: workflowName.trim() || undefined,
+				// The webhook secret is server-generated and preserved across updates — never sent here
 				config:
 					triggerKind === 'cron'
 						? { schedule: cronSchedule.trim(), timezone: cronTimezone.trim() || 'UTC' }
-						: {},
+						: triggerKind === 'webhook'
+							? { requireSignature: webhookRequireSignature }
+							: {},
 				description: undefined
 			}
 		})
@@ -372,6 +383,30 @@
 						<code class="rounded bg-muted px-1 py-0.5">X-Hub-Signature-256</code> header.
 					</p>
 
+					<div class="flex items-center justify-between gap-4">
+						<div class="space-y-0.5">
+							<Label for="webhook-require-signature" class="text-xs"
+								>Require signed requests (HMAC-SHA256)</Label
+							>
+							<p class="text-xs text-muted-foreground">
+								Reject requests without a valid
+								<code class="rounded bg-muted px-1 py-0.5">X-Hub-Signature-256</code> signature.
+							</p>
+						</div>
+						<Switch
+							id="webhook-require-signature"
+							checked={webhookRequireSignature}
+							onCheckedChange={(checked: boolean) => (webhookRequireSignature = checked)}
+							aria-label="Require signed webhook requests"
+						/>
+					</div>
+					{#if !webhookRequireSignature}
+						<p class="text-xs text-amber-600 dark:text-amber-400">
+							Signature verification is off — anyone who knows the webhook URL can trigger this
+							workflow.
+						</p>
+					{/if}
+
 					{#if webhookSecret && webhookUrl}
 						<!-- Show existing webhook details in edit mode -->
 						<div class="space-y-2">
@@ -391,27 +426,29 @@
 									</Button>
 								</div>
 							</div>
-							<div class="space-y-1.5">
-								<Label class="text-xs">HMAC Secret</Label>
-								<div class="flex items-center gap-2">
-									<Input type="text" value={webhookSecret} readonly class="font-mono text-xs" />
-									<Button
-										type="button"
-										variant="outline"
-										size="sm"
-										onclick={() => copyToClipboard(webhookSecret!, 'secret')}
-										class="shrink-0"
-									>
-										<CopyIcon class="size-4" />
-										<span class="sr-only">{copiedSecret ? 'Copied!' : 'Copy secret'}</span>
-									</Button>
+							{#if webhookRequireSignature}
+								<div class="space-y-1.5">
+									<Label class="text-xs">HMAC Secret</Label>
+									<div class="flex items-center gap-2">
+										<Input type="text" value={webhookSecret} readonly class="font-mono text-xs" />
+										<Button
+											type="button"
+											variant="outline"
+											size="sm"
+											onclick={() => copyToClipboard(webhookSecret!, 'secret')}
+											class="shrink-0"
+										>
+											<CopyIcon class="size-4" />
+											<span class="sr-only">{copiedSecret ? 'Copied!' : 'Copy secret'}</span>
+										</Button>
+									</div>
+									<p class="text-xs text-muted-foreground">
+										{copiedSecret
+											? '✓ Copied to clipboard'
+											: 'Keep this secret safe — it verifies incoming requests.'}
+									</p>
 								</div>
-								<p class="text-xs text-muted-foreground">
-									{copiedSecret
-										? '✓ Copied to clipboard'
-										: 'Keep this secret safe — it verifies incoming requests.'}
-								</p>
-							</div>
+							{/if}
 						</div>
 					{:else}
 						<p class="text-xs text-amber-600 dark:text-amber-400">

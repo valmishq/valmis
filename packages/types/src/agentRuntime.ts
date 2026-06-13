@@ -107,6 +107,12 @@ export interface CronTriggerConfig {
 export interface WebhookTriggerConfig {
 	/** HMAC-SHA256 secret for verifying X-Hub-Signature-256 header */
 	secret: string;
+	/**
+	 * Whether incoming requests must carry a valid X-Hub-Signature-256 HMAC signature.
+	 * Absent means true — existing triggers created before this flag keep requiring signatures.
+	 * When false, anyone with the webhook URL can fire the trigger.
+	 */
+	requireSignature?: boolean;
 }
 
 /** Manual trigger config (no fields needed) */

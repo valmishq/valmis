@@ -198,6 +198,11 @@ app.set('trust proxy', parseInt(process.env.TRUST_PROXY_HOPS ?? '0', 10));
 
 // --- Global middleware ---
 app.use(corsMiddleware);
+
+// Mounted before the rate limiter too — external services deliver at arbitrary
+// frequency (this replaces the old /v1/webhooks/ rate-limiter exclusion).
+app.use('/v1/webhooks', createWebhooksRouter(triggerService));
+
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
@@ -209,9 +214,8 @@ app.use((req, res, next) => {
 		/^\/v1\/health$/,
 		// OAuth2 callback must remain public — the provider redirects here without a token
 		/^\/v1\/oauth2\/callback$/,
-		// Webhook endpoints are called by external services at arbitrary frequency;
-		// IP-based rate limiting would drop legitimate high-volume events.
-		/^\/v1\/webhooks\//,
+		// Note: /v1/webhooks/ is mounted before this middleware (raw-body requirement),
+		// so it never reaches the rate limiter and needs no exclusion here.
 		// Sandbox-internal endpoints are called by agent child processes (localhost),
 		// not by browser clients. All sandbox calls originate from 127.0.0.1, so they
 		// would all share a single IP bucket and exhaust it quickly during active turns
@@ -295,9 +299,6 @@ app.use(
 		discordGatewayManager,
 	),
 );
-
-// Webhook routes — public, HMAC-verified
-app.use('/v1/webhooks', createWebhooksRouter(triggerService));
 
 // Workflow routes — scoped under agents (GET/POST /v1/agents/:agentId/workflows/...)
 // triggerService is passed so cron jobs are scheduled immediately on create/update/delete

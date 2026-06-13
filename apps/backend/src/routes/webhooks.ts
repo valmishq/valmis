@@ -1,6 +1,7 @@
-import { Router } from 'express';
+import express, { Router } from 'express';
 import type { Request, Response } from 'express';
-import { TriggerService } from '../services/TriggerService.js';
+import type { WebhookAcceptedResponse } from '@repo/types';
+import { TriggerService, TriggerFireError } from '../services/TriggerService.js';
 import { logger } from '../config/logger.js';
 
 /**
@@ -11,14 +12,36 @@ import { logger } from '../config/logger.js';
  *
  * Security:
  *   - No user auth — these endpoints are called by external services
- *   - HMAC-SHA256 signature verified against the trigger's stored secret
+ *   - HMAC-SHA256 signature verified against the trigger's stored secret,
+ *     unless the trigger's config has requireSignature === false
  *   - Signature must be in the X-Hub-Signature-256 header: "sha256=<hex>"
- *   - Mismatched signatures return 401 without revealing whether the trigger exists
+ *   - Auth/validation failures return a generic 401 without revealing whether
+ *     the trigger exists (anti-enumeration); the precise reason is logged
  *
- * Note: express.json() must NOT parse the body before this router because
- * HMAC verification requires the raw body bytes. This router uses express.raw()
- * to buffer the body, then parses it manually.
+ * IMPORTANT: this router must be mounted BEFORE the global express.json()
+ * middleware in index.ts. HMAC verification needs the raw body bytes, so the
+ * router buffers the body itself with express.raw() — if the global JSON
+ * parser runs first it consumes the request stream and the raw body is lost
+ * (historically this caused webhook requests to hang forever).
  */
+
+/** Request headers that must never be forwarded into the workflow trigger payload */
+const STRIPPED_HEADERS = new Set(['authorization', 'cookie', 'x-hub-signature-256']);
+
+/** Build a sanitized headers object for {{trigger.payload}} templates */
+function sanitizeHeaders(req: Request): Record<string, string> {
+	const headers: Record<string, string> = {};
+	for (const [name, value] of Object.entries(req.headers)) {
+		if (STRIPPED_HEADERS.has(name)) continue;
+		if (typeof value === 'string') {
+			headers[name] = value;
+		} else if (Array.isArray(value)) {
+			headers[name] = value.join(', ');
+		}
+	}
+	return headers;
+}
+
 export function createWebhooksRouter(triggerService: TriggerService): Router {
 	const router = Router();
 
@@ -28,53 +51,65 @@ export function createWebhooksRouter(triggerService: TriggerService): Router {
 	 *
 	 * Expected headers:
 	 *   Content-Type: application/json
-	 *   X-Hub-Signature-256: sha256=<hmac-hex>
+	 *   X-Hub-Signature-256: sha256=<hmac-hex>  (required unless the trigger
+	 *   was configured with "require signature" off)
+	 *
+	 * Responses:
+	 *   202 { success: true, data: { received: true, runId, workflowId } } — run started
+	 *   400 — body is not valid JSON
+	 *   401 — unknown trigger / disabled / wrong kind / missing or invalid signature
+	 *   503 — runtime could not be started (retryable)
 	 */
 	router.post(
 		'/:triggerId',
-		// Buffer raw body for HMAC verification before JSON parsing
-		(req: Request, _res: Response, next) => {
-			let rawBody = Buffer.alloc(0);
-			req.on('data', (chunk: Buffer) => {
-				rawBody = Buffer.concat([rawBody, chunk]);
-			});
-			req.on('end', () => {
-				(req as Request & { rawBody: Buffer }).rawBody = rawBody;
-				next();
-			});
-		},
+		// Buffer the raw body for HMAC verification — bounded to prevent memory abuse
+		// on this unauthenticated endpoint. type: () => true buffers regardless of
+		// Content-Type so signing is verified over the exact bytes sent.
+		express.raw({ type: () => true, limit: '5mb' }),
 		async (req: Request, res: Response) => {
 			const { triggerId } = req.params as { triggerId: string };
 			const signature = req.headers['x-hub-signature-256'] as string | undefined;
-			const rawBody = (req as Request & { rawBody: Buffer }).rawBody;
+			// express.raw puts the buffered body on req.body; an empty body yields {}
+			const rawBody = Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0);
 
-			if (!signature) {
-				res.status(401).json({ success: false, error: 'Missing X-Hub-Signature-256 header' });
-				return;
-			}
-
-			let payload: Record<string, unknown>;
+			let body: Record<string, unknown>;
 			try {
-				payload = JSON.parse(rawBody.toString('utf-8')) as Record<string, unknown>;
+				body = JSON.parse(rawBody.toString('utf-8')) as Record<string, unknown>;
 			} catch {
 				res.status(400).json({ success: false, error: 'Invalid JSON body' });
 				return;
 			}
 
 			try {
-				await triggerService.fireWebhookTrigger(triggerId, signature, rawBody, payload);
-				res.json({ success: true, data: { received: true } });
-			} catch (err) {
-				const message = err instanceof Error ? err.message : 'Webhook processing failed';
+				const result = await triggerService.fireWebhookTrigger(
+					triggerId,
+					signature,
+					rawBody,
+					body,
+					sanitizeHeaders(req),
+				);
 
-				// Return 401 for all auth/validation errors to avoid leaking info
-				if (
-					message.includes('signature') ||
-					message.includes('not found') ||
-					message.includes('disabled') ||
-					message.includes('not a webhook')
-				) {
-					logger.warn({ triggerId, message }, '[webhooks] webhook rejected');
+				const response: WebhookAcceptedResponse = {
+					success: true,
+					data: { received: true, runId: result.runId, workflowId: result.workflowId },
+				};
+				res.status(202).json(response);
+			} catch (err) {
+				if (err instanceof TriggerFireError) {
+					if (err.code === 'spawn_failed') {
+						logger.error({ triggerId, message: err.message }, '[webhooks] runtime spawn failed');
+						res.status(503).json({
+							success: false,
+							error: 'The workflow could not be started. Please retry later.',
+						});
+						return;
+					}
+					// not_found / disabled / wrong_kind / bad_signature — generic 401 so
+					// callers cannot probe which trigger IDs exist. Real reason is logged.
+					logger.warn(
+						{ triggerId, code: err.code, message: err.message },
+						'[webhooks] webhook rejected',
+					);
 					res.status(401).json({ success: false, error: 'Unauthorized' });
 					return;
 				}

@@ -26,6 +26,7 @@ COPY packages/types/package.json      packages/types/
 COPY packages/ui/package.json         packages/ui/
 COPY packages/utils/package.json      packages/utils/
 COPY packages/models/package.json     packages/models/
+COPY packages/extractor/package.json  packages/extractor/
 COPY apps/backend/package.json        apps/backend/
 COPY apps/web/package.json            apps/web/
 COPY apps/agent-runtime/package.json  apps/agent-runtime/
@@ -35,7 +36,9 @@ RUN pnpm install --frozen-lockfile
 # Copy source
 COPY . .
 
-RUN pnpm build
+# Build everything except @repo/docs — the docs (vitepress) package produces no
+# runtime artifact and its devDependencies are not installed in this image.
+RUN pnpm exec turbo run build --filter=!@repo/docs
 
 # ─── Runtime stage ─────────────────────────────────────────────────────────────
 # Lean production image — compiled outputs + production dependencies only.
@@ -61,6 +64,7 @@ COPY packages/types/package.json      packages/types/
 COPY packages/ui/package.json         packages/ui/
 COPY packages/utils/package.json      packages/utils/
 COPY packages/models/package.json     packages/models/
+COPY packages/extractor/package.json  packages/extractor/
 COPY apps/backend/package.json        apps/backend/
 COPY apps/web/package.json            apps/web/
 COPY apps/agent-runtime/package.json  apps/agent-runtime/
@@ -78,6 +82,10 @@ COPY --from=builder /repo/packages/models/dist packages/models/dist
 
 # packages/utils compiled JS output
 COPY --from=builder /repo/packages/utils/dist  packages/utils/dist
+
+# packages/extractor compiled JS output — imported at runtime by the backend
+# (KnowledgeBaseService). Its exports "import" condition resolves to dist/index.js.
+COPY --from=builder /repo/packages/extractor/dist  packages/extractor/dist
 
 # Data files referenced at runtime via __dirname (tsc does not copy non-TS files).
 # Both registries resolve ../../src/... from dist/, i.e. packages/utils/src/...

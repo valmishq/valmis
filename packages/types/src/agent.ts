@@ -73,7 +73,8 @@ export interface AgentMemorySearchResult {
 	isKnowledgeBase?: boolean;
 	agentKnowledgeFileId?: string;
 	createdAt: Date;
-	/** Cosine similarity score — higher is more similar (0–1 range) */
+	/** Cosine similarity (1 - cosine distance); higher is more similar. ~1.0 = near-identical,
+	 *  ~0 = unrelated, may be slightly negative for very dissimilar entries. */
 	similarity: number;
 }
 

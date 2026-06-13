@@ -5,6 +5,9 @@ export default defineConfig({
 	description:
 		'Self-hosted AI agent platform — create LLM-powered agents that talk to your apps via chat, messaging channels, and automated workflows.',
 	lang: 'en-US',
+	// Served as a GitHub Pages project site at https://wayneshn.github.io/agent-int/,
+	// so every asset/link must be prefixed with the repo name.
+	base: '/agent-int/',
 	lastUpdated: true,
 	themeConfig: {
 		nav: [

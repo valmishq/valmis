@@ -1,0 +1,79 @@
+# Builds the VitePress documentation (docs/) and deploys it to GitHub Pages.
+#
+# Published at: https://wayneshn.github.io/agent-int/
+# The site's base path is configured as '/agent-int/' in docs/.vitepress/config.ts.
+#
+# One-time setup in the repo: Settings → Pages → Build and deployment →
+# Source = "GitHub Actions".
+#
+# Triggers:
+#   - Push to main that touches docs/      → rebuild and deploy
+#   - Manual run (workflow_dispatch)       → rebuild and deploy
+
+name: Deploy docs to GitHub Pages
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'docs/**'
+      - '.github/workflows/deploy-docs.yml'
+  workflow_dispatch:
+
+# Grant GITHUB_TOKEN the permissions required to deploy to Pages.
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Allow one concurrent deployment; cancel in-progress runs of older commits.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # VitePress' lastUpdated reads git history; fetch it all.
+          fetch-depth: 0
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.20.0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build docs with VitePress
+        run: pnpm --filter @repo/docs build
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs/.vitepress/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

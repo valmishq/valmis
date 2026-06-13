@@ -5,6 +5,7 @@ import type {
 	AgentRuntimeConfig,
 	Agent,
 	CredentialMeta,
+	LlmProviderConfig,
 	SkillRuntimeEntry,
 	Workflow,
 	WorkflowTriggerContext,
@@ -187,6 +188,12 @@ export class AgentRuntimeService {
 	 * definition and trigger context. The runtime routes to workflow-runner.ts.
 	 *
 	 * The method is non-blocking — it spawns the runtime and returns immediately.
+	 *
+	 * Returns true when the runtime was started. Returns false when the run was
+	 * declined or failed to start (concurrency cap, missing/unresolvable chat model,
+	 * driver spawn failure) — in those cases the thread is already marked 'error'
+	 * and the SSE stream has been notified, so chat callers need no extra handling,
+	 * while trigger callers can mark their workflow run as failed.
 	 */
 	async spawnForThread(
 		agentId: string,
@@ -196,7 +203,7 @@ export class AgentRuntimeService {
 		triggerPayload?: Record<string, unknown>,
 		userDatetime?: string,
 		workflowConfig?: WorkflowSpawnConfig,
-	): Promise<void> {
+	): Promise<boolean> {
 		// Concurrency cap — reject before touching thread state or spawning.
 		if (this.liveHandles.size >= this.maxConcurrent) {
 			logger.warn(
@@ -209,13 +216,32 @@ export class AgentRuntimeService {
 				message: 'Too many agent runs are in progress. Please try again shortly.',
 			});
 			agentStreamBus.emit(threadId, { type: 'done' });
-			return;
+			return false;
 		}
 
 		// Fetch the agent once — reuse for both the proxy token and runtime config build.
 		const agent = await this.agentService.getById(agentId, ownerId);
 		if (!agent) {
 			throw new Error(`Agent not found: ${agentId}`);
+		}
+
+		// Fail fast when the agent's chat model is missing or unresolvable — spawning
+		// anyway would only surface an opaque error from inside the sandbox later.
+		const modelConfig = agent.modelConfigId
+			? await this.llmProviderService.getById(agent.modelConfigId, ownerId)
+			: null;
+		if (!modelConfig) {
+			logger.error(
+				{ agentId, threadId, modelConfigId: agent.modelConfigId ?? null },
+				'[runtime] agent has no resolvable chat model config — rejecting spawn',
+			);
+			await this.sessionService.updateThreadStatus(threadId, 'error');
+			agentStreamBus.emit(threadId, {
+				type: 'error',
+				message: 'This agent has no chat model configured. Please assign a model and try again.',
+			});
+			agentStreamBus.emit(threadId, { type: 'done' });
+			return false;
 		}
 
 		// Ensure the per-agent workspace exists (driver also fixes ownership for
@@ -234,6 +260,7 @@ export class AgentRuntimeService {
 		// Build the runtime config (no secrets) for the runtime.
 		const runtimeConfig = await this.buildRuntimeConfig(
 			agent,
+			modelConfig,
 			threadId,
 			ownerId,
 			triggerType,
@@ -294,7 +321,7 @@ export class AgentRuntimeService {
 				message: `Failed to start agent runtime: ${spawnErr instanceof Error ? spawnErr.message : String(spawnErr)}`,
 			});
 			agentStreamBus.emit(threadId, { type: 'done' });
-			return;
+			return false;
 		}
 		this.liveHandles.add(handle);
 
@@ -364,6 +391,8 @@ export class AgentRuntimeService {
 		handle.onError((err) => {
 			logger.error({ err, agentId, threadId, runtimeId: handle.id }, '[runtime] runtime error');
 		});
+
+		return true;
 	}
 
 	/**
@@ -388,12 +417,14 @@ export class AgentRuntimeService {
 	 * Build the AgentRuntimeConfig that is passed to the runtime via env var.
 	 * Contains no secrets — API keys and credentials stay in the backend process.
 	 *
-	 * The agent object is passed in from spawnForThread to avoid a redundant DB fetch.
+	 * The agent and model config objects are passed in from spawnForThread to avoid
+	 * redundant DB fetches (spawnForThread already validated the model config).
 	 * When workflowConfig is provided, the `workflow` field is included so the runtime
 	 * routes to workflow-runner.ts.
 	 */
 	private async buildRuntimeConfig(
 		agent: Agent,
+		modelConfig: LlmProviderConfig,
 		threadId: string,
 		ownerId: string,
 		triggerType: AgentTriggerType,
@@ -402,16 +433,8 @@ export class AgentRuntimeService {
 		userDatetime?: string,
 		workflowConfig?: WorkflowSpawnConfig,
 	): Promise<AgentRuntimeConfig> {
-		let modelProvider = '';
-		let modelId = '';
-
-		if (agent.modelConfigId) {
-			const config = await this.llmProviderService.getById(agent.modelConfigId, ownerId);
-			if (config) {
-				modelProvider = config.provider;
-				modelId = config.model;
-			}
-		}
+		const modelProvider = modelConfig.provider;
+		const modelId = modelConfig.model;
 
 		// Resolve credential metadata so the agent prompt can show name, integration,
 		// and OAuth2 scopes (when available). We fetch all credentials for this owner

@@ -52,20 +52,24 @@ function rowToWorkflow(row: typeof workflows.$inferSelect, trigger?: AgentTrigge
 
 /**
  * Build the trigger config from the user-supplied input.
- * Generates an HMAC secret for webhook triggers if none is provided.
- * Falls back to a sensible default when config is omitted.
+ *
+ * For webhooks, the HMAC secret is server-generated and must survive updates:
+ * clients never send it (the builder submits only { requireSignature }), so the
+ * stored config takes precedence. A new secret is generated only when there is
+ * no stored one — on create or when the trigger kind changes.
  */
 function buildTriggerConfig(
 	kind: AgentTriggerKind,
 	inputConfig?: AgentTriggerConfig,
+	storedConfig?: AgentTriggerConfig,
 ): AgentTriggerConfig {
 	if (kind === 'webhook') {
-		const existing = inputConfig as WebhookTriggerConfig | undefined;
-		// Always generate a new secret if one wasn't explicitly supplied
-		if (!existing?.secret) {
-			return { secret: randomBytes(32).toString('hex') } as WebhookTriggerConfig;
-		}
-		return existing;
+		const input = inputConfig as WebhookTriggerConfig | undefined;
+		const stored = storedConfig as WebhookTriggerConfig | undefined;
+		const secret = stored?.secret ?? input?.secret ?? randomBytes(32).toString('hex');
+		const requireSignature = input?.requireSignature ?? stored?.requireSignature ?? true;
+		const config: WebhookTriggerConfig = { secret, requireSignature };
+		return config;
 	}
 	if (kind === 'cron') {
 		// Return provided config, or a placeholder default
@@ -379,7 +383,12 @@ export class WorkflowService {
 
 					if (triggerInput.name !== undefined) triggerUpdates.name = triggerInput.name;
 					if (triggerInput.config !== undefined)
-						triggerUpdates.config = buildTriggerConfig(existing.trigger.kind, triggerInput.config);
+						// Pass the stored config so the webhook secret is preserved across updates
+						triggerUpdates.config = buildTriggerConfig(
+							existing.trigger.kind,
+							triggerInput.config,
+							existing.trigger.config,
+						);
 					if (triggerInput.description !== undefined)
 						triggerUpdates.description = triggerInput.description ?? null;
 
