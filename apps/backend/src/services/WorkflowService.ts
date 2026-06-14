@@ -10,6 +10,7 @@ import type {
 	AgentTrigger,
 	AgentTriggerKind,
 	AgentTriggerConfig,
+	AppTriggerConfig,
 	CronTriggerConfig,
 	WebhookTriggerConfig,
 } from '@repo/types';
@@ -28,8 +29,30 @@ function rowToTrigger(row: typeof agentTriggers.$inferSelect): AgentTrigger {
 		lastFiredAt: row.lastFiredAt ?? undefined,
 		description: row.description ?? undefined,
 		workflowId: row.workflowId ?? undefined,
+		appRegistration: appRegistrationFromState(row.kind, row.state),
 		createdAt: row.createdAt,
 		updatedAt: row.updatedAt,
+	};
+}
+
+/** Surface app-trigger registration status from the runtime state column (app triggers only). */
+function appRegistrationFromState(
+	kind: string,
+	state: unknown,
+): AgentTrigger['appRegistration'] {
+	if (kind !== 'app' || !state || typeof state !== 'object') return undefined;
+	const s = state as {
+		registeredAt?: string;
+		lastRegisterError?: string;
+		registrationMode?: 'auto' | 'manual';
+		verificationToken?: string;
+	};
+	if (!s.registeredAt && !s.lastRegisterError && !s.verificationToken) return undefined;
+	return {
+		registeredAt: s.registeredAt,
+		error: s.lastRegisterError,
+		mode: s.registrationMode,
+		verificationToken: s.verificationToken,
 	};
 }
 
@@ -74,6 +97,12 @@ function buildTriggerConfig(
 	if (kind === 'cron') {
 		// Return provided config, or a placeholder default
 		return (inputConfig as CronTriggerConfig) ?? ({ schedule: '0 9 * * *' } as CronTriggerConfig);
+	}
+	if (kind === 'app') {
+		// App trigger config (provider/event/credentialId/params) is fully user-supplied.
+		// Runtime listening state (cursor/subscription) lives in the separate
+		// agent_triggers.state column, so nothing needs to be preserved here across updates.
+		return (inputConfig as AppTriggerConfig) ?? ({} as AgentTriggerConfig);
 	}
 	// manual — no config needed
 	return {} as AgentTriggerConfig;

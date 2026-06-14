@@ -1,6 +1,6 @@
 # Workflows
 
-Workflows turn an agent into an automation: an ordered pipeline of steps, each a full agent turn with its own instruction and constraints, fired by a manual click, a cron schedule, or a webhook. Workflow runs are recorded with per-step logs you can watch live.
+Workflows turn an agent into an automation: an ordered pipeline of steps, each a full agent turn with its own instruction and constraints, fired by a manual click, a cron schedule, a generic webhook, or an event in a connected app (a Gmail message arrives, a Notion database item changes, a Google Form is submitted, a Slack message is posted). Workflow runs are recorded with per-step logs you can watch live.
 
 Workflows belong to an agent — manage them from **Agents → workflow icon**.
 
@@ -77,6 +77,47 @@ A successful delivery returns `202 Accepted` with the started run's ID:
 ```
 
 Rejected requests return `401` (unknown trigger, disabled workflow, or bad signature), `400` for a non-JSON body, and `503` if the runtime could not be started (safe to retry).
+
+### App event
+
+App triggers run the workflow when something happens in a connected app — a new Gmail message, a Notion database item change, a new Google Form response, a Slack message. Unlike a generic webhook (where you wire and parse everything yourself), each app is a built-in **provider** that knows how to listen for its events and hand the workflow a clean, documented payload. See the [App Triggers reference](/integrations/triggers/) for the full provider list and per-app setup.
+
+In the builder's trigger card, choose **App event**, then pick:
+
+1. **App** — the provider (Gmail, Notion, Slack, Google Forms).
+2. **Credential** — a credential of the matching type (see the per-app setup below). App-trigger credentials authenticate the _listener_, so any of your credentials of the right type works — it need not be attached to the agent.
+3. **Event** — what to fire on (e.g. _New email received_).
+4. **Parameters** — event-specific fields (e.g. a Gmail label, a Notion database id, a Google Form id, a Slack channel id).
+
+#### Event payload
+
+Each event becomes one workflow run. The provider maps the event to **normalized fields plus a `raw` escape hatch** (the original API object), delivered as <code v-pre>{{trigger.payload}}</code>:
+
+| App              | Event                            | <code v-pre>{{trigger.payload}}</code> shape                                                  |
+| ---------------- | -------------------------------- | --------------------------------------------------------------------------------------------- |
+| **Gmail**        | New email received               | `{ from, to, subject, snippet, body, receivedAt, messageId, threadId, labels, raw }`          |
+| **Notion**       | Database item created or updated | `{ pageId, databaseId, url, properties, changedProperties, lastEditedTime, eventType, raw }`   |
+| **Slack**        | New message                      | `{ channel, user, text, ts, eventType, raw }`                                                  |
+| **Google Forms** | New form response                | `{ formId, responseId, submittedAt, answers, raw }`                                            |
+
+#### How each app listens
+
+| App              | Delivery                       | Notes                                                                                                       |
+| ---------------- | ------------------------------ | ---------------------------------------------------------------------------------------------------------- |
+| **Gmail**        | Push (Google Cloud Pub/Sub)    | Registers a Gmail `watch` and auto-renews it; needs a Pub/Sub topic + push subscription (one-time setup).   |
+| **Notion**       | Push (Notion webhook)          | You add the delivery URL once in your Notion integration; the verification token is captured automatically. |
+| **Slack**        | Push (Events API)              | Auto-registers the request URL via the App Manifest API when a config token is set; else paste it manually. |
+| **Google Forms** | Polling                        | Checks for new responses on an interval (default 60s, configurable).                                        |
+
+For the push apps, save the workflow first — the builder then shows the **delivery URL** (`<APP_URL>/api/v1/webhooks/<triggerId>`) to register with the app. Each provider verifies its own inbound requests (Gmail Pub/Sub envelope, Slack signing secret, Notion signature), so the URL is safe to give to the external service. The exact provider setup lives on its trigger page: [Gmail](/integrations/triggers/gmail), [Notion](/integrations/triggers/notion), [Slack](/integrations/triggers/slack), [Google Forms](/integrations/triggers/google-forms).
+
+::: tip First run won't replay history
+Polling apps (Google Forms) record a baseline on activation and only fire for items that arrive **after** the trigger is enabled — turning a trigger on does not flood you with every past response.
+:::
+
+::: warning Auto-disable on repeated failure
+Like cron triggers, an app trigger that fails to listen 5 times in a row (e.g. an expired credential) is automatically disabled. Fix the cause and re-enable the workflow.
+:::
 
 ## Runs and observability
 

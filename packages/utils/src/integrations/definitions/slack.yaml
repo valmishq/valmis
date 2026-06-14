@@ -17,6 +17,33 @@ properties:
     type: secret
     required: true
     description: OAuth2 Client Secret from your Slack App settings
+  - name: signingSecret
+    displayName: Signing Secret
+    type: secret
+    required: false
+    description: >-
+      Required for Slack app triggers. The Signing Secret from your Slack app's Basic
+      Information page — used to verify inbound Events API deliveries (HMAC over the raw body).
+  - name: configToken
+    displayName: App Manifest Config Token
+    type: secret
+    required: false
+    description: >-
+      Optional. An App Configuration access token (xoxe.xoxp-...). With the App ID, Slack app
+      triggers auto-register the Events API request URL via the App Manifest API. Without it,
+      paste the trigger's delivery URL into your Slack app's Event Subscriptions manually.
+  - name: configRefreshToken
+    displayName: App Manifest Refresh Token
+    type: secret
+    required: false
+    description: >-
+      Optional. The matching App Configuration refresh token (xoxe-1-...). Config tokens expire
+      (~12h); the trigger rotates them via tooling.tokens.rotate and stores the new pair.
+  - name: appId
+    displayName: Slack App ID
+    type: string
+    required: false
+    description: Optional. Your Slack App ID (e.g. A0123456789), needed for manifest auto-registration.
   - name: scope
     displayName: Bot Token Scopes
     type: string

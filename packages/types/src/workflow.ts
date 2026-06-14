@@ -143,7 +143,7 @@ export interface WorkflowRun {
 	agentId: string;
 	ownerId: string;
 	status: WorkflowRunStatus;
-	triggerType: 'cron' | 'webhook' | 'manual';
+	triggerType: 'cron' | 'webhook' | 'manual' | 'app';
 	triggerId?: string;
 	triggerPayload?: Record<string, unknown>;
 	error?: string;
@@ -184,13 +184,23 @@ export interface WorkflowStepLog {
  */
 export interface WorkflowTriggerContext {
 	/** The trigger type that initiated this run */
-	type: 'cron' | 'webhook' | 'manual';
+	type: 'cron' | 'webhook' | 'manual' | 'app';
 	/**
 	 * The user-defined trigger name — set when the trigger was created.
 	 * e.g. "Slack Incoming Webhook", "Daily Report", "Manual Run"
 	 * Copied from AgentTrigger.name at fire time. Always explicitly defined by the user.
 	 */
 	triggerName: string;
+	/**
+	 * For app triggers (type === 'app'): the provider id that emitted the event,
+	 * e.g. 'gmail', 'notion', 'slack'. Lets the step prompt name the source.
+	 */
+	appProvider?: string;
+	/**
+	 * For app triggers (type === 'app'): the event id that fired,
+	 * e.g. 'message.received', 'database.itemChanged'.
+	 */
+	appEvent?: string;
 	/**
 	 * ISO 8601 timestamp of when the trigger fired.
 	 * For cron: the scheduled fire time. For webhook: the request receipt time.
@@ -200,6 +210,8 @@ export interface WorkflowTriggerContext {
 	 * The raw payload from the trigger source.
 	 * For webhook: the parsed JSON request body (may contain source-specific fields
 	 * such as Slack event objects, GitHub webhook payloads, etc.)
+	 * For app: the provider's normalized event payload plus a `raw` field carrying the
+	 * original API object (e.g. { from, subject, body, receivedAt, messageId, raw }).
 	 * For cron: { firedAt: string }.
 	 * For manual: { firedAt: string }.
 	 */

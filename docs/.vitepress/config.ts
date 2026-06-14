@@ -59,6 +59,16 @@ export default defineConfig({
 					items: [{ text: 'Overview', link: '/integrations/' }],
 				},
 				{
+					text: 'Triggers (app events)',
+					items: [
+						{ text: 'Overview', link: '/integrations/triggers/' },
+						{ text: 'Gmail', link: '/integrations/triggers/gmail' },
+						{ text: 'Google Forms', link: '/integrations/triggers/google-forms' },
+						{ text: 'Notion', link: '/integrations/triggers/notion' },
+						{ text: 'Slack', link: '/integrations/triggers/slack' },
+					],
+				},
+				{
 					text: 'Communication & Bots',
 					items: [
 						{ text: 'Discord Bot', link: '/integrations/discord-bot' },
@@ -77,7 +87,10 @@ export default defineConfig({
 						{ text: 'Calendly', link: '/integrations/calendly' },
 						{ text: 'Canva', link: '/integrations/canva' },
 						{ text: 'Dropbox', link: '/integrations/dropbox' },
-						{ text: 'Google (Gmail, Calendar, Docs, Sheets, Drive)', link: '/integrations/google' },
+						{
+							text: 'Google (Gmail, Calendar, Docs, Sheets, Drive, Forms)',
+							link: '/integrations/google',
+						},
 						{ text: 'Jira', link: '/integrations/jira' },
 						{ text: 'Microsoft OneDrive', link: '/integrations/microsoft-onedrive' },
 						{ text: 'Notion', link: '/integrations/notion' },

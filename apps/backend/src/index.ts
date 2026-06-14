@@ -17,6 +17,7 @@ import { createSkillsRouter } from './routes/skills.js';
 import { createRuntimeRouter } from './routes/runtime.js';
 import { createWebhooksRouter } from './routes/webhooks.js';
 import { createWorkflowsRouter, createGlobalWorkflowsRouter } from './routes/workflows.js';
+import { createAppTriggersRouter } from './routes/appTriggers.js';
 import { createChannelsRouter } from './routes/channels.js';
 import { createKnowledgeRouter, createAgentKnowledgeRouter } from './routes/knowledge.js';
 import { KnowledgeBaseService } from './services/KnowledgeBaseService.js';
@@ -44,6 +45,8 @@ import { ProcessDriver } from './services/runtime/ProcessDriver.js';
 import { DockerDriver } from './services/runtime/DockerDriver.js';
 import type { ExecutionDriver } from './services/runtime/ExecutionDriver.js';
 import { TriggerService } from './services/TriggerService.js';
+import { AppTriggerProviderRegistry } from './services/triggers/AppTriggerProviderRegistry.js';
+import { AppTriggerManager } from './services/triggers/AppTriggerManager.js';
 import { WorkflowService } from './services/WorkflowService.js';
 import { WorkflowRunService } from './services/WorkflowRunService.js';
 import { SkillService } from './services/SkillService.js';
@@ -187,6 +190,18 @@ const triggerService = new TriggerService(
 	workflowRunService,
 );
 
+// App-trigger system — data-driven providers (Gmail/Notion/Slack/Google Forms) that listen
+// for external events (poll / push webhook / stream) and funnel each into a workflow run via
+// TriggerService.fireAppEvent(). The manager owns the in-memory listeners; the agent_triggers
+// row (kind='app') is the durable record. Independent of the channels system.
+const appTriggerRegistry = new AppTriggerProviderRegistry();
+const appTriggerManager = new AppTriggerManager(
+	appTriggerRegistry,
+	credentialResolverService,
+	credentialService,
+	triggerService,
+);
+
 const app = express();
 const PORT = process.env.BACKEND_PORT ?? 4000;
 
@@ -201,7 +216,7 @@ app.use(corsMiddleware);
 
 // Mounted before the rate limiter too — external services deliver at arbitrary
 // frequency (this replaces the old /v1/webhooks/ rate-limiter exclusion).
-app.use('/v1/webhooks', createWebhooksRouter(triggerService));
+app.use('/v1/webhooks', createWebhooksRouter(triggerService, appTriggerManager));
 
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
@@ -241,6 +256,8 @@ app.use(
 		// credential's token. Both calls are no-ops if nothing is tracked.
 		telegramPollerManager.stopPoller(credentialId);
 		discordGatewayManager.stopGateway(credentialId);
+		// Stop any app triggers (poll/webhook/stream) using the deleted credential.
+		void appTriggerManager.stopByCredential(credentialId);
 	}),
 );
 app.use('/v1/oauth2', createOAuth2Router(authService));
@@ -306,11 +323,29 @@ app.use(
 // cannot call TriggerService itself — the route layer bridges that gap).
 app.use(
 	'/v1/agents/:agentId/workflows',
-	createWorkflowsRouter(authService, workflowService, workflowRunService, triggerService),
+	createWorkflowsRouter(
+		authService,
+		workflowService,
+		workflowRunService,
+		triggerService,
+		appTriggerManager,
+	),
 );
 
 // Global workflow routes — owner-wide read-only listing for the top-level workflows page
 app.use('/v1/workflows', createGlobalWorkflowsRouter(authService, workflowService));
+
+// App-trigger catalog — providers + events + param schemas + dynamic resource listings
+app.use(
+	'/v1/app-triggers',
+	createAppTriggersRouter(
+		authService,
+		appTriggerRegistry,
+		credentialResolverService,
+		credentialService,
+		appTriggerManager,
+	),
+);
 
 // Global error handler — must be registered last, after all routes
 app.use(errorHandler);
@@ -327,6 +362,8 @@ app.listen(PORT, async () => {
 	await knowledgeBaseService.failInterruptedProcessing();
 	// Load and schedule all enabled cron triggers on startup
 	await triggerService.loadAll();
+	// Activate all enabled app triggers (poll timers / webhook subscriptions / stream conns)
+	await appTriggerManager.loadActive();
 	// Start Telegram long-polling for all active bot credentials
 	await telegramPollerManager.loadActivePollers();
 	// Start Discord Gateway connections for all active bot credentials
@@ -342,6 +379,8 @@ const gracefulShutdown = (signal: string): void => {
 	if (shuttingDown) return;
 	shuttingDown = true;
 	logger.info({ signal }, '[backend] shutting down');
+	// Clear app-trigger timers + stream connections before exiting.
+	void appTriggerManager.stopAll();
 	void runtimeService.shutdown().finally(() => process.exit(0));
 };
 process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));

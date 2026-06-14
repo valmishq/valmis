@@ -13,6 +13,7 @@
 	import PageHeader from '$lib/components/page-header.svelte';
 	import WorkflowStepCard from '$lib/components/custom/workflow/WorkflowStepCard.svelte';
 	import CronSchedulePicker from '$lib/components/custom/workflow/CronSchedulePicker.svelte';
+	import AppTriggerPicker from '$lib/components/custom/workflow/AppTriggerPicker.svelte';
 	import type { PageData, ActionData } from './$types';
 	import type { WorkflowStep, CredentialDefinition, AgentTriggerKind } from '@repo/types';
 	import ArrowLeftIcon from '@lucide/svelte/icons/arrow-left';
@@ -22,6 +23,7 @@
 	import WebhookIcon from '@lucide/svelte/icons/webhook';
 	import PlayIcon from '@lucide/svelte/icons/play';
 	import CopyIcon from '@lucide/svelte/icons/copy';
+	import BlocksIcon from '@lucide/svelte/icons/blocks';
 
 	let { data, form }: { data: PageData; form: ActionData } = $props();
 
@@ -73,6 +75,68 @@
 			? `${typeof window !== 'undefined' ? window.location.origin : ''}/api/v1/webhooks/${workflow.trigger.id}`
 			: null
 	);
+
+	// ── App-trigger state ───────────────────────────────────────────────────────
+	const appConfig = $derived(
+		workflow?.trigger?.kind === 'app'
+			? (workflow.trigger.config as {
+					provider?: string;
+					event?: string;
+					credentialId?: string;
+					params?: Record<string, unknown>;
+					pollIntervalSec?: number;
+				})
+			: undefined
+	);
+	let appProvider = $state<string>(appConfig?.provider ?? data.appTriggerProviders[0]?.id ?? '');
+	let appEvent = $state<string>(
+		appConfig?.event ?? data.appTriggerProviders[0]?.events[0]?.id ?? ''
+	);
+	let appCredentialId = $state<string>(appConfig?.credentialId ?? '');
+	let appParams = $state<Record<string, unknown>>(appConfig?.params ?? {});
+	let appPollIntervalSec = $state<number | undefined>(appConfig?.pollIntervalSec);
+
+	// ── Validation ──────────────────────────────────────────────────────────────
+	/** Human-readable validation problems shown inline + in the alert (client + server). */
+	let validationErrors = $state<string[]>([]);
+
+	/**
+	 * Client-side pre-submit validation — mirrors the server's workflow Zod rules plus
+	 * app-trigger requirements, so the user sees every problem instantly with a clear
+	 * field reference. The server remains the source of truth and reports anything missed.
+	 */
+	function validateClient(): string[] {
+		const errors: string[] = [];
+		if (!workflowName.trim()) errors.push('Workflow name is required');
+		if (steps.length === 0) errors.push('Workflow must have at least one step');
+		steps.forEach((s, i) => {
+			if (!s.name.trim()) errors.push(`Step ${i + 1} → name is required`);
+			if (!s.instruction.trim()) errors.push(`Step ${i + 1} → instruction is required`);
+		});
+		if (triggerKind === 'cron' && !cronSchedule.trim()) {
+			errors.push('Cron schedule is required');
+		}
+		if (triggerKind === 'app') {
+			if (!appProvider) errors.push('App trigger: choose an app');
+			if (!appEvent) errors.push('App trigger: choose an event');
+			if (!appCredentialId) errors.push('App trigger: choose a credential');
+			const provider = data.appTriggerProviders.find((p) => p.id === appProvider);
+			const event = provider?.events.find((e) => e.id === appEvent);
+			for (const field of event?.params ?? []) {
+				if (!field.required) continue;
+				const value = appParams[field.name];
+				const isEmpty =
+					value === undefined ||
+					value === null ||
+					value === '' ||
+					(Array.isArray(value) && value.length === 0);
+				if (isEmpty) {
+					errors.push(`App trigger: "${field.label}" is required`);
+				}
+			}
+		}
+		return errors;
+	}
 
 	let copiedSecret = $state(false);
 	let copiedUrl = $state(false);
@@ -160,7 +224,15 @@
 						? { schedule: cronSchedule.trim(), timezone: cronTimezone.trim() || 'UTC' }
 						: triggerKind === 'webhook'
 							? { requireSignature: webhookRequireSignature }
-							: {},
+							: triggerKind === 'app'
+								? {
+										provider: appProvider,
+										event: appEvent,
+										credentialId: appCredentialId,
+										params: appParams,
+										pollIntervalSec: appPollIntervalSec
+									}
+								: {},
 				description: undefined
 			}
 		})
@@ -200,19 +272,41 @@
 <form
 	method="POST"
 	action="?/save"
-	use:enhance={() => {
+	use:enhance={({ cancel }) => {
+		// Client-side pre-validation — block the submit and show every problem.
+		const errors = validateClient();
+		if (errors.length > 0) {
+			cancel();
+			validationErrors = errors;
+			console.error('[workflow] validation failed:', errors);
+			setAlert({
+				type: 'error',
+				title: `Fix ${errors.length} issue${errors.length > 1 ? 's' : ''} before saving`,
+				message: errors.join('\n'),
+				duration: 7000,
+				show: true
+			});
+			return;
+		}
+		validationErrors = [];
 		isSaving = true;
 		return async ({ result, update }) => {
 			isSaving = false;
 			if (result.type === 'failure') {
+				const failData = result.data as { error?: string; messages?: string[] };
+				const messages =
+					failData?.messages ?? (failData?.error ? failData.error.split('\n') : []);
+				validationErrors = messages;
+				console.error('[workflow] save failed:', messages.length ? messages : failData?.error);
 				setAlert({
 					type: 'error',
 					title: isEditMode ? 'Failed to save workflow' : 'Failed to create workflow',
-					message: (result.data as { error?: string })?.error ?? 'An unexpected error occurred.',
-					duration: 5000,
+					message: messages.join('\n') || failData?.error || 'An unexpected error occurred.',
+					duration: 7000,
 					show: true
 				});
 			} else {
+				validationErrors = [];
 				await update();
 			}
 		};
@@ -273,7 +367,7 @@
 					type="single"
 					value={triggerKind}
 					onValueChange={(v) => {
-						if (v === 'manual' || v === 'cron' || v === 'webhook') {
+						if (v === 'manual' || v === 'cron' || v === 'webhook' || v === 'app') {
 							triggerKind = v;
 						}
 					}}
@@ -288,6 +382,11 @@
 							<span class="flex items-center gap-2">
 								<ClockIcon class="size-4 text-muted-foreground" />
 								Scheduled (Cron)
+							</span>
+						{:else if triggerKind === 'app'}
+							<span class="flex items-center gap-2">
+								<BlocksIcon class="size-4 text-muted-foreground" />
+								App event
 							</span>
 						{:else}
 							<span class="flex items-center gap-2">
@@ -321,6 +420,17 @@
 								<span>
 									<span class="font-medium">Webhook</span>
 									<span class="ml-1 text-xs text-muted-foreground">— triggered by HTTP request</span
+									>
+								</span>
+							</span>
+						</Select.Item>
+						<Select.Item value="app">
+							<span class="flex items-center gap-2">
+								<BlocksIcon class="size-4" />
+								<span>
+									<span class="font-medium">App event</span>
+									<span class="ml-1 text-xs text-muted-foreground"
+										>— Gmail, Notion, Slack, Google Forms…</span
 									>
 								</span>
 							</span>
@@ -456,6 +566,22 @@
 						</p>
 					{/if}
 				</div>
+			{:else if triggerKind === 'app'}
+				<!-- App-event trigger: provider → credential → event → params -->
+				<AppTriggerPicker
+					providers={data.appTriggerProviders}
+					credentials={data.allCredentials}
+					bind:provider={appProvider}
+					bind:event={appEvent}
+					bind:credentialId={appCredentialId}
+					bind:params={appParams}
+					bind:pollIntervalSec={appPollIntervalSec}
+					deliveryUrl={webhookUrl}
+					triggerId={workflow?.trigger?.id ?? null}
+					registration={workflow?.trigger?.kind === 'app'
+						? workflow.trigger.appRegistration
+						: undefined}
+				/>
 			{:else}
 				<!-- Manual trigger info -->
 				<div class="rounded-lg border border-border p-4">
@@ -527,6 +653,24 @@
 
 	<!-- ── Submit ─────────────────────────────────────────────────────────────── -->
 	<Separator />
+
+	{#if validationErrors.length > 0}
+		<!-- Full list of problems to fix — populated by client pre-validation or the server -->
+		<div
+			class="space-y-1 rounded-md bg-destructive/10 p-4 text-sm text-destructive"
+			role="alert"
+		>
+			<p class="font-medium">
+				Please fix {validationErrors.length} issue{validationErrors.length > 1 ? 's' : ''}:
+			</p>
+			<ul class="list-inside list-disc space-y-0.5">
+				{#each validationErrors as message (message)}
+					<li>{message}</li>
+				{/each}
+			</ul>
+		</div>
+	{/if}
+
 	<div class="flex justify-end gap-3">
 		<Button
 			type="button"

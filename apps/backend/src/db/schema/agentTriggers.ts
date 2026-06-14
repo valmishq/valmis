@@ -56,6 +56,17 @@ export const agentTriggers = pgTable(
 		 * manual:  {}
 		 */
 		config: jsonb('config').notNull().default({}),
+		/**
+		 * Runtime listening state for app triggers (kind === 'app') — written only by
+		 * AppTriggerManager, never by the user. Kept separate from `config` (user intent)
+		 * so the listener and the user never clobber each other.
+		 *
+		 * Shape (AppTriggerState):
+		 *   { cursor?, lastPolledAt?, subscriptionId?, expiresAt?, verificationToken?, baselineHistoryId? }
+		 *
+		 * Empty object for non-app triggers.
+		 */
+		state: jsonb('state').notNull().default({}),
 		/** Whether this trigger is currently active and should fire */
 		isEnabled: boolean('is_enabled').notNull().default(true),
 		/** Timestamp of the last successful trigger fire (null if never fired) */

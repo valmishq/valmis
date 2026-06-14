@@ -7,6 +7,7 @@ import type {
 	AgentTrigger,
 	AgentTriggerKind,
 	AgentTriggerConfig,
+	AppTriggerConfig,
 	CronTriggerConfig,
 	WebhookTriggerConfig,
 	WorkflowTriggerContext,
@@ -20,6 +21,23 @@ import { logger } from '../config/logger.js';
 // ─── Mappers ──────────────────────────────────────────────────────────────────
 
 function rowToTrigger(row: typeof agentTriggers.$inferSelect): AgentTrigger {
+	let appRegistration: AgentTrigger['appRegistration'];
+	if (row.kind === 'app' && row.state && typeof row.state === 'object') {
+		const s = row.state as {
+			registeredAt?: string;
+			lastRegisterError?: string;
+			registrationMode?: 'auto' | 'manual';
+			verificationToken?: string;
+		};
+		if (s.registeredAt || s.lastRegisterError || s.verificationToken) {
+			appRegistration = {
+				registeredAt: s.registeredAt,
+				error: s.lastRegisterError,
+				mode: s.registrationMode,
+				verificationToken: s.verificationToken,
+			};
+		}
+	}
 	return {
 		id: row.id,
 		agentId: row.agentId,
@@ -31,6 +49,7 @@ function rowToTrigger(row: typeof agentTriggers.$inferSelect): AgentTrigger {
 		lastFiredAt: row.lastFiredAt ?? undefined,
 		description: row.description ?? undefined,
 		workflowId: row.workflowId ?? undefined,
+		appRegistration,
 		createdAt: row.createdAt,
 		updatedAt: row.updatedAt,
 	};
@@ -331,6 +350,25 @@ export class TriggerService {
 		return this.fireTrigger(trigger, { firedAt: new Date().toISOString() });
 	}
 
+	/**
+	 * Fire an app trigger with a provider-normalized event payload.
+	 * Called by AppTriggerManager once per external event (poll batch item, webhook
+	 * delivery, or stream message). Routes through the same fireTrigger() funnel as
+	 * cron/webhook/manual, so each event becomes one workflow run.
+	 */
+	async fireAppEvent(
+		triggerId: string,
+		payload: Record<string, unknown>,
+	): Promise<TriggerFireResult> {
+		const trigger = await this.getByIdInternal(triggerId);
+		if (!trigger) throw new TriggerFireError(`Trigger not found: ${triggerId}`, 'not_found');
+		if (!trigger.isEnabled) throw new TriggerFireError(`Trigger ${triggerId} is disabled`, 'disabled');
+		if (trigger.kind !== 'app')
+			throw new TriggerFireError(`Trigger ${triggerId} is not an app trigger`, 'wrong_kind');
+
+		return this.fireTrigger(trigger, payload);
+	}
+
 	// ─── Public scheduling helpers ────────────────────────────────────────
 
 	/**
@@ -460,6 +498,12 @@ export class TriggerService {
 					firedAt,
 					payload,
 				};
+				// For app triggers, surface the provider + event so Step 1's prompt can name the source.
+				if (trigger.kind === 'app') {
+					const appConfig = trigger.config as AppTriggerConfig;
+					triggerContext.appProvider = appConfig.provider;
+					triggerContext.appEvent = appConfig.event;
+				}
 
 				// Create a thread to house the sandbox spawn.
 				// Marked as a workflow thread so users can filter it out in the chat history.

@@ -455,97 +455,101 @@
 			</Dialog.Header>
 
 			<form onsubmit={handleCreate} class="space-y-4">
-				{#if createError}
-					<p class="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive" role="alert">
-						{createError}
-					</p>
-				{/if}
+				<!-- Scrollable field area so a long form never exceeds the viewport (the footer
+				     stays pinned below). -mx-1/px-1 give focus rings room without shifting layout. -->
+				<div class="-mx-1 max-h-[60vh] space-y-4 overflow-y-auto px-1">
+					{#if createError}
+						<p class="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive" role="alert">
+							{createError}
+						</p>
+					{/if}
 
-				<!-- OAuth2: show the callback URL the user must register with their OAuth provider -->
-				{#if selectedDefinition.type === 'oauth2' && data.oauthCallbackUrl}
+					<!-- OAuth2: show the callback URL the user must register with their OAuth provider -->
+					{#if selectedDefinition.type === 'oauth2' && data.oauthCallbackUrl}
+						<div class="space-y-1.5">
+							<Label for="callbackUrl">Authorized redirect URI</Label>
+							<Input
+								id="callbackUrl"
+								type="text"
+								value={data.oauthCallbackUrl}
+								readonly
+								class="cursor-default bg-muted font-mono text-xs text-muted-foreground select-all"
+							/>
+							<p class="text-xs text-muted-foreground">
+								Add this URL as an authorized redirect URI in your OAuth provider's console.
+							</p>
+						</div>
+					{/if}
+
+					<!-- User-facing label for this credential instance -->
 					<div class="space-y-1.5">
-						<Label for="callbackUrl">Authorized redirect URI</Label>
+						<Label for="credName">Credential name</Label>
 						<Input
-							id="callbackUrl"
+							id="credName"
 							type="text"
-							value={data.oauthCallbackUrl}
-							readonly
-							class="cursor-default bg-muted font-mono text-xs text-muted-foreground select-all"
+							bind:value={credentialName}
+							required
+							placeholder="e.g. My {selectedDefinition.name} account"
 						/>
 						<p class="text-xs text-muted-foreground">
-							Add this URL as an authorized redirect URI in your OAuth provider's console.
+							A label to identify this credential in the dashboard.
 						</p>
 					</div>
-				{/if}
 
-				<!-- User-facing label for this credential instance -->
-				<div class="space-y-1.5">
-					<Label for="credName">Credential name</Label>
-					<Input
-						id="credName"
-						type="text"
-						bind:value={credentialName}
-						required
-						placeholder="e.g. My {selectedDefinition.name} account"
-					/>
-					<p class="text-xs text-muted-foreground">
-						A label to identify this credential in the dashboard.
-					</p>
+					<!-- Dynamic property fields from the definition -->
+					{#each selectedDefinition.properties as prop (prop.name)}
+						<div class="space-y-1.5">
+							<Label for={`prop-${prop.name}`}>
+								{prop.displayName}{prop.required ? '' : ' (optional)'}
+							</Label>
+
+							{#if prop.type === 'options' && prop.options}
+								<select
+									id={`prop-${prop.name}`}
+									bind:value={formValues[prop.name]}
+									class="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-none"
+								>
+									{#each prop.options as opt (opt.value)}
+										<option value={String(opt.value)}>{opt.name}</option>
+									{/each}
+								</select>
+							{:else if prop.type === 'boolean'}
+								<select
+									id={`prop-${prop.name}`}
+									bind:value={formValues[prop.name]}
+									class="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-none"
+								>
+									<option value="true">Yes</option>
+									<option value="false">No</option>
+								</select>
+							{:else}
+								<Input
+									id={`prop-${prop.name}`}
+									type={inputType(prop)}
+									bind:value={formValues[prop.name]}
+									required={prop.required}
+								/>
+							{/if}
+
+							{#if prop.description && prop.type !== 'options' && prop.type !== 'boolean'}
+								<p class="text-xs text-muted-foreground">{prop.description}</p>
+							{/if}
+						</div>
+					{/each}
+
+					{#if selectedDefinition.documentationUrl}
+						<p class="text-xs text-muted-foreground">
+							<a
+								href={selectedDefinition.documentationUrl}
+								target="_blank"
+								rel="noopener noreferrer"
+								class="underline underline-offset-2 hover:text-foreground"
+							>
+								View documentation
+							</a>
+						</p>
+					{/if}
 				</div>
-
-				<!-- Dynamic property fields from the definition -->
-				{#each selectedDefinition.properties as prop (prop.name)}
-					<div class="space-y-1.5">
-						<Label for={`prop-${prop.name}`}>
-							{prop.displayName}{prop.required ? '' : ' (optional)'}
-						</Label>
-
-						{#if prop.type === 'options' && prop.options}
-							<select
-								id={`prop-${prop.name}`}
-								bind:value={formValues[prop.name]}
-								class="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-none"
-							>
-								{#each prop.options as opt (opt.value)}
-									<option value={String(opt.value)}>{opt.name}</option>
-								{/each}
-							</select>
-						{:else if prop.type === 'boolean'}
-							<select
-								id={`prop-${prop.name}`}
-								bind:value={formValues[prop.name]}
-								class="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-none"
-							>
-								<option value="true">Yes</option>
-								<option value="false">No</option>
-							</select>
-						{:else}
-							<Input
-								id={`prop-${prop.name}`}
-								type={inputType(prop)}
-								bind:value={formValues[prop.name]}
-								required={prop.required}
-							/>
-						{/if}
-
-						{#if prop.description && prop.type !== 'options' && prop.type !== 'boolean'}
-							<p class="text-xs text-muted-foreground">{prop.description}</p>
-						{/if}
-					</div>
-				{/each}
-
-				{#if selectedDefinition.documentationUrl}
-					<p class="text-xs text-muted-foreground">
-						<a
-							href={selectedDefinition.documentationUrl}
-							target="_blank"
-							rel="noopener noreferrer"
-							class="underline underline-offset-2 hover:text-foreground"
-						>
-							View documentation
-						</a>
-					</p>
-				{/if}
 
 				<Dialog.Footer class="pt-2">
 					<Button type="button" variant="outline" onclick={closeAddDialog} disabled={isCreating}>

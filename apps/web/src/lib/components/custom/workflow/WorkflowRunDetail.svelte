@@ -130,7 +130,12 @@
 	}
 
 	function triggerLabel(type: string): string {
-		const map: Record<string, string> = { cron: 'Cron', webhook: 'Webhook', manual: 'Manual' };
+		const map: Record<string, string> = {
+			cron: 'Cron',
+			webhook: 'Webhook',
+			manual: 'Manual',
+			app: 'App event'
+		};
 		return map[type] ?? type;
 	}
 

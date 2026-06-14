@@ -25,12 +25,14 @@ export const agentThreadStatusEnum = pgEnum('agent_thread_status', [
  * 'cron' = scheduled cron trigger
  * 'webhook' = external webhook trigger
  * 'manual' = user clicked "run now"
+ * 'app' = an app-trigger provider event fired (Gmail/Notion/Slack/Google Forms/…)
  */
 export const agentTriggerTypeEnum = pgEnum('agent_trigger_type', [
 	'chat',
 	'cron',
 	'webhook',
 	'manual',
+	'app',
 ]);
 
 /**

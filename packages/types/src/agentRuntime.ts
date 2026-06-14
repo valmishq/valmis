@@ -5,9 +5,9 @@ import type { Workflow, WorkflowTriggerContext } from './workflow.js';
 // ─── Enum mirrors (TypeScript unions matching the pgEnum values) ──────────────
 
 export type AgentThreadStatus = 'idle' | 'running' | 'completed' | 'error';
-export type AgentTriggerType = 'chat' | 'cron' | 'webhook' | 'manual';
+export type AgentTriggerType = 'chat' | 'cron' | 'webhook' | 'manual' | 'app';
 /** Valid trigger kinds — 'chat' is not a trigger, only a thread origin */
-export type AgentTriggerKind = 'cron' | 'webhook' | 'manual';
+export type AgentTriggerKind = 'cron' | 'webhook' | 'manual' | 'app';
 export type AgentMessageRole = 'user' | 'assistant' | 'tool_result';
 
 // ─── Thread ───────────────────────────────────────────────────────────────────
@@ -118,7 +118,83 @@ export interface WebhookTriggerConfig {
 /** Manual trigger config (no fields needed) */
 export type ManualTriggerConfig = Record<string, never>;
 
-export type AgentTriggerConfig = CronTriggerConfig | WebhookTriggerConfig | ManualTriggerConfig;
+/**
+ * App-based trigger config — fires a workflow when an external app emits an event
+ * (e.g. a Gmail message arrives, a Notion DB item changes, a Google Form is submitted).
+ *
+ * The user-editable intent only. Runtime listening state (cursors, webhook
+ * subscription ids, baselines) lives in the separate `agent_triggers.state` jsonb
+ * column (see AppTriggerState) so the listener and the user never clobber each other.
+ */
+export interface AppTriggerConfig {
+	/** Provider id from the app-trigger registry, e.g. 'gmail', 'notion', 'slack', 'google-forms' */
+	provider: string;
+	/** Event id offered by the provider, e.g. 'message.received', 'database.itemChanged' */
+	event: string;
+	/** Credential used to authenticate listening (poll / subscribe) and outbound calls */
+	credentialId: string;
+	/** Event-specific parameters validated against the provider event's paramsSchema */
+	params: Record<string, unknown>;
+	/** Poll cadence in seconds for poll-mode providers — clamped to the provider's minimum */
+	pollIntervalSec?: number;
+	/**
+	 * Pub/Sub topic name for providers that push via Google Cloud Pub/Sub (Gmail).
+	 * Falls back to the server-configured default topic when omitted.
+	 */
+	pubsubTopic?: string;
+}
+
+/**
+ * Runtime listening state for an app trigger — written by AppTriggerManager, never
+ * by the user. Stored in the `agent_triggers.state` jsonb column.
+ */
+export interface AppTriggerState {
+	/** Opaque poll cursor (provider-defined, e.g. last response timestamp) */
+	cursor?: unknown;
+	/** ISO timestamp of the last successful poll */
+	lastPolledAt?: string;
+	/** External subscription / watch id returned at registration (webhook providers) */
+	subscriptionId?: string;
+	/** ISO timestamp at which a webhook subscription must be renewed (e.g. Gmail watch ≤ 7 days) */
+	expiresAt?: string;
+	/** Verification token captured during a webhook handshake (e.g. Notion) */
+	verificationToken?: string;
+	/** Baseline history id captured at registration (Gmail Pub/Sub history cursor) */
+	baselineHistoryId?: string;
+	/** ISO timestamp of the last successful listener activation / webhook registration */
+	registeredAt?: string;
+	/** Message from the last failed activation / registration (cleared on success) */
+	lastRegisterError?: string;
+	/**
+	 * Whether the last activation actually registered the subscription via the app's API
+	 * ('auto') or only set up internal state and requires the user to add the delivery URL
+	 * in the app themselves ('manual', e.g. Notion always, Slack without a config token).
+	 */
+	registrationMode?: 'auto' | 'manual';
+}
+
+/**
+ * App-trigger registration status surfaced to the builder (kind === 'app' only).
+ * `registeredAt` set on a successful activation; `error` set when it failed; `mode`
+ * distinguishes a real API registration ('auto') from one needing manual setup ('manual').
+ */
+export interface AppTriggerRegistrationStatus {
+	registeredAt?: string;
+	error?: string;
+	mode?: 'auto' | 'manual';
+	/**
+	 * A handshake token the app sent that the user must echo back to confirm the webhook
+	 * subscription (e.g. Notion's one-time verification token). Surfaced so the builder can
+	 * show it with a copy button instead of burying it in the server logs.
+	 */
+	verificationToken?: string;
+}
+
+export type AgentTriggerConfig =
+	| CronTriggerConfig
+	| WebhookTriggerConfig
+	| ManualTriggerConfig
+	| AppTriggerConfig;
 
 /** An agent trigger subscription */
 export interface AgentTrigger {
@@ -137,6 +213,12 @@ export interface AgentTrigger {
 	 * When null/undefined: trigger has no workflow attached.
 	 */
 	workflowId?: string;
+	/**
+	 * App-trigger registration status (kind === 'app' only) — surfaced from the
+	 * trigger's runtime state so the builder can show whether the automatic webhook
+	 * setup succeeded, needs manual completion, or failed.
+	 */
+	appRegistration?: AppTriggerRegistrationStatus;
 	createdAt: Date;
 	updatedAt: Date;
 }

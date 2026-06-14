@@ -23,6 +23,7 @@
 	import ClockIcon from '@lucide/svelte/icons/clock';
 	import WebhookIcon from '@lucide/svelte/icons/webhook';
 	import PlayIcon from '@lucide/svelte/icons/play';
+	import BlocksIcon from '@lucide/svelte/icons/blocks';
 	import BotIcon from '@lucide/svelte/icons/bot';
 
 	/** Returns a short human-readable label for the workflow's trigger. */
@@ -34,6 +35,10 @@
 			return cfg.schedule ? `Cron: ${cfg.schedule}` : 'Cron';
 		}
 		if (t.kind === 'webhook') return 'Webhook';
+		if (t.kind === 'app') {
+			const cfg = t.config as { provider?: string };
+			return cfg.provider ? `App: ${cfg.provider}` : 'App event';
+		}
 		return 'Manual';
 	}
 
@@ -42,6 +47,7 @@
 		const kind = workflow.trigger?.kind;
 		if (kind === 'cron') return 'outline';
 		if (kind === 'webhook') return 'secondary';
+		if (kind === 'app') return 'default';
 		return 'outline';
 	}
 
@@ -351,6 +357,8 @@
 											<ClockIcon class="size-3" />
 										{:else if workflow.trigger?.kind === 'webhook'}
 											<WebhookIcon class="size-3" />
+										{:else if workflow.trigger?.kind === 'app'}
+											<BlocksIcon class="size-3" />
 										{:else}
 											<PlayIcon class="size-3" />
 										{/if}

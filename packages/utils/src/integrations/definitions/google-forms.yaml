@@ -1,0 +1,40 @@
+id: google-forms
+name: Google Forms (OAuth2)
+brandName: Google Forms
+type: oauth2
+icon: /logos/google-forms.svg
+description: Connect to Google Forms via Google OAuth2 to read form responses. Used by the Google Forms app trigger to fire a workflow when a new response is submitted.
+documentationUrl: https://developers.google.com/forms/api/guides
+
+properties:
+  - name: clientId
+    displayName: Client ID
+    type: string
+    required: true
+    description: OAuth2 Client ID from Google Cloud Console
+  - name: clientSecret
+    displayName: Client Secret
+    type: secret
+    required: true
+    description: OAuth2 Client Secret from Google Cloud Console
+
+oauth2:
+  authorizationUrl: 'https://accounts.google.com/o/oauth2/v2/auth'
+  accessTokenUrl: 'https://oauth2.googleapis.com/token'
+  clientIdProperty: clientId
+  clientSecretProperty: clientSecret
+  authStyle: inBody
+  scope: 'openid email https://www.googleapis.com/auth/forms.responses.readonly'
+  # Google requires these to issue a refresh_token on first authorization
+  extraAuthParams:
+    access_type: offline
+    prompt: consent
+
+requestMapping:
+  headers:
+    Authorization: 'Bearer {{properties.accessToken}}'
+
+testRequest:
+  method: GET
+  url: 'https://www.googleapis.com/oauth2/v3/userinfo'
+  accountIdentifierKey: email

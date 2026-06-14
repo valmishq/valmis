@@ -5,22 +5,40 @@ import { AuthService } from '../services/AuthService.js';
 import { WorkflowService } from '../services/WorkflowService.js';
 import { WorkflowRunService } from '../services/WorkflowRunService.js';
 import { TriggerService } from '../services/TriggerService.js';
+import type { AppTriggerManager } from '../services/triggers/AppTriggerManager.js';
 import { requireAuth } from '../middleware/auth.js';
+import { logger } from '../config/logger.js';
 import type { WorkflowStep, WorkflowTriggerInput } from '@repo/types';
 
 /**
- * Returns a structured 422 response body with all ZodError issues.
- * Each issue includes the field path, error code, and human-readable message.
+ * Turns a Zod path into a human-readable, path-annotated message.
+ * Step array paths are made friendly ("steps.0.name" → "Step 1 → name") so users
+ * can locate the problem. Kept in sync with the client builder's pre-validation.
+ */
+function readableIssue(path: PropertyKey[], message: string): string {
+	const joined = path.join('.');
+	const friendly = joined.replace(/^steps\.(\d+)\.?/, (_m, i) => `Step ${Number(i) + 1} → `);
+	return friendly ? `${friendly}${message}` : message;
+}
+
+/**
+ * Returns a structured 422 response body with all ZodError issues, and logs them
+ * server-side so failures are debuggable from the API logs (not just the client).
+ * `issues` keeps machine fields; `messages` is the human-readable list the UI shows.
  */
 function handleZodError(err: ZodError, res: Response): void {
+	const issues = err.issues.map((issue) => ({
+		path: issue.path.join('.'),
+		code: issue.code,
+		message: issue.message,
+	}));
+	const messages = err.issues.map((issue) => readableIssue(issue.path, issue.message));
+	logger.warn({ issues: messages }, '[workflows] workflow validation failed');
 	res.status(422).json({
 		success: false,
 		error: 'Validation failed',
-		issues: err.issues.map((issue) => ({
-			path: issue.path.join('.'),
-			code: issue.code,
-			message: issue.message,
-		})),
+		issues,
+		messages,
 	});
 }
 
@@ -49,6 +67,7 @@ export function createWorkflowsRouter(
 	workflowService: WorkflowService,
 	workflowRunService: WorkflowRunService,
 	triggerService: TriggerService,
+	appTriggerManager: AppTriggerManager,
 ): Router {
 	const router = Router({ mergeParams: true });
 	const auth = requireAuth(authService);
@@ -90,6 +109,10 @@ export function createWorkflowsRouter(
 			// WorkflowService cannot do this itself (circular dep), so we do it here.
 			if (workflow.trigger) {
 				triggerService.scheduleFromWorkflow(workflow.trigger);
+				// App triggers: activate the provider listener (poll/webhook/stream) immediately.
+				if (workflow.trigger.kind === 'app' && workflow.isEnabled) {
+					void appTriggerManager.scheduleFromTrigger(workflow.trigger.id);
+				}
 			}
 
 			res.status(201).json({ success: true, data: workflow });
@@ -162,6 +185,13 @@ export function createWorkflowsRouter(
 		// Capture the old trigger ID before update so we can unschedule it when kind changes.
 		const existing = await workflowService.getById(id, ownerId);
 
+		// Tear down an existing app-trigger BEFORE the update so its external subscription
+		// is unregistered while its row still exists (update may delete/replace the row on a
+		// kind change). Awaited so the unregister completes against the live credential.
+		if (existing?.trigger?.kind === 'app') {
+			await appTriggerManager.unscheduleFromTrigger(existing.trigger.id);
+		}
+
 		try {
 			const updated = await workflowService.update(id, ownerId, {
 				name,
@@ -185,6 +215,10 @@ export function createWorkflowsRouter(
 			//    even though the trigger row's own isEnabled remains true.
 			if (updated.trigger && updated.isEnabled) {
 				triggerService.scheduleFromWorkflow(updated.trigger);
+			}
+			// 3. (Re)activate the app-trigger listener when the workflow is enabled.
+			if (updated.trigger?.kind === 'app' && updated.isEnabled) {
+				void appTriggerManager.scheduleFromTrigger(updated.trigger.id);
 			}
 
 			res.json({ success: true, data: updated });
@@ -212,6 +246,12 @@ export function createWorkflowsRouter(
 
 		// Fetch the workflow first so we know the trigger ID to unschedule.
 		const existing = await workflowService.getById(id, ownerId);
+
+		// Tear down an app-trigger BEFORE deleting the workflow so the external subscription
+		// is unregistered while its row still exists.
+		if (existing?.trigger?.kind === 'app') {
+			await appTriggerManager.unscheduleFromTrigger(existing.trigger.id);
+		}
 
 		const deleted = await workflowService.delete(id, ownerId);
 		if (!deleted) {

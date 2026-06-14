@@ -1,7 +1,13 @@
 import { error, fail, redirect } from '@sveltejs/kit';
 import type { PageServerLoad, Actions } from './$types';
 import { api } from '$lib/server/api';
-import type { Agent, Workflow, CredentialMetadata, CredentialDefinition } from '@repo/types';
+import type {
+	Agent,
+	Workflow,
+	CredentialMetadata,
+	CredentialDefinition,
+	AppTriggerProviderInfo
+} from '@repo/types';
 
 /**
  * Unified load for workflow create and edit.
@@ -20,11 +26,12 @@ export const load: PageServerLoad = async (event) => {
 		error(401, 'Not authenticated');
 	}
 
-	// Always need the agent + credentials + definitions in parallel
-	const [agentRes, credsRes, defsRes] = await Promise.all([
+	// Always need the agent + credentials + definitions + app-trigger catalog in parallel
+	const [agentRes, credsRes, defsRes, appTriggersRes] = await Promise.all([
 		api(`/agents/${agentId}`, event),
 		api('/credentials', event),
-		api('/credentials/definitions', event)
+		api('/credentials/definitions', event),
+		api('/app-triggers/providers', event)
 	]);
 
 	if (!agentRes.ok) {
@@ -34,20 +41,27 @@ export const load: PageServerLoad = async (event) => {
 	const agentBody = await agentRes.json();
 	const agent = agentBody.data as Agent;
 
-	let credentials: CredentialMetadata[] = [];
+	// All of the owner's credentials — app triggers authenticate the listener with any
+	// credential of the matching type, not just agent-linked ones.
+	let allCredentials: CredentialMetadata[] = [];
 	if (credsRes.ok) {
 		const credsBody = await credsRes.json();
-		const allCredentials = (credsBody.data ?? []) as CredentialMetadata[];
-		// Only expose credentials that are linked to this agent.
-		// The step's allowedCredentialIds selector should only show agent-scoped credentials.
-		const agentCredentialIds = new Set(agent.credentialIds);
-		credentials = allCredentials.filter((c) => agentCredentialIds.has(c.id));
+		allCredentials = (credsBody.data ?? []) as CredentialMetadata[];
 	}
+	// Step cards only expose credentials linked to this agent (the agent's own authority).
+	const agentCredentialIds = new Set(agent.credentialIds);
+	const credentials = allCredentials.filter((c) => agentCredentialIds.has(c.id));
 
 	let definitions: CredentialDefinition[] = [];
 	if (defsRes.ok) {
 		const defsBody = await defsRes.json();
 		definitions = (defsBody.data ?? []) as CredentialDefinition[];
+	}
+
+	let appTriggerProviders: AppTriggerProviderInfo[] = [];
+	if (appTriggersRes.ok) {
+		const appBody = await appTriggersRes.json();
+		appTriggerProviders = (appBody.data ?? []) as AppTriggerProviderInfo[];
 	}
 
 	// Edit mode: also fetch the existing workflow
@@ -61,8 +75,31 @@ export const load: PageServerLoad = async (event) => {
 		workflow = workflowBody.data as Workflow;
 	}
 
-	return { agent, credentials, definitions, workflow, isEditMode };
+	return {
+		agent,
+		credentials,
+		allCredentials,
+		definitions,
+		appTriggerProviders,
+		workflow,
+		isEditMode
+	};
 };
+
+/**
+ * Pull a flat list of human-readable validation messages from a 422 error body.
+ * Prefers the backend's path-annotated `messages`, falls back to raw Zod `issues`.
+ */
+function extractMessages(body: unknown): string[] {
+	const b = body as { messages?: unknown; issues?: { path?: string; message?: string }[] };
+	if (Array.isArray(b.messages)) {
+		return b.messages.filter((m): m is string => typeof m === 'string');
+	}
+	if (Array.isArray(b.issues)) {
+		return b.issues.map((i) => (i.path ? `${i.path}: ${i.message}` : (i.message ?? 'Invalid value')));
+	}
+	return [];
+}
 
 // ─── Form Actions ─────────────────────────────────────────────────────────────
 
@@ -105,10 +142,10 @@ export const actions: Actions = {
 
 			if (!res.ok) {
 				const body = await res.json();
-				// Surface Zod issues if present
-				if (body.issues) {
-					const firstIssue = (body.issues as { message: string }[])[0];
-					return fail(res.status, { error: firstIssue?.message ?? 'Validation failed' });
+				// Surface ALL validation problems (path-annotated) so the user can fix them.
+				const messages = extractMessages(body);
+				if (messages.length > 0) {
+					return fail(res.status, { error: messages.join('\n'), messages });
 				}
 				return fail(res.status, { error: body.error ?? 'Failed to update workflow' });
 			}
@@ -120,9 +157,9 @@ export const actions: Actions = {
 
 			if (!res.ok) {
 				const body = await res.json();
-				if (body.issues) {
-					const firstIssue = (body.issues as { message: string }[])[0];
-					return fail(res.status, { error: firstIssue?.message ?? 'Validation failed' });
+				const messages = extractMessages(body);
+				if (messages.length > 0) {
+					return fail(res.status, { error: messages.join('\n'), messages });
 				}
 				return fail(res.status, { error: body.error ?? 'Failed to create workflow' });
 			}

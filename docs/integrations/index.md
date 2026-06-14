@@ -8,6 +8,17 @@ To use any of them: **Credentials → Add credential**, pick the service, fill i
 Every OAuth2 integration requires registering the same redirect URI in the provider's console: `<APP_URL>/oauth2/callback`. The credential form shows it with a copy button.
 :::
 
+## App triggers
+
+Some integrations can also **start a [workflow](/guide/workflows)** when something happens in the app — a new email, a database change, a form response, a chat message. See [App Triggers](/integrations/triggers/) for the full list, or jump to one:
+
+| Trigger                                              | Fires on                         | Delivery |
+| ---------------------------------------------------- | -------------------------------- | -------- |
+| [Gmail](/integrations/triggers/gmail)                | New email received               | Push     |
+| [Google Forms](/integrations/triggers/google-forms)  | New form response                | Polling  |
+| [Notion](/integrations/triggers/notion)              | Database item created or updated | Push     |
+| [Slack](/integrations/triggers/slack)                | New message                      | Push     |
+
 ## Communication & bots
 
 | Service                                              | Auth method          |
@@ -32,6 +43,7 @@ Every OAuth2 integration requires registering the same redirect URI in the provi
 | [Google Calendar](/integrations/google)                | OAuth2 (Google)                 |
 | [Google Docs](/integrations/google)                    | OAuth2 (Google)                 |
 | [Google Drive](/integrations/google)                   | OAuth2 (Google, custom scopes)  |
+| [Google Forms](/integrations/google)                   | OAuth2 (Google)                 |
 | [Google Sheets](/integrations/google)                  | OAuth2 (Google)                 |
 | [Google Workspace](/integrations/google)               | OAuth2 (Google, custom scopes)  |
 | [Microsoft OneDrive](/integrations/microsoft-onedrive) | OAuth2 (Azure AD)               |

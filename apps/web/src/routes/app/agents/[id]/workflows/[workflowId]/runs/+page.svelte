@@ -38,6 +38,8 @@
 				return 'Webhook';
 			case 'manual':
 				return 'Manual';
+			case 'app':
+				return 'App event';
 		}
 	}
 

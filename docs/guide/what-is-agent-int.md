@@ -6,7 +6,7 @@ Agent-Int is a **self-hosted AI agent platform**. You install it on your own ser
 - **Call external services** (Slack, GitHub, Gmail, Notion, Stripe, Home Assistant, and [many more](/integrations/)) using credentials you store once
 - **Remember things** across conversations with a built-in [vector memory](/guide/memory)
 - **Work with files and run code** in an isolated, per-agent workspace
-- **Run automatically** via [workflows](/guide/workflows) triggered by cron schedules, webhooks, or manual runs
+- **Run automatically** via [workflows](/guide/workflows) triggered by cron schedules, webhooks, app events (a new email, a Notion change, a form submission), or manual runs
 - **Ask you for input** mid-task and wait for your answer (human-in-the-loop)
 
 Everything — LLM API keys, third-party credentials, conversation history, agent memory — lives in your own PostgreSQL database. Nothing is sent to a vendor cloud except the LLM and API calls you explicitly configure.
@@ -44,7 +44,7 @@ When you send a message to an agent, the server spawns a short-lived, isolated *
 | [Skill](/guide/skills)                  | A markdown-defined behavioral profile assigned to an agent. Install community skills from GitHub or use the built-ins.                            |
 | [Knowledge base](/guide/knowledge-base) | A library of your documents (uploaded or imported from cloud storage), converted to searchable text and assigned to agents as reference material. |
 | [Memory](/guide/memory)                 | A per-agent vector store with four memory types. The agent writes and searches it autonomously.                                                   |
-| [Workflow](/guide/workflows)            | A multi-step pipeline attached to an agent, where each step is a full agent turn. Triggered manually, by cron, or by webhook.                     |
+| [Workflow](/guide/workflows)            | A multi-step pipeline attached to an agent, where each step is a full agent turn. Triggered manually, by cron, by webhook, or by an app event.    |
 | [Channel](/guide/channels)              | A pairing between an agent and your own Telegram or Discord bot, so you can talk to the agent outside the web UI.                                 |
 
 ## What Agent-Int is not

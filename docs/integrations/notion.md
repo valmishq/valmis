@@ -37,3 +37,7 @@ A Notion integration sees **nothing** by default. In Notion, open each page or d
 2. Register the redirect URI from the credential form: `<APP_URL>/oauth2/callback`.
 3. Copy the client ID and secret into the credential form.
 4. Save, click **Authorize**, and pick the workspace and pages to grant.
+
+## App triggers
+
+A Notion credential can fire a workflow when a page in a chosen database is **created or has its properties updated** (e.g. a status change). Notion delivers these as webhook events — you add the delivery URL as a webhook subscription in the Notion integration UI (it sends a one-time verification token, captured automatically), and verification, filtering, and routing are handled for you. The full setup and payload shape live on the [Notion app trigger page](/integrations/triggers/notion).

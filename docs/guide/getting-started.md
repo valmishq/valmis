@@ -63,7 +63,7 @@ Now ask the agent something like _"list my open GitHub pull requests"_ — it wi
 | Goal                                          | Read                                  |
 | --------------------------------------------- | ------------------------------------- |
 | Let the agent remember preferences and facts  | [Agent Memory](/guide/memory)         |
-| Run the agent on a schedule or from a webhook | [Workflows](/guide/workflows)         |
+| Run the agent on a schedule, webhook, or app event | [Workflows](/guide/workflows)    |
 | Talk to the agent from Telegram or Discord    | [Messaging Channels](/guide/channels) |
 | Give the agent specialized behaviors          | [Skills](/guide/skills)               |
 | Automate against the platform API             | [API Keys](/guide/api-keys)           |

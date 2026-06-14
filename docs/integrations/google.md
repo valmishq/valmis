@@ -1,6 +1,6 @@
-# Google (Gmail, Calendar, Docs, Sheets, Drive, Workspace)
+# Google (Gmail, Calendar, Docs, Sheets, Drive, Forms, Workspace)
 
-Agent-Int has six Google OAuth2 integrations. They all authenticate the same way — an OAuth client you create once in Google Cloud Console — but each requests only the scopes it needs:
+Agent-Int has seven Google OAuth2 integrations. They all authenticate the same way — an OAuth client you create once in Google Cloud Console — but each requests only the scopes it needs:
 
 | Integration          | What agents can do                                                                                             | Scopes requested                                                                                                            |
 | -------------------- | -------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
@@ -9,9 +9,10 @@ Agent-Int has six Google OAuth2 integrations. They all authenticate the same way
 | **Google Docs**      | Read, write, and manage documents                                                                              | `documents`                                                                                                                 |
 | **Google Sheets**    | Read, write, and manage spreadsheets                                                                           | `spreadsheets`                                                                                                              |
 | **Google Drive**     | Browse and manage Drive files — **scopes editable**; powers the [knowledge base](/guide/knowledge-base) import | Your own list (default: `drive` — full read/write; use `drive.readonly` for read-only)                                      |
+| **Google Forms**     | Read form responses — powers the [Google Forms app trigger](/integrations/triggers/google-forms)               | `forms.responses.readonly`                                                                                                 |
 | **Google Workspace** | Any Google API — **you choose the scopes**                                                                     | Your own list (default: `drive.readonly`)                                                                                   |
 
-All six also request `openid email` (your identity) and offline access (`access_type=offline`, `prompt=consent`) so the credential keeps working without re-authorizing.
+All of them also request `openid email` (your identity) and offline access (`access_type=offline`, `prompt=consent`) so the credential keeps working without re-authorizing.
 
 ::: tip One Cloud project can serve all of them
 You can create a **single Google Cloud project and OAuth client** and reuse its Client ID/Secret for every Google credential in Agent-Int. Enable all the APIs you'll use and add all their scopes to the consent screen — each Agent-Int integration still only requests its own scopes during authorization, so a Calendar credential never gets Gmail access. Or create separate projects per product if you prefer strict separation.
@@ -40,6 +41,7 @@ You can create a **single Google Cloud project and OAuth client** and reuse its 
    - **Google Docs API** (for Docs)
    - **Google Sheets API** (for Sheets)
    - **Google Drive API** (for Google Drive — including knowledge base imports)
+   - **Google Forms API** (for the Google Forms app trigger)
    - For the Workspace integration: whatever APIs your scopes belong to (e.g. **Google Drive API** for Drive scopes)
 
 Calls to an API that isn't enabled fail even when the scope was granted — enabling the API and granting the scope are two separate things.
@@ -81,3 +83,10 @@ While the consent screen is in _Testing_ status, Google expires refresh tokens a
 ::: warning Gmail grants full mailbox access
 The Gmail integration requests full Gmail scopes — an agent holding it can read, send, and delete mail in the authorized account. Attach it only to agents you trust, and consider a dedicated mailbox for automation.
 :::
+
+## App triggers
+
+A Gmail credential can fire a workflow when a **new email arrives** (push via Google Cloud Pub/Sub), and a Google Forms credential can fire one when a **new response is submitted** (polling). The one-time Pub/Sub setup, the form-id and label parameters, and the payload shapes live on the dedicated trigger pages:
+
+- [Gmail app trigger](/integrations/triggers/gmail) — needs a one-time Pub/Sub topic + push subscription; `gmail.readonly` is enough for the trigger.
+- [Google Forms app trigger](/integrations/triggers/google-forms) — create the credential like the others above (same OAuth client; **enable the Google Forms API** in Step 2), then point the trigger at a form id.
