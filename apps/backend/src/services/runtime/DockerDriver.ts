@@ -1,4 +1,5 @@
-import { mkdirSync, chownSync, chmodSync, rmSync } from 'fs';
+import { mkdirSync, chownSync, chmodSync, rmSync, readFileSync } from 'fs';
+import { hostname } from 'os';
 import { join } from 'path';
 import { PassThrough } from 'stream';
 import Docker from 'dockerode';
@@ -40,11 +41,15 @@ export class DockerDriver implements ExecutionDriver {
 	private readonly docker: Docker;
 	private readonly image: string;
 	private readonly proxyHost: string;
-	private readonly networkOpen: string;
-	private readonly networkInternal: string;
+	// Network + workspace identifiers are resolved from env at construction, then
+	// reconciled against the backend's OWN container at init() (autoConfigureFromSelf)
+	// — they are not readonly because a renaming orchestrator (e.g. Coolify) may
+	// give the live resources different names than the env defaults.
+	private networkOpen: string;
+	private networkInternal: string;
 	private readonly addHostGateway: boolean;
-	private readonly workspaceVolume: string | undefined;
-	private readonly workspaceHostPath: string | undefined;
+	private workspaceVolume: string | undefined;
+	private workspaceHostPath: string | undefined;
 	private readonly memoryLimitBytes: number;
 	private readonly nanoCpus: number;
 	private readonly pidsLimit: number;
@@ -75,10 +80,21 @@ export class DockerDriver implements ExecutionDriver {
 	}
 
 	async init(workspacesBasePath?: string): Promise<void> {
+		// Reconcile the env-configured volume/network names against the resources the
+		// backend's OWN container is actually attached to. A renaming orchestrator
+		// (Coolify, Dokploy) rewrites compose volume/network names to project-scoped
+		// ones, so the hardcoded env defaults would point at the wrong (or empty,
+		// auto-created) resources. Self-detection makes the driver correct everywhere.
+		if (workspacesBasePath) {
+			await this.autoConfigureFromSelf(workspacesBasePath);
+		}
+
 		if (!this.workspaceVolume && !this.workspaceHostPath) {
 			throw new Error(
-				'[runtime:docker] AGENT_RUNTIME_WORKSPACE_VOLUME (production, named volume with subpath mounts) ' +
-					'or AGENT_RUNTIME_WORKSPACE_HOST_PATH (dev, host bind mounts) must be set when AGENT_RUNTIME_DRIVER=docker',
+				'[runtime:docker] could not determine the agent workspace storage: set ' +
+					'AGENT_RUNTIME_WORKSPACE_VOLUME (production, named volume with subpath mounts) ' +
+					'or AGENT_RUNTIME_WORKSPACE_HOST_PATH (dev, host bind mounts), or run the backend ' +
+					'as a container so the workspace mount can be auto-detected',
 			);
 		}
 
@@ -286,6 +302,131 @@ export class DockerDriver implements ExecutionDriver {
 		});
 		await Promise.all(killAll);
 		this.liveContainers.clear();
+	}
+
+	/**
+	 * Reconcile the env-configured workspace volume + runtime network names against
+	 * the resources the backend's OWN container is actually attached to.
+	 *
+	 * Orchestrators that rename compose resources (Coolify rewrites volumes to
+	 * `<project-uuid>_<key>`, leaving the env defaults pointing at the wrong — or an
+	 * empty, auto-created — volume/network) would otherwise silently break every
+	 * spawn. For each value we trust the configured name only when the backend is
+	 * really attached to it; otherwise we substitute the real one. Best-effort: any
+	 * failure logs a warning and leaves the configured names untouched.
+	 */
+	private async autoConfigureFromSelf(workspacesBasePath: string): Promise<void> {
+		let info: Docker.ContainerInspectInfo;
+		try {
+			info = await this.docker.getContainer(this.resolveSelfContainerId()).inspect();
+		} catch (err) {
+			logger.warn(
+				{ err },
+				'[runtime:docker] could not inspect own container — keeping env-configured volume/network names',
+			);
+			return;
+		}
+
+		// Workspace storage: whatever volume/bind backs the workspaces base path.
+		const mount = (info.Mounts ?? []).find((m) => m.Destination === workspacesBasePath);
+		if (!mount) {
+			logger.warn(
+				{ workspacesBasePath },
+				'[runtime:docker] no mount at the workspaces base path on the backend container — keeping env-configured workspace storage',
+			);
+		} else if (mount.Type === 'volume' && mount.Name) {
+			if (this.workspaceVolume !== mount.Name) {
+				logger.warn(
+					{ configured: this.workspaceVolume ?? null, detected: mount.Name, workspacesBasePath },
+					'[runtime:docker] workspace volume auto-detected from the backend mount (overriding AGENT_RUNTIME_WORKSPACE_VOLUME)',
+				);
+			}
+			this.workspaceVolume = mount.Name;
+			this.workspaceHostPath = undefined;
+		} else if (mount.Type === 'bind') {
+			if (this.workspaceHostPath !== mount.Source) {
+				logger.warn(
+					{ configured: this.workspaceHostPath ?? null, detected: mount.Source, workspacesBasePath },
+					'[runtime:docker] workspace host path auto-detected from the backend mount (overriding AGENT_RUNTIME_WORKSPACE_HOST_PATH)',
+				);
+			}
+			this.workspaceHostPath = mount.Source;
+			this.workspaceVolume = undefined;
+		}
+
+		// Runtime networks: the open + internal nets the backend itself is on.
+		const attached = Object.keys(info.NetworkSettings?.Networks ?? {});
+		this.networkOpen = await this.resolveRuntimeNetwork(attached, this.networkOpen, false);
+		this.networkInternal = await this.resolveRuntimeNetwork(attached, this.networkInternal, true);
+
+		logger.info(
+			{
+				workspaceVolume: this.workspaceVolume ?? null,
+				workspaceHostPath: this.workspaceHostPath ?? null,
+				networkOpen: this.networkOpen,
+				networkInternal: this.networkInternal,
+			},
+			'[runtime:docker] resolved runtime resources from backend container',
+		);
+	}
+
+	/**
+	 * Best-effort discovery of this backend container's id for a self-inspect.
+	 * Primary: the 64-hex id in /proc/self/mountinfo (the /etc/hostname, /etc/hosts
+	 * and /etc/resolv.conf binds live under /var/lib/docker/containers/<id>/...).
+	 * Fallback: the hostname, which Docker sets to the short container id by default.
+	 */
+	private resolveSelfContainerId(): string {
+		try {
+			const mountinfo = readFileSync('/proc/self/mountinfo', 'utf8');
+			const match = mountinfo.match(/\/containers\/([0-9a-f]{64})\//);
+			if (match) return match[1];
+		} catch {
+			// /proc unavailable (non-Linux dev) — fall through to the hostname.
+		}
+		return hostname();
+	}
+
+	/**
+	 * Pick the runtime network of the requested kind from the nets the backend is
+	 * attached to. Trust the configured name when the backend is on it; otherwise
+	 * classify the remaining attachments by their Internal flag (+ name hints),
+	 * never selecting the app's default network (shared with other services). Falls
+	 * back to the configured name when nothing matches (ensureNetwork creates it).
+	 */
+	private async resolveRuntimeNetwork(
+		attached: string[],
+		configured: string,
+		wantInternal: boolean,
+	): Promise<string> {
+		if (attached.includes(configured)) return configured;
+
+		for (const name of attached) {
+			if (name === 'bridge' || name === 'host' || name === 'none') continue;
+			if (/(^|[_-])default$/i.test(name)) continue;
+			if (wantInternal && !/internal|runtime|agent/i.test(name)) continue;
+			if (!wantInternal && (!/runtime|agent/i.test(name) || /internal/i.test(name))) continue;
+
+			let isInternal: boolean;
+			try {
+				isInternal = (await this.docker.getNetwork(name).inspect()).Internal === true;
+			} catch {
+				continue;
+			}
+			if (isInternal !== wantInternal) continue;
+
+			logger.warn(
+				{ configured, detected: name, wantInternal },
+				'[runtime:docker] runtime network auto-detected from backend attachments (overriding env)',
+			);
+			return name;
+		}
+
+		logger.warn(
+			{ configured, wantInternal, attached },
+			'[runtime:docker] no matching runtime network among backend attachments — keeping configured name (ensureNetwork creates it if missing)',
+		);
+		return configured;
 	}
 
 	/**
