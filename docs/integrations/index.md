@@ -10,7 +10,7 @@ Every OAuth2 integration requires registering the same redirect URI in the provi
 
 ## App triggers
 
-Some integrations can also **start a [workflow](/guide/workflows)** when something happens in the app — a new email, a database change, a form response, a chat message. See [App Triggers](/integrations/triggers/) for the full list, or jump to one:
+Some integrations can also **start a [workflow](/guide/workflows/)** when something happens in the app — a new email, a database change, a form response, a chat message. See [App Triggers](/integrations/triggers/) for the full list, or jump to one:
 
 | Trigger                                              | Fires on                         | Delivery |
 | ---------------------------------------------------- | -------------------------------- | -------- |

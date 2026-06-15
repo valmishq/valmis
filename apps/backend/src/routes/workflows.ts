@@ -8,17 +8,27 @@ import { TriggerService } from '../services/TriggerService.js';
 import type { AppTriggerManager } from '../services/triggers/AppTriggerManager.js';
 import { requireAuth } from '../middleware/auth.js';
 import { logger } from '../config/logger.js';
-import type { WorkflowStep, WorkflowTriggerInput } from '@repo/types';
+import type { WorkflowStep, WorkflowNode, WorkflowEdge, WorkflowTriggerInput } from '@repo/types';
 
 /**
  * Turns a Zod path into a human-readable, path-annotated message.
- * Step array paths are made friendly ("steps.0.name" → "Step 1 → name") so users
- * can locate the problem. Kept in sync with the client builder's pre-validation.
+ * Step/node array paths are made friendly ("steps.0.name" → "Step 1 → name",
+ * "nodes.2.data.instruction" → "Step → instruction") so users can locate the
+ * problem. Kept in sync with the client builder's pre-validation.
  */
 function readableIssue(path: PropertyKey[], message: string): string {
 	const joined = path.join('.');
-	const friendly = joined.replace(/^steps\.(\d+)\.?/, (_m, i) => `Step ${Number(i) + 1} → `);
-	return friendly ? `${friendly}${message}` : message;
+	if (/^steps\.\d+/.test(joined)) {
+		const friendly = joined.replace(/^steps\.(\d+)\.?/, (_m, i) => `Step ${Number(i) + 1} → `);
+		return `${friendly}${message}`;
+	}
+	if (/^nodes\.\d+\.data/.test(joined)) {
+		return `Step → ${joined.replace(/^nodes\.\d+\.data\.?/, '')}${message}`;
+	}
+	if (/^nodes\b/.test(joined) || /^edges\b/.test(joined)) {
+		return message;
+	}
+	return joined ? `${joined}${message}` : message;
 }
 
 /**
@@ -86,10 +96,12 @@ export function createWorkflowsRouter(
 			return;
 		}
 		const { agentId } = req.params as { agentId: string };
-		const { name, description, steps, isEnabled, trigger } = req.body as {
+		const { name, description, steps, nodes, edges, isEnabled, trigger } = req.body as {
 			name: string;
 			description?: string;
-			steps: WorkflowStep[];
+			steps?: WorkflowStep[];
+			nodes?: WorkflowNode[];
+			edges?: WorkflowEdge[];
 			isEnabled?: boolean;
 			trigger?: WorkflowTriggerInput;
 		};
@@ -101,6 +113,8 @@ export function createWorkflowsRouter(
 				name,
 				description,
 				steps,
+				nodes,
+				edges,
 				isEnabled,
 				trigger,
 			});
@@ -174,10 +188,12 @@ export function createWorkflowsRouter(
 			return;
 		}
 		const { id } = req.params as { id: string };
-		const { name, description, steps, isEnabled, trigger } = req.body as {
+		const { name, description, steps, nodes, edges, isEnabled, trigger } = req.body as {
 			name?: string;
 			description?: string;
 			steps?: WorkflowStep[];
+			nodes?: WorkflowNode[];
+			edges?: WorkflowEdge[];
 			isEnabled?: boolean;
 			trigger?: WorkflowTriggerInput;
 		};
@@ -197,6 +213,8 @@ export function createWorkflowsRouter(
 				name,
 				description,
 				steps,
+				nodes,
+				edges,
 				isEnabled,
 				trigger,
 			});

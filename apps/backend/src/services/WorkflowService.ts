@@ -2,10 +2,18 @@ import { eq, and, desc, inArray } from 'drizzle-orm';
 import { randomBytes } from 'crypto';
 import { db } from '../db/index.js';
 import { workflows, agents, agentTriggers } from '../db/schema/index.js';
-import { validateWorkflowCreate, validateWorkflowUpdate } from '@repo/utils';
+import {
+	validateWorkflowCreate,
+	validateWorkflowUpdate,
+	ensureGraph,
+	stepsToGraph,
+	graphToSteps,
+} from '@repo/utils';
 import type {
 	Workflow,
 	WorkflowStep,
+	WorkflowNode,
+	WorkflowEdge,
 	WorkflowTriggerInput,
 	AgentTrigger,
 	AgentTriggerKind,
@@ -36,10 +44,7 @@ function rowToTrigger(row: typeof agentTriggers.$inferSelect): AgentTrigger {
 }
 
 /** Surface app-trigger registration status from the runtime state column (app triggers only). */
-function appRegistrationFromState(
-	kind: string,
-	state: unknown,
-): AgentTrigger['appRegistration'] {
+function appRegistrationFromState(kind: string, state: unknown): AgentTrigger['appRegistration'] {
 	if (kind !== 'app' || !state || typeof state !== 'object') return undefined;
 	const s = state as {
 		registeredAt?: string;
@@ -57,6 +62,13 @@ function appRegistrationFromState(
 }
 
 function rowToWorkflow(row: typeof workflows.$inferSelect, trigger?: AgentTrigger): Workflow {
+	// Synthesize a graph from legacy steps when the graph columns are still empty
+	// (rows created before the graph migration/backfill), so every read returns a graph.
+	const graph = ensureGraph({
+		nodes: row.nodes as WorkflowNode[],
+		edges: row.edges as WorkflowEdge[],
+		steps: row.steps as WorkflowStep[],
+	});
 	return {
 		id: row.id,
 		agentId: row.agentId,
@@ -64,6 +76,8 @@ function rowToWorkflow(row: typeof workflows.$inferSelect, trigger?: AgentTrigge
 		name: row.name,
 		description: row.description ?? undefined,
 		steps: row.steps as WorkflowStep[],
+		nodes: graph.nodes,
+		edges: graph.edges,
 		isEnabled: row.isEnabled,
 		trigger,
 		createdAt: row.createdAt,
@@ -141,17 +155,32 @@ export class WorkflowService {
 		ownerId: string;
 		name: string;
 		description?: string;
-		steps: WorkflowStep[];
+		steps?: WorkflowStep[];
+		nodes?: WorkflowNode[];
+		edges?: WorkflowEdge[];
 		isEnabled?: boolean;
 		trigger?: WorkflowTriggerInput;
 	}): Promise<Workflow> {
-		// Validate workflow input through Zod — throws ZodError on invalid data
+		// Normalize to a graph (authoritative). Legacy callers may send `steps` only.
+		const inputGraph =
+			input.nodes && input.nodes.length > 0
+				? { nodes: input.nodes, edges: input.edges ?? [] }
+				: stepsToGraph(input.steps ?? []);
+
+		// Validate through Zod — throws ZodError on invalid data (applies step defaults).
+		// The derived steps projection satisfies the legacy rule path for graph payloads.
 		const validated = validateWorkflowCreate({
 			name: input.name,
 			description: input.description,
-			steps: input.steps,
+			nodes: inputGraph.nodes,
+			edges: inputGraph.edges,
+			steps: graphToSteps(inputGraph.nodes, inputGraph.edges),
 			isEnabled: input.isEnabled,
 		});
+
+		const nodes = (validated.nodes ?? inputGraph.nodes) as WorkflowNode[];
+		const edges = (validated.edges ?? inputGraph.edges) as WorkflowEdge[];
+		const steps = graphToSteps(nodes, edges);
 
 		const now = new Date();
 		const [workflowRow] = await db
@@ -161,7 +190,9 @@ export class WorkflowService {
 				ownerId: input.ownerId,
 				name: validated.name,
 				description: validated.description ?? null,
-				steps: validated.steps as WorkflowStep[],
+				steps,
+				nodes,
+				edges,
 				isEnabled: validated.isEnabled,
 				createdAt: now,
 				updatedAt: now,
@@ -344,6 +375,8 @@ export class WorkflowService {
 			name?: string;
 			description?: string;
 			steps?: WorkflowStep[];
+			nodes?: WorkflowNode[];
+			edges?: WorkflowEdge[];
 			isEnabled?: boolean;
 			trigger?: WorkflowTriggerInput;
 		},
@@ -351,13 +384,36 @@ export class WorkflowService {
 		const existing = await this.getById(id, ownerId);
 		if (!existing) return null;
 
-		// Validate the update payload
-		const validated = validateWorkflowUpdate(input);
+		// Normalize an incoming graph (or legacy steps) to nodes+edges. Left undefined
+		// when the caller updates only name/isEnabled/trigger (partial update — the
+		// existing graph is preserved untouched).
+		let normalizedNodes: WorkflowNode[] | undefined;
+		let normalizedEdges: WorkflowEdge[] | undefined;
+		if (input.nodes && input.nodes.length > 0) {
+			normalizedNodes = input.nodes;
+			normalizedEdges = input.edges ?? [];
+		} else if (input.steps && input.steps.length > 0) {
+			const g = stepsToGraph(input.steps);
+			normalizedNodes = g.nodes;
+			normalizedEdges = g.edges;
+		}
+
+		// Validate the update payload (applies step defaults)
+		const validated = validateWorkflowUpdate({
+			name: input.name,
+			description: input.description,
+			nodes: normalizedNodes,
+			edges: normalizedEdges,
+			steps: normalizedNodes ? graphToSteps(normalizedNodes, normalizedEdges ?? []) : undefined,
+			isEnabled: input.isEnabled,
+		});
 
 		const workflowUpdates: Partial<{
 			name: string;
 			description: string | null;
 			steps: WorkflowStep[];
+			nodes: WorkflowNode[];
+			edges: WorkflowEdge[];
 			isEnabled: boolean;
 			updatedAt: Date;
 		}> = { updatedAt: new Date() };
@@ -365,7 +421,15 @@ export class WorkflowService {
 		if (validated.name !== undefined) workflowUpdates.name = validated.name;
 		if (validated.description !== undefined)
 			workflowUpdates.description = validated.description ?? null;
-		if (validated.steps !== undefined) workflowUpdates.steps = validated.steps as WorkflowStep[];
+		// Graph is authoritative: when provided, persist nodes/edges and re-derive the
+		// legacy steps projection from them so all three columns stay consistent.
+		const validatedNodes = (validated.nodes ?? normalizedNodes) as WorkflowNode[] | undefined;
+		if (validatedNodes !== undefined) {
+			const finalEdges = (validated.edges ?? normalizedEdges ?? []) as WorkflowEdge[];
+			workflowUpdates.nodes = validatedNodes;
+			workflowUpdates.edges = finalEdges;
+			workflowUpdates.steps = graphToSteps(validatedNodes, finalEdges);
+		}
 		if (validated.isEnabled !== undefined) workflowUpdates.isEnabled = validated.isEnabled;
 
 		await db

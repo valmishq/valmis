@@ -18,6 +18,7 @@ import type {
 	WorkflowStepLogStatus,
 	WorkflowSummary,
 	Workflow,
+	WorkflowSpec,
 } from '@repo/types';
 
 /**
@@ -407,13 +408,16 @@ export class ProxyClient {
 	async createWorkflow(input: {
 		name: string;
 		description?: string;
-		steps: Array<{
+		/** Linear sequence of steps. Provide this OR `graph` (for branching/looping). */
+		steps?: Array<{
 			name: string;
 			instruction: string;
 			allowedTools?: string[];
 			allowedCredentialIds?: string[];
 			errorHandlingAction?: 'stop' | 'continue' | 'retry';
 		}>;
+		/** High-level graph spec for branching (conditions) and loops. */
+		graph?: WorkflowSpec;
 		trigger?: {
 			kind?: 'manual' | 'cron' | 'webhook';
 			name?: string;

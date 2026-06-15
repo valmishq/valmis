@@ -41,7 +41,10 @@ export class ProcessDriver implements ExecutionDriver {
 		this.proxyHostUrl = `http://localhost:${backendPort}`;
 	}
 
-	async init(): Promise<void> {
+	async init(_workspacesBasePath?: string): Promise<void> {
+		// The process driver shares the backend's filesystem, so there is no
+		// cross-mount workspace contract to verify — the param is accepted only
+		// to satisfy the ExecutionDriver interface.
 		logger.info({ entry: this.agentRuntimeEntry }, '[runtime:process] driver initialised');
 	}
 

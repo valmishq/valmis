@@ -51,11 +51,21 @@ services:
       # Persist per-agent workspaces across container restarts
       - agent_workspaces:/opt/agent-workspaces
     networks:
-      - default
+      # gw_priority pins this container's default route to the egress-capable
+      # `default` NAT bridge. The app is also attached to agent_runtime_internal
+      # (internal: true, NO internet egress) so locked-down agents can reach the
+      # backend proxy — without an explicit priority Docker may pick that internal
+      # network as the default gateway, which breaks the backend's OWN outbound
+      # calls (credential test, OAuth token refresh, cloud-storage import) with
+      # EHOSTUNREACH. Highest gw_priority wins. Requires Docker Engine >= 28.0.
+      default:
+        gw_priority: 100
       # The app must be reachable from BOTH runtime networks so locked-down
       # (internal) runtimes can still call the backend proxy endpoints
-      - agent_runtime
-      - agent_runtime_internal
+      agent_runtime:
+        gw_priority: 50
+      agent_runtime_internal:
+        gw_priority: 0
     depends_on:
       postgres:
         condition: service_healthy

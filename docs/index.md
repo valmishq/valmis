@@ -32,7 +32,7 @@ features:
   - icon: ⚙️
     title: Automated workflows
     details: Chain agent steps into multi-stage pipelines triggered manually, on a cron schedule, by signed webhooks, or by app events (new email, Notion change, form submission) — with run history and live step logs.
-    link: /guide/workflows
+    link: /guide/workflows/
   - icon: 💬
     title: Telegram & Discord channels
     details: Pair an agent with your own Telegram or Discord bot and talk to it from your phone. Human-in-the-loop prompts arrive as tappable buttons.

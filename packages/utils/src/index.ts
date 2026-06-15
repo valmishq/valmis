@@ -25,3 +25,16 @@ export type { SkillBundleFile, ParsedSkillMarkdown } from './skills/registry.js'
 
 export { validateWorkflowCreate, validateWorkflowUpdate } from './workflow/validator.js';
 export type { ValidatedWorkflowCreate, ValidatedWorkflowUpdate } from './workflow/validator.js';
+
+export {
+	stepsToGraph,
+	graphToSteps,
+	ensureGraph,
+	specToGraph,
+	hasCycle,
+	isLoopBackEdge,
+	TRIGGER_NODE_ID,
+} from './workflow/graph.js';
+
+export { evalFilter, isUnaryOperator } from './workflow/filter.js';
+export type { TemplateResolver } from './workflow/filter.js';

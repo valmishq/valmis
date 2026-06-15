@@ -1,6 +1,6 @@
 # Slack App Trigger
 
-Fire a [workflow](/guide/workflows) when a message is posted to a channel the app is subscribed to (via the Slack **Events API**).
+Fire a [workflow](/guide/workflows/) when a message is posted to a channel the app is subscribed to (via the Slack **Events API**).
 
 | | |
 | --------------- | ------------------------------------------------------------------ |

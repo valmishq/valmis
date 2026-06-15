@@ -53,7 +53,7 @@ Use **Off** for agents that handle sensitive data or run untrusted instructions.
 
 | Action        | Where it goes                                 |
 | ------------- | --------------------------------------------- |
-| **Workflows** | The agent's [workflow list](/guide/workflows) |
+| **Workflows** | The agent's [workflow list](/guide/workflows/) |
 | **Activity**  | Run history and cost dashboard (below)        |
 | **Memory**    | The [memory browser](/guide/memory)           |
 | **Edit**      | The agent form                                |

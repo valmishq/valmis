@@ -13,7 +13,8 @@
 		"@earendil-works/pi-agent-core": "^0.78.0",
 		"@earendil-works/pi-ai": "^0.78.0",
 		"@repo/types": "workspace:*",
-		"@repo/utils": "workspace:*"
+		"@repo/utils": "workspace:*",
+		"ajv": "^8.17.1"
 	},
 	"devDependencies": {
 		"@repo/tsconfig": "workspace:*",

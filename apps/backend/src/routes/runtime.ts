@@ -15,6 +15,7 @@ import { agentStreamBus } from '../services/AgentStreamBus.js';
 import { MessagePipeline } from '../channels/pipeline.js';
 import { WebAdapter } from '../channels/web/adapter.js';
 import { logger } from '../config/logger.js';
+import { specToGraph } from '@repo/utils';
 import type { AuthService } from '../services/AuthService.js';
 import type {
 	AgentThreadResponse,
@@ -38,6 +39,8 @@ import type {
 	ContentBlock,
 	WorkflowSummary,
 	WorkflowTriggerContext,
+	WorkflowSpec,
+	WorkflowStep,
 } from '@repo/types';
 
 /**
@@ -908,16 +911,17 @@ export function createRuntimeRouter(
 	 */
 	router.post('/internal/workflow/create', async (req: Request, res: Response) => {
 		const sandboxToken = (req as Request & { sandboxToken: SandboxTokenPayload }).sandboxToken;
-		const { name, description, steps, trigger } = req.body as {
+		const { name, description, steps, graph, trigger } = req.body as {
 			name: string;
 			description?: string;
-			steps: Array<{
+			steps?: Array<{
 				name: string;
 				instruction: string;
 				allowedTools?: string[];
 				allowedCredentialIds?: string[];
 				errorHandlingAction?: 'stop' | 'continue' | 'retry';
 			}>;
+			graph?: WorkflowSpec;
 			trigger?: {
 				kind?: 'cron' | 'webhook' | 'manual';
 				name?: string;
@@ -926,43 +930,65 @@ export function createRuntimeRouter(
 			};
 		};
 
-		if (!name || !steps || !Array.isArray(steps) || steps.length === 0) {
-			res.status(400).json({ success: false, error: 'name and at least one step are required' });
+		const hasGraph = !!graph && Array.isArray(graph.nodes) && graph.nodes.length > 0;
+		const hasSteps = Array.isArray(steps) && steps.length > 0;
+		if (!name || (!hasGraph && !hasSteps)) {
+			res.status(400).json({
+				success: false,
+				error: 'name and either `steps` (linear) or `graph` (branching/looping) are required',
+			});
 			return;
 		}
 
 		try {
-			// Map agent-provided step inputs to full WorkflowStep objects.
-			// UUIDs are generated here on the host so the sandbox cannot inject arbitrary IDs.
-			const { randomUUID } = await import('crypto');
-			const workflowSteps = steps.map((s) => ({
-				id: randomUUID(),
-				name: s.name,
-				instruction: s.instruction,
-				allowedTools: s.allowedTools ?? [],
-				allowedCredentialIds: s.allowedCredentialIds ?? [],
-				errorHandling: {
-					action: (s.errorHandlingAction ?? 'stop') as 'stop' | 'continue' | 'retry',
-				},
-			}));
+			// WorkflowService defaults the trigger to manual if omitted.
+			const triggerInput = trigger
+				? {
+						kind: trigger.kind,
+						name: trigger.name,
+						config: trigger.config as import('@repo/types').AgentTriggerConfig | undefined,
+						description: trigger.description,
+					}
+				: undefined;
 
-			const workflow = await workflowService.create({
-				agentId: sandboxToken.agentId,
-				ownerId: sandboxToken.ownerId,
-				name,
-				description,
-				steps: workflowSteps,
-				isEnabled: true,
-				// Pass trigger info — WorkflowService defaults to manual if omitted
-				trigger: trigger
-					? {
-							kind: trigger.kind,
-							name: trigger.name,
-							config: trigger.config as import('@repo/types').AgentTriggerConfig | undefined,
-							description: trigger.description,
-						}
-					: undefined,
-			});
+			let workflow;
+			if (hasGraph) {
+				// High-level spec → real node/edge graph. UUIDs are generated host-side by
+				// specToGraph, which also wires handles, the loop back-edge, and positions.
+				const { nodes, edges } = specToGraph(graph!);
+				workflow = await workflowService.create({
+					agentId: sandboxToken.agentId,
+					ownerId: sandboxToken.ownerId,
+					name,
+					description,
+					nodes,
+					edges,
+					isEnabled: true,
+					trigger: triggerInput,
+				});
+			} else {
+				// Linear steps — host generates UUIDs so the sandbox cannot inject arbitrary IDs.
+				const { randomUUID } = await import('crypto');
+				const workflowSteps: WorkflowStep[] = steps!.map((s) => ({
+					id: randomUUID(),
+					name: s.name,
+					instruction: s.instruction,
+					allowedTools: s.allowedTools ?? [],
+					allowedCredentialIds: s.allowedCredentialIds ?? [],
+					errorHandling: {
+						action: (s.errorHandlingAction ?? 'stop') as 'stop' | 'continue' | 'retry',
+					},
+				}));
+				workflow = await workflowService.create({
+					agentId: sandboxToken.agentId,
+					ownerId: sandboxToken.ownerId,
+					name,
+					description,
+					steps: workflowSteps,
+					isEnabled: true,
+					trigger: triggerInput,
+				});
+			}
 
 			// Schedule the cron job immediately if the trigger is of kind 'cron'.
 			// WorkflowService cannot do this itself (circular dep with TriggerService),
@@ -996,7 +1022,10 @@ export function createRuntimeRouter(
 					id: w.id,
 					name: w.name,
 					description: w.description,
-					stepCount: w.steps.length,
+					stepCount: w.nodes.filter((n) => n.type === 'agent').length,
+					conditionCount: w.nodes.filter((n) => n.type === 'condition').length,
+					loopCount: w.nodes.filter((n) => n.type === 'loop').length,
+					triggerKind: w.trigger?.kind,
 					isEnabled: w.isEnabled,
 				}));
 			res.json({ success: true, data: summaries });
@@ -1252,9 +1281,7 @@ export function createRuntimeRouter(
 			// The skill must actually be assigned to this agent
 			const assigned = await skillService.getAgentSkills(sandboxToken.agentId);
 			if (!assigned.includes(body.skillName)) {
-				res
-					.status(404)
-					.json({ success: false, error: 'Skill is not assigned to this agent' });
+				res.status(404).json({ success: false, error: 'Skill is not assigned to this agent' });
 				return;
 			}
 

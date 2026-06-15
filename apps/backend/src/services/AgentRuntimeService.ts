@@ -165,7 +165,9 @@ export class AgentRuntimeService {
 
 	/** Validate driver configuration and reap orphaned runs. Call once at backend startup. */
 	async init(): Promise<void> {
-		await this.driver.init();
+		// Pass the backend-side workspaces base path so the docker driver can verify
+		// at boot that it resolves to the same physical storage as its workspace volume.
+		await this.driver.init(this.workspacesBasePath);
 	}
 
 	/** Kill all live runs. Call on backend shutdown (SIGTERM/SIGINT). */

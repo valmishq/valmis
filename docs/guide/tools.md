@@ -49,7 +49,7 @@ In Docker-sandboxed deployments these run inside the per-turn container; whether
 
 ## Workflows
 
-Agents can inspect and operate their own [workflows](/guide/workflows):
+Agents can inspect and operate their own [workflows](/guide/workflows/):
 
 | Tool               | What it does                                                                                                                                                  |
 | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |

@@ -1,6 +1,6 @@
 # Notion App Trigger
 
-Fire a [workflow](/guide/workflows) when a page in a chosen database is **created or has its properties updated** (e.g. a status change). Notion delivers these as webhook events; the subscription is created in the Notion integration UI (Notion has no API to create it), but verification and routing are automatic.
+Fire a [workflow](/guide/workflows/) when a page in a chosen database is **created or has its properties updated** (e.g. a status change). Notion delivers these as webhook events; the subscription is created in the Notion integration UI (Notion has no API to create it), but verification and routing are automatic.
 
 | | |
 | --------------- | ------------------------------------------------------------------ |

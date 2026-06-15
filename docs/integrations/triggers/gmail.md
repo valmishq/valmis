@@ -1,6 +1,6 @@
 # Gmail App Trigger
 
-Fire a [workflow](/guide/workflows) when a new email arrives. Gmail pushes notifications through **Google Cloud Pub/Sub** rather than polling, so it needs a one-time Pub/Sub setup in the same Cloud project as your Gmail credential.
+Fire a [workflow](/guide/workflows/) when a new email arrives. Gmail pushes notifications through **Google Cloud Pub/Sub** rather than polling, so it needs a one-time Pub/Sub setup in the same Cloud project as your Gmail credential.
 
 | | |
 | --------------- | ------------------------------------------------------------------ |

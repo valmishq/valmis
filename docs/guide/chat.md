@@ -12,7 +12,7 @@ Go to **Chat** and pick an agent (each conversation belongs to exactly one agent
 - **Rename** — threads get an auto-generated title after your second message; you can rename them any time from the thread menu.
 - **Pin** — pinned threads sort to the top of the sidebar.
 - **Delete** — removes the thread and its messages.
-- **Workflow thread filter** — threads created by [workflow runs](/guide/workflows) are hidden by default; a toggle in the sidebar shows them, marked with a `workflow` badge.
+- **Workflow thread filter** — threads created by [workflow runs](/guide/workflows/) are hidden by default; a toggle in the sidebar shows them, marked with a `workflow` badge.
 
 ## What you see during a turn
 

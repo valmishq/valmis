@@ -1,4 +1,4 @@
-import { mkdirSync, chownSync, chmodSync } from 'fs';
+import { mkdirSync, chownSync, chmodSync, rmSync } from 'fs';
 import { join } from 'path';
 import { PassThrough } from 'stream';
 import Docker from 'dockerode';
@@ -74,7 +74,7 @@ export class DockerDriver implements ExecutionDriver {
 		this.dockerRuntime = process.env.AGENT_RUNTIME_DOCKER_RUNTIME;
 	}
 
-	async init(): Promise<void> {
+	async init(workspacesBasePath?: string): Promise<void> {
 		if (!this.workspaceVolume && !this.workspaceHostPath) {
 			throw new Error(
 				'[runtime:docker] AGENT_RUNTIME_WORKSPACE_VOLUME (production, named volume with subpath mounts) ' +
@@ -136,6 +136,13 @@ export class DockerDriver implements ExecutionDriver {
 		await this.ensureNetwork(this.networkOpen, false);
 		await this.ensureNetwork(this.networkInternal, true);
 		await this.reapOrphans();
+
+		// Verify the cross-mount workspace contract before serving any turn, so a
+		// misconfigured volume fails the boot with a clear message instead of a
+		// cryptic per-message 404 (and silently broken skill materialization).
+		if (workspacesBasePath) {
+			await this.verifyWorkspaceContract(workspacesBasePath);
+		}
 
 		logger.info(
 			{
@@ -279,6 +286,71 @@ export class DockerDriver implements ExecutionDriver {
 		});
 		await Promise.all(killAll);
 		this.liveContainers.clear();
+	}
+
+	/**
+	 * Boot-time self-check for the named-volume workspace model.
+	 *
+	 * The backend writes each agent's workspace (and materialized skills) to
+	 * <workspacesBasePath>/<agentId> via its OWN volume mount, while runtime
+	 * containers mount only <volume>/<agentId> as a subpath. Both MUST be the
+	 * same physical volume or the daemon's subpath lookup fails with
+	 * "cannot access path ... no such file or directory" on every spawn (and
+	 * skill files silently never reach the runtime).
+	 *
+	 * This verifies the contract once at startup by creating a probe directory
+	 * via the backend mount and round-tripping a throwaway container that mounts
+	 * the same path as a volume subpath. Only relevant to the volume model — the
+	 * dev host-path bind model shares the host filesystem directly.
+	 */
+	private async verifyWorkspaceContract(workspacesBasePath: string): Promise<void> {
+		if (!this.workspaceVolume) return;
+
+		const PROBE_SUBPATH = '.contract-probe';
+		const probeDir = join(workspacesBasePath, PROBE_SUBPATH);
+		let container: Docker.Container | undefined;
+		try {
+			mkdirSync(probeDir, { recursive: true });
+			container = await this.docker.createContainer({
+				Image: this.image,
+				Cmd: ['/bin/true'],
+				Labels: { [RUNTIME_LABEL]: 'true' },
+				HostConfig: { Mounts: [this.buildWorkspaceMount(PROBE_SUBPATH)] },
+			});
+			await container.start();
+			await container.wait();
+			logger.info(
+				{ workspacesBasePath, workspaceVolume: this.workspaceVolume },
+				'[runtime:docker] workspace volume contract verified',
+			);
+		} catch (err) {
+			const message = err instanceof Error ? err.message : String(err);
+			if (/cannot access path|no such file or directory/i.test(message)) {
+				throw new Error(
+					'[runtime:docker] workspace volume contract is broken: the backend writes agent ' +
+						`workspaces to "${workspacesBasePath}" (AGENT_WORKSPACES_PATH) but runtime containers ` +
+						`mount subpaths of docker volume "${this.workspaceVolume}" ` +
+						'(AGENT_RUNTIME_WORKSPACE_VOLUME) — these must resolve to the SAME physical volume. ' +
+						'The probe directory created by the backend was not visible to the daemon inside the ' +
+						`volume. Ensure the app service mounts volume "${this.workspaceVolume}" at ` +
+						`"${workspacesBasePath}" (original error: ${message})`,
+				);
+			}
+			throw new Error(`[runtime:docker] workspace volume contract self-check failed: ${message}`);
+		} finally {
+			if (container) {
+				try {
+					await container.remove({ force: true });
+				} catch {
+					// Already gone (e.g. wait() completed and it was reaped) — nothing to do.
+				}
+			}
+			try {
+				rmSync(probeDir, { recursive: true, force: true });
+			} catch {
+				// Best-effort cleanup — a leftover empty probe dir is harmless.
+			}
+		}
 	}
 
 	/**

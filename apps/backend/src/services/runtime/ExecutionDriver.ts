@@ -60,8 +60,13 @@ export interface ExecutionDriver {
 	 * networks exist), and reap any orphaned execution units from a previous
 	 * backend run. Must throw with a clear operator-facing message on
 	 * misconfiguration so the backend fails fast at boot.
+	 *
+	 * `workspacesBasePath` is the backend-side base directory for per-agent
+	 * workspaces (AGENT_WORKSPACES_PATH). The docker driver uses it to verify,
+	 * at boot, that this path and its workspace volume resolve to the same
+	 * physical storage (see DockerDriver). Other drivers may ignore it.
 	 */
-	init(): Promise<void>;
+	init(workspacesBasePath?: string): Promise<void>;
 	/**
 	 * Ensure the per-agent workspace directory exists with the ownership the
 	 * runtime user needs. Called by AgentRuntimeService before every spawn.

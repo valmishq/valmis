@@ -42,8 +42,9 @@ export interface WorkflowStep {
 	/**
 	 * Optional template string for data from prior steps or the trigger payload.
 	 * Interpolated before the instruction is sent to the LLM.
-	 * Variables: {{trigger.payload}}, {{steps.<stepIndex>.output}}
-	 * If omitted, the runner automatically appends the previous step's output.
+	 * Variables: {{trigger.payload}}, {{steps.<nodeId>.output}} (and the legacy
+	 * {{steps.<stepIndex>.output}} alias, still supported for older workflows).
+	 * If omitted, the runner automatically feeds the predecessor node's output.
 	 */
 	inputMapping?: string;
 
@@ -84,6 +85,206 @@ export interface WorkflowStep {
 	errorHandling: WorkflowStepErrorHandling;
 }
 
+// ─── Graph Model: Nodes & Edges ───────────────────────────────────────────────
+
+/**
+ * The kind of a node in the workflow graph.
+ * - 'trigger': the single entry node. Its config lives on the workflow's trigger
+ *   (a separate AgentTrigger entity); this node is a visual anchor only.
+ * - 'agent': an agent step — a full agent turn. `data` is a WorkflowStep.
+ * - 'condition': branches the flow to a 'true' or 'false' output.
+ * - 'loop': iterates a body subgraph over items or while a condition holds.
+ */
+export type WorkflowNodeType = 'trigger' | 'agent' | 'condition' | 'loop';
+
+/** Canvas position of a node (Svelte Flow coordinate space). */
+export interface WorkflowNodePosition {
+	x: number;
+	y: number;
+}
+
+// ── Condition filter (used by condition nodes and loop while-conditions) ──
+
+/**
+ * Comparison operators for a single condition.
+ * The unary operators (isEmpty/isNotEmpty/isTrue/isFalse/exists/notExists)
+ * ignore the `right` operand.
+ */
+export type FilterOperator =
+	| 'equals'
+	| 'notEquals'
+	| 'contains'
+	| 'notContains'
+	| 'gt'
+	| 'gte'
+	| 'lt'
+	| 'lte'
+	| 'isEmpty'
+	| 'isNotEmpty'
+	| 'isTrue'
+	| 'isFalse'
+	| 'exists'
+	| 'notExists';
+
+export interface FilterCondition {
+	/** Left operand — a template string, e.g. "{{steps.<nodeId>.output.status}}". */
+	left: string;
+	operator: FilterOperator;
+	/** Right operand — template or literal. Omitted for unary operators. */
+	right?: string;
+}
+
+/** A boolean predicate: a set of conditions combined with and/or. */
+export interface FilterValue {
+	combinator: 'and' | 'or';
+	conditions: FilterCondition[];
+}
+
+// ── Node data shapes ──
+
+/** Trigger node carries no execution config (it lives on workflow.trigger). */
+export interface WorkflowTriggerNodeData {
+	/** Optional cosmetic label shown on the node. */
+	label?: string;
+}
+
+/**
+ * How a condition's true/false (or a loop's while) decision is made.
+ * - 'smart': the agent reads a natural-language predicate and decides (default).
+ * - 'manual': a deterministic field comparison (FilterValue).
+ */
+export type WorkflowEvalMode = 'smart' | 'manual';
+
+export interface WorkflowConditionNodeData {
+	/** Display name for the condition node. */
+	name: string;
+	/** How the true/false decision is made. Defaults to 'smart' when omitted. */
+	evalMode?: WorkflowEvalMode;
+	/** smart mode: a natural-language predicate the agent evaluates to true/false. */
+	prompt?: string;
+	/** manual mode: deterministic field comparison choosing the 'true'/'false' output. */
+	filter?: FilterValue;
+}
+
+export interface WorkflowLoopNodeData {
+	/** Display name for the loop node. */
+	name: string;
+	/** 'forEach' iterates over `items`; 'while' repeats while the condition holds. */
+	mode: 'forEach' | 'while';
+	/**
+	 * forEach mode: a template resolving to an array,
+	 * e.g. "{{steps.<nodeId>.output.items}}".
+	 */
+	items?: string;
+	/** while mode: how the per-iteration condition is evaluated. Defaults to 'smart'. */
+	evalMode?: WorkflowEvalMode;
+	/** while + smart: a natural-language predicate the agent judges each iteration. */
+	prompt?: string;
+	/** while + manual: a deterministic predicate evaluated before each iteration. */
+	condition?: FilterValue;
+	/** Hard safety cap on iterations (prevents runaway loops). */
+	maxIterations: number;
+}
+
+// ── Node union (discriminated by `type`) ──
+
+interface WorkflowNodeBase {
+	id: string;
+	position: WorkflowNodePosition;
+}
+
+export interface WorkflowTriggerNode extends WorkflowNodeBase {
+	type: 'trigger';
+	data: WorkflowTriggerNodeData;
+}
+
+export interface WorkflowAgentNode extends WorkflowNodeBase {
+	type: 'agent';
+	/** Full step configuration. By convention node.id === data.id. */
+	data: WorkflowStep;
+}
+
+export interface WorkflowConditionNode extends WorkflowNodeBase {
+	type: 'condition';
+	data: WorkflowConditionNodeData;
+}
+
+export interface WorkflowLoopNode extends WorkflowNodeBase {
+	type: 'loop';
+	data: WorkflowLoopNodeData;
+}
+
+export type WorkflowNode =
+	| WorkflowTriggerNode
+	| WorkflowAgentNode
+	| WorkflowConditionNode
+	| WorkflowLoopNode;
+
+/**
+ * A directed connection between two nodes.
+ * Handles default to 'out' (source) / 'in' (target). Multi-output nodes use
+ * named source handles: condition → 'true' | 'false'; loop → 'loop' | 'done'.
+ * A loop's body feeds back via an edge whose target handle is 'loopBack'.
+ */
+export interface WorkflowEdge {
+	id: string;
+	source: string;
+	sourceHandle?: string;
+	target: string;
+	targetHandle?: string;
+	/** Optional UI label (e.g. "true"/"false"). */
+	label?: string;
+}
+
+// ─── Agent workflow-authoring spec ────────────────────────────────────────────
+
+/**
+ * A high-level workflow description the agent's create_workflow tool can author for
+ * branching/looping flows. The host converts it to the real node/edge graph
+ * (`specToGraph`): it generates node UUIDs, handles, the loop back-edge, node
+ * positions, and rewrites `{{steps.<key>.output}}` references to the generated ids.
+ * Connections reference other nodes by their `key`; an omitted connection ends that path.
+ */
+export interface WorkflowSpecNode {
+	/** Unique key the agent assigns, used to wire connections and `{{steps.<key>.output}}`. */
+	key: string;
+	type: 'agent' | 'condition' | 'loop';
+	/** Display name for the node. */
+	name: string;
+
+	// ── agent step ──
+	/** agent: the task instruction for this step. */
+	instruction?: string;
+	allowedTools?: string[];
+	allowedCredentialIds?: string[];
+	errorHandlingAction?: 'stop' | 'continue' | 'retry';
+	/** agent / loop: key of the next node after this one (omit to end this path). */
+	next?: string;
+
+	// ── condition (Smart, agent-judged) ──
+	/** condition / loop-while: the natural-language predicate the agent judges true/false. */
+	prompt?: string;
+	/** condition: key to follow when the predicate is true (omit to end). */
+	ifTrue?: string;
+	/** condition: key to follow when the predicate is false (omit to end). */
+	ifFalse?: string;
+
+	// ── loop ──
+	loopMode?: 'forEach' | 'while';
+	/** loop forEach: a template resolving to an array, e.g. "{{steps.<key>.output.items}}". */
+	items?: string;
+	/** loop: hard safety cap on iterations (default 10). */
+	maxIterations?: number;
+	/** loop: ordered keys of the body nodes (run in sequence each iteration). */
+	body?: string[];
+}
+
+export interface WorkflowSpec {
+	/** Key of the first node to run after the trigger. */
+	entry: string;
+	nodes: WorkflowSpecNode[];
+}
+
 // ─── Trigger Input (for create/update requests) ───────────────────────────────
 
 /**
@@ -119,8 +320,16 @@ export interface Workflow {
 	ownerId: string;
 	name: string;
 	description?: string;
-	/** Linear sequence: steps[0] → steps[1] → … */
+	/**
+	 * @deprecated Legacy linear projection of the graph, derived from `nodes`/`edges`
+	 * on every save and kept for backward-compatible reads (run-detail timeline,
+	 * step-log ordering, list step counts). The graph is the source of truth.
+	 */
 	steps: WorkflowStep[];
+	/** Authoritative graph: nodes (trigger + agent + condition + loop). */
+	nodes: WorkflowNode[];
+	/** Authoritative graph: directed connections between nodes. */
+	edges: WorkflowEdge[];
 	isEnabled: boolean;
 	/**
 	 * The trigger associated with this workflow.
@@ -228,8 +437,14 @@ export interface WorkflowSummary {
 	id: string;
 	name: string;
 	description?: string;
-	/** Number of steps in this workflow */
+	/** Number of agent steps in this workflow. */
 	stepCount: number;
+	/** Number of condition (branch) nodes, if any. */
+	conditionCount?: number;
+	/** Number of loop nodes, if any. */
+	loopCount?: number;
+	/** How this workflow is triggered (manual/cron/webhook/app). */
+	triggerKind?: AgentTriggerKind;
 	isEnabled: boolean;
 }
 
@@ -238,7 +453,12 @@ export interface WorkflowSummary {
 export interface CreateWorkflowRequestBody {
 	name: string;
 	description?: string;
-	steps: WorkflowStep[];
+	/** @deprecated Provide `nodes`/`edges` instead. Accepted for backward compatibility. */
+	steps?: WorkflowStep[];
+	/** Graph nodes — the source of truth for new clients. */
+	nodes?: WorkflowNode[];
+	/** Graph edges. */
+	edges?: WorkflowEdge[];
 	isEnabled?: boolean;
 	/**
 	 * Trigger to provision alongside the workflow.
@@ -250,7 +470,12 @@ export interface CreateWorkflowRequestBody {
 export interface UpdateWorkflowRequestBody {
 	name?: string;
 	description?: string;
+	/** @deprecated Provide `nodes`/`edges` instead. Accepted for backward compatibility. */
 	steps?: WorkflowStep[];
+	/** Graph nodes — the source of truth for new clients. */
+	nodes?: WorkflowNode[];
+	/** Graph edges. */
+	edges?: WorkflowEdge[];
 	isEnabled?: boolean;
 	/**
 	 * Trigger configuration to update.

@@ -1,6 +1,6 @@
 # Google Forms App Trigger
 
-Fire a [workflow](/guide/workflows) when a new response is submitted to a Google Form. Google Forms is **polled** for new responses, so there is no webhook to register — just a credential and the form id.
+Fire a [workflow](/guide/workflows/) when a new response is submitted to a Google Form. Google Forms is **polled** for new responses, so there is no webhook to register — just a credential and the form id.
 
 | | |
 | --------------- | ------------------------------------------------------------------ |

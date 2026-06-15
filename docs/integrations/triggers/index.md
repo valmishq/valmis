@@ -1,6 +1,6 @@
 # App Triggers
 
-App triggers fire a [workflow](/guide/workflows) the moment something happens in a connected app — a new Gmail message arrives, a Notion database item changes, a new Google Form response is submitted, a Slack message is posted. Unlike a [generic webhook](/guide/workflows#webhook) (where you wire and parse everything yourself), each app is a built-in **provider** that knows how to listen for its events and hand the workflow a clean, documented payload.
+App triggers fire a [workflow](/guide/workflows/) the moment something happens in a connected app — a new Gmail message arrives, a Notion database item changes, a new Google Form response is submitted, a Slack message is posted. Unlike a [generic webhook](/guide/workflows/triggers#webhook) (where you wire and parse everything yourself), each app is a built-in **provider** that knows how to listen for its events and hand the workflow a clean, documented payload.
 
 ## Available triggers
 

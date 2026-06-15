@@ -26,9 +26,9 @@ export function createListWorkflowsTool(ctx: ToolContext): AgentTool {
 		label: 'List Workflows',
 		description:
 			'List all enabled automation workflows available to this agent. ' +
-			"Returns each workflow's ID, name, description, and step count. " +
+			"Returns each workflow's ID, name, description, node composition (steps, conditions, loops), and trigger kind. " +
 			'Use this to discover which workflows can be triggered. ' +
-			"Use read_workflow to inspect a workflow's step-by-step configuration, " +
+			"Use read_workflow to inspect a workflow's full graph (steps, branches, loops), " +
 			'and trigger_workflow to execute one. ' +
 			'Always call this first to get the correct workflowId before triggering or reading a specific workflow.',
 		parameters: Type.Object({}),
@@ -48,12 +48,20 @@ export function createListWorkflowsTool(ctx: ToolContext): AgentTool {
 			}
 
 			const formatted = workflows
-				.map(
-					(w: WorkflowSummary, idx: number) =>
+				.map((w: WorkflowSummary, idx: number) => {
+					const composition =
+						`${w.stepCount} step${w.stepCount === 1 ? '' : 's'}` +
+						(w.conditionCount
+							? `, ${w.conditionCount} condition${w.conditionCount === 1 ? '' : 's'}`
+							: '') +
+						(w.loopCount ? `, ${w.loopCount} loop${w.loopCount === 1 ? '' : 's'}` : '');
+					return (
 						`${idx + 1}. **${w.name}** (id: \`${w.id}\`)\n` +
-						`   Steps: ${w.stepCount}` +
-						(w.description ? `\n   ${w.description}` : ''),
-				)
+						`   ${composition}` +
+						(w.triggerKind ? ` · trigger: ${w.triggerKind}` : '') +
+						(w.description ? `\n   ${w.description}` : '')
+					);
+				})
 				.join('\n\n');
 
 			const textContent: TextContent = {
