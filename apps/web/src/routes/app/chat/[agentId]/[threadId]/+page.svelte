@@ -111,6 +111,8 @@
 		toolCallArgs = buildToolCallArgsFromMessages(data.messages);
 		isStreaming = false;
 		streamingMessageId = null;
+		optimisticAssistantId = null;
+		clearOptimisticTimer();
 		pendingHitl = null;
 		// Reset session usage stats to the DB values for the new thread
 		contextTokens = data.threadContextTokens;
@@ -128,6 +130,33 @@
 	 * and added to the messages list as a synthetic AgentMessage.
 	 */
 	let streamingMessageId = $state<string | null>(null);
+
+	/**
+	 * Id of the optimistic, empty assistant message that backs the typing indicator
+	 * while the docker runtime spins up, before the real 'message_start' SSE event.
+	 * It is inserted ~300ms after send (see optimisticTimer) so a fast response never
+	 * flashes a redundant placeholder, upgraded in place to the real message on
+	 * 'message_start', or removed if the turn ends without one. Null when none is
+	 * outstanding.
+	 */
+	let optimisticAssistantId = $state<string | null>(null);
+
+	/**
+	 * Pending timer that inserts the optimistic placeholder a short delay after send.
+	 * Cleared if the real stream starts (or the turn ends) within that window.
+	 */
+	let optimisticTimer: ReturnType<typeof setTimeout> | null = null;
+
+	/** Delay before the artificial typing indicator appears, to avoid a fast-response flash. */
+	const OPTIMISTIC_INDICATOR_DELAY_MS = 300;
+
+	/** Cancel a pending optimistic-placeholder insertion, if any. */
+	function clearOptimisticTimer() {
+		if (optimisticTimer !== null) {
+			clearTimeout(optimisticTimer);
+			optimisticTimer = null;
+		}
+	}
 
 	/**
 	 * Map of toolCallId → result string.
@@ -219,16 +248,29 @@
 	function handleStreamEvent(event: AgentStreamEvent) {
 		switch (event.type) {
 			case 'message_start': {
-				// Create a new empty assistant message placeholder
+				// The real stream started — cancel any not-yet-fired artificial indicator.
+				clearOptimisticTimer();
 				streamingMessageId = event.messageId;
-				const placeholder: AgentMessage = {
-					id: event.messageId,
-					threadId: data.thread.id,
-					role: 'assistant',
-					content: [],
-					createdAt: new Date()
-				};
-				messages = [...messages, placeholder];
+				// If an optimistic placeholder is already on screen (first message of the
+				// turn), upgrade it in place to the real id — no flicker, no duplicate
+				// bubble. Otherwise (e.g. a second assistant message after a tool call),
+				// append a fresh empty placeholder as before.
+				if (optimisticAssistantId) {
+					const placeholderId = optimisticAssistantId;
+					optimisticAssistantId = null;
+					messages = messages.map((m) =>
+						m.id === placeholderId ? { ...m, id: event.messageId } : m
+					);
+				} else {
+					const placeholder: AgentMessage = {
+						id: event.messageId,
+						threadId: data.thread.id,
+						role: 'assistant',
+						content: [],
+						createdAt: new Date()
+					};
+					messages = [...messages, placeholder];
+				}
 				isStreaming = true;
 				scrollToBottom();
 				break;
@@ -361,6 +403,14 @@
 				streamingMessageId = null;
 				// Clear any lingering HITL state (e.g. if the tool timed out)
 				pendingHitl = null;
+				clearOptimisticTimer();
+				// Drop a never-upgraded optimistic placeholder so the turn doesn't end
+				// with a stale empty assistant bubble (e.g. runtime never started).
+				if (optimisticAssistantId) {
+					const placeholderId = optimisticAssistantId;
+					optimisticAssistantId = null;
+					messages = messages.filter((m) => m.id !== placeholderId);
+				}
 				break;
 			}
 
@@ -368,6 +418,14 @@
 				isStreaming = false;
 				streamingMessageId = null;
 				pendingHitl = null;
+				clearOptimisticTimer();
+				// Replace any never-upgraded optimistic placeholder with the error
+				// message rather than leaving an empty bubble beside it.
+				if (optimisticAssistantId) {
+					const placeholderId = optimisticAssistantId;
+					optimisticAssistantId = null;
+					messages = messages.filter((m) => m.id !== placeholderId);
+				}
 				// Show the error as a toast so it's hard to miss
 				setAlert({
 					type: 'error',
@@ -403,7 +461,7 @@
 			pendingHitl = null;
 		}
 
-		// Optimistically add user message
+		// Optimistically add the user message immediately.
 		const optimisticMsg: AgentMessage = {
 			id: `optimistic-${Date.now()}`,
 			threadId: data.thread.id,
@@ -416,6 +474,33 @@
 
 		isStreaming = true;
 
+		// Show an artificial typing indicator after a short delay — an empty assistant
+		// placeholder that satisfies (isStreaming && assistant && no text yet). This
+		// bridges the docker runtime spin-up gap before the real 'message_start' SSE
+		// event. The delay avoids flashing it when the response starts quickly; if
+		// 'message_start' arrives first it clears this timer and creates the bubble itself.
+		const placeholderId = `optimistic-assistant-${Date.now()}`;
+		clearOptimisticTimer();
+		optimisticTimer = setTimeout(() => {
+			optimisticTimer = null;
+			// The real stream already started this turn — nothing to do.
+			if (streamingMessageId !== null) return;
+			const optimisticAssistant: AgentMessage = {
+				id: placeholderId,
+				threadId: data.thread.id,
+				role: 'assistant',
+				content: [],
+				createdAt: new Date()
+			};
+			optimisticAssistantId = placeholderId;
+			// Point streamingMessageId at the placeholder so the per-message
+			// `isStreaming && id === streamingMessageId` binding lights up its typing
+			// indicator; 'message_start' reassigns it to the real id.
+			streamingMessageId = placeholderId;
+			messages = [...messages, optimisticAssistant];
+			scrollToBottom();
+		}, OPTIMISTIC_INDICATOR_DELAY_MS);
+
 		try {
 			const res = await api(`/runtime/${data.agent.id}/threads/${data.thread.id}/messages`, {
 				method: 'POST',
@@ -425,8 +510,12 @@
 			});
 
 			if (!res.ok) {
-				// Remove optimistic message on failure
-				messages = messages.filter((m) => m.id !== optimisticMsg.id);
+				// Cancel the pending indicator and remove the optimistic user message
+				// (and the placeholder, if it was already inserted) on failure.
+				clearOptimisticTimer();
+				messages = messages.filter((m) => m.id !== optimisticMsg.id && m.id !== placeholderId);
+				optimisticAssistantId = null;
+				streamingMessageId = null;
 				const body = await res.json();
 				setAlert({
 					type: 'error',
@@ -444,7 +533,10 @@
 			const realMsg = body.data as AgentMessage;
 			messages = messages.map((m) => (m.id === optimisticMsg.id ? realMsg : m));
 		} catch {
-			messages = messages.filter((m) => m.id !== optimisticMsg.id);
+			clearOptimisticTimer();
+			messages = messages.filter((m) => m.id !== optimisticMsg.id && m.id !== placeholderId);
+			optimisticAssistantId = null;
+			streamingMessageId = null;
 			setAlert({
 				type: 'error',
 				title: 'Failed to send',
@@ -608,6 +700,7 @@
 
 	onDestroy(() => {
 		closeStream();
+		clearOptimisticTimer();
 	});
 </script>
 
