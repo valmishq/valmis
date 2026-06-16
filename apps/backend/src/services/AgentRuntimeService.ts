@@ -143,6 +143,25 @@ export class AgentRuntimeService {
 	/** Maximum simultaneous runs across all agents/owners */
 	private readonly maxConcurrent: number;
 
+	/**
+	 * Max serialized runtime-config size (bytes) still passed inline via the
+	 * RUNTIME_CONFIG env var. Larger configs (e.g. workflows, which embed the full
+	 * definition) are served over HTTP from `/internal/config` instead, because the
+	 * docker-socket-proxy rejects oversized createContainer requests (HTTP 431).
+	 */
+	private readonly maxEnvConfigBytes: number;
+
+	/**
+	 * Configs awaiting an HTTP fetch by a just-spawned runtime, keyed by threadId.
+	 * Populated before spawn when the config exceeds maxEnvConfigBytes; consumed
+	 * once by the runtime's loadConfig() call. One-shot + TTL-bounded so a runtime
+	 * that never starts cannot leak. Assumes a single backend instance (see plan).
+	 */
+	private readonly pendingConfigs = new Map<string, { config: AgentRuntimeConfig; expiresAt: number }>();
+
+	/** How long a pending config stays fetchable before it is swept. */
+	private readonly pendingConfigTtlMs = 5 * 60 * 1000;
+
 	/** Live runtime handles, for the concurrency cap and shutdown() */
 	private readonly liveHandles = new Set<RuntimeHandle>();
 
@@ -163,6 +182,7 @@ export class AgentRuntimeService {
 			process.env.AGENT_WORKSPACES_PATH ?? resolve(process.cwd(), '../../.agent-workspaces');
 		this.runTimeoutMs = parseInt(process.env.AGENT_RUNTIME_TIMEOUT_MS ?? '2400000', 10);
 		this.maxConcurrent = parseInt(process.env.AGENT_RUNTIME_MAX_CONCURRENT ?? '20', 10);
+		this.maxEnvConfigBytes = parseInt(process.env.AGENT_RUNTIME_MAX_ENV_CONFIG_BYTES ?? '8192', 10);
 	}
 
 	/** Validate driver configuration and reap orphaned runs. Call once at backend startup. */
@@ -177,6 +197,25 @@ export class AgentRuntimeService {
 		logger.info({ liveRuns: this.liveHandles.size }, '[runtime] shutting down live agent runs');
 		await this.driver.shutdown();
 		this.liveHandles.clear();
+	}
+
+	/**
+	 * One-shot retrieval of a runtime config that was too large to pass inline via
+	 * the RUNTIME_CONFIG env var. Called by the `/internal/config` endpoint when a
+	 * freshly-spawned runtime fetches its config. Returns null (and the caller logs)
+	 * when the entry is absent or expired — the runtime then fails fast and the run
+	 * is reconciled to error. Sweeps expired entries on every call.
+	 */
+	takePendingConfig(threadId: string): AgentRuntimeConfig | null {
+		const now = Date.now();
+		// Lazy TTL sweep — bounds memory if a runtime never started to fetch its config.
+		for (const [key, entry] of this.pendingConfigs) {
+			if (entry.expiresAt <= now) this.pendingConfigs.delete(key);
+		}
+		const pending = this.pendingConfigs.get(threadId);
+		if (!pending || pending.expiresAt <= now) return null;
+		this.pendingConfigs.delete(threadId);
+		return pending.config;
 	}
 
 	/**
@@ -195,9 +234,12 @@ export class AgentRuntimeService {
 	 *
 	 * Returns true when the runtime was started. Returns false when the run was
 	 * declined or failed to start (concurrency cap, missing/unresolvable chat model,
-	 * driver spawn failure) — in those cases the thread is already marked 'error'
-	 * and the SSE stream has been notified, so chat callers need no extra handling,
-	 * while trigger callers can mark their workflow run as failed.
+	 * driver spawn failure) — in those cases the thread is already marked 'error',
+	 * the SSE stream has been notified, and the specific reason is already logged
+	 * here, so chat callers need no extra handling. A false return is never an
+	 * exception: callers that own a workflow run (TriggerService, the agent-triggered
+	 * /internal/workflow/:id/trigger endpoint) MUST still inspect it and mark their
+	 * run 'error', or the run would sit at 'running' forever.
 	 */
 	async spawnForThread(
 		agentId: string,
@@ -292,8 +334,23 @@ export class AgentRuntimeService {
 			AGENT_ID: agentId,
 			THREAD_ID: threadId,
 			PROXY_TOKEN: proxyToken,
-			RUNTIME_CONFIG: JSON.stringify(runtimeConfig),
 		};
+
+		// Pass the config inline via env when it is small; otherwise stash it for the
+		// runtime to fetch over HTTP from /internal/config. Large configs (workflows
+		// embed the full definition) would otherwise blow past the docker-socket-proxy
+		// request buffer and fail createContainer with HTTP 431. The runtime's
+		// loadConfig() reads RUNTIME_CONFIG when present, else fetches — no runtime change.
+		const serializedConfig = JSON.stringify(runtimeConfig);
+		const configViaFetch = serializedConfig.length > this.maxEnvConfigBytes;
+		if (configViaFetch) {
+			this.pendingConfigs.set(threadId, {
+				config: runtimeConfig,
+				expiresAt: Date.now() + this.pendingConfigTtlMs,
+			});
+		} else {
+			env.RUNTIME_CONFIG = serializedConfig;
+		}
 
 		logger.info(
 			{
@@ -304,6 +361,8 @@ export class AgentRuntimeService {
 				workspacePath,
 				allowInternetAccess: agent.allowInternetAccess,
 				hasWorkflow: !!workflowConfig,
+				configBytes: serializedConfig.length,
+				configViaFetch,
 			},
 			'[runtime] spawning agent runtime',
 		);
@@ -322,6 +381,8 @@ export class AgentRuntimeService {
 				env,
 			});
 		} catch (spawnErr) {
+			// The runtime never started, so no one will fetch the stashed config — drop it.
+			this.pendingConfigs.delete(threadId);
 			logger.error({ err: spawnErr, agentId, threadId }, '[runtime] failed to spawn runtime');
 			await this.sessionService.updateThreadStatus(threadId, 'error');
 			agentStreamBus.emit(threadId, {

@@ -142,11 +142,24 @@ export function createRuntimeRouter(
 
 	/**
 	 * GET /v1/runtime/internal/config
-	 * Sandbox fetches its runtime config on startup (no secrets included).
+	 * Sandbox fetches its runtime config on startup (no secrets included). Used when
+	 * the config was too large to inline via the RUNTIME_CONFIG env var (workflows),
+	 * so spawnForThread stashed it for one-shot retrieval keyed by threadId. A miss
+	 * (expired / never stashed / different backend instance) is logged loudly — the
+	 * runtime then fails fast and its run is reconciled to error, never left silent.
 	 */
 	router.get('/internal/config', (req: Request, res: Response) => {
 		const sandboxToken = (req as Request & { sandboxToken: SandboxTokenPayload }).sandboxToken;
-		res.json({ success: true, data: { agentId: sandboxToken.agentId } });
+		const config = runtimeService.takePendingConfig(sandboxToken.threadId);
+		if (!config) {
+			logger.warn(
+				{ threadId: sandboxToken.threadId, agentId: sandboxToken.agentId },
+				'[runtime] config requested but none pending (expired or already consumed)',
+			);
+			res.status(404).json({ success: false, error: 'No pending runtime config for this thread' });
+			return;
+		}
+		res.json({ success: true, data: config });
 	});
 
 	/**
@@ -1113,7 +1126,10 @@ export function createRuntimeRouter(
 				isWorkflowThread: true,
 			});
 
-			// Spawn child process (fire-and-forget) — do not await
+			// Spawn child process (fire-and-forget) — do not await the response on it,
+			// but never drop the outcome: spawnForThread returns false (the specific
+			// reason is logged inside it) without throwing, so a bare .catch() would
+			// silently leave the run 'running' forever. Log and reconcile both paths.
 			runtimeService
 				.spawnForThread(
 					sandboxToken.agentId,
@@ -1124,11 +1140,30 @@ export function createRuntimeRouter(
 					undefined,
 					{ runId: run.id, definition: workflow, triggerContext },
 				)
-				.catch((spawnErr: Error) => {
+				.then(async (spawned) => {
+					if (!spawned) {
+						logger.error(
+							{ runId: run.id, workflowId, agentId: sandboxToken.agentId, threadId: thread.id },
+							'[runtime] agent-triggered workflow failed to start',
+						);
+						await workflowRunService
+							.completeRun(run.id, 'error', 'Runtime could not be started for workflow run')
+							.catch((reconcileErr: Error) =>
+								logger.error(
+									{ err: reconcileErr, runId: run.id },
+									'[runtime] failed to mark agent-triggered workflow run as errored',
+								),
+							);
+					}
+				})
+				.catch(async (spawnErr: Error) => {
 					logger.error(
-						{ spawnErr, agentId: sandboxToken.agentId, workflowId },
-						'[runtime] agent-triggered workflow spawn failed',
+						{ spawnErr, runId: run.id, agentId: sandboxToken.agentId, workflowId },
+						'[runtime] agent-triggered workflow spawn threw',
 					);
+					await workflowRunService
+						.completeRun(run.id, 'error', spawnErr instanceof Error ? spawnErr.message : String(spawnErr))
+						.catch(() => {});
 				});
 
 			res.status(201).json({ success: true, data: { runId: run.id } });
