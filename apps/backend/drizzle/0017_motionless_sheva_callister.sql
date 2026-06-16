@@ -1,0 +1,1 @@
+ALTER TABLE "agents" ADD COLUMN "max_tool_calls_per_turn" integer DEFAULT 20 NOT NULL;

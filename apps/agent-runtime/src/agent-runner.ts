@@ -36,14 +36,8 @@ const zeroUsage: Usage = {
  */
 const WORKSPACE_ROOT = process.env.WORKSPACE_ROOT ?? '/workspace';
 
-/**
- * Hard cap on tool calls per agent turn.
- * If the agent has not resolved the task within this many tool calls it is
- * forced to stop and asked to admit it does not have the information, or to
- * ask the user to provide it. This prevents infinite tool-call loops when the
- * agent cannot find an answer through the available tools.
- */
-const MAX_TOOL_CALLS_PER_TURN = 20; //adjustable via agent setting TBD.
+/** Fallback tool-call cap when the agent config does not specify one (legacy configs). */
+const DEFAULT_MAX_TOOL_CALLS_PER_TURN = 20;
 
 /**
  * Builds and runs the pi-agent Agent for a single task/conversation turn.
@@ -55,9 +49,13 @@ const MAX_TOOL_CALLS_PER_TURN = 20; //adjustable via agent setting TBD.
  *   - run_terminal and run_code must only access files inside the workspace.
  *
  * Tool loop protection:
- *   - Hard cap of MAX_TOOL_CALLS_PER_TURN tool executions per turn.
- *   - If the cap is hit, the agent is steered to give a final honest answer
- *     rather than continuing to loop.
+ *   - Hard cap of config.maxToolCallsPerTurn tool executions per turn (per-agent
+ *     setting, default 20). When exceeded the tool is blocked and the agent must
+ *     produce a final reply.
+ *   - Proactive budget notice: as the agent nears the cap, a model-only system
+ *     notice is appended to the LLM context (never persisted/shown) telling it how
+ *     many calls remain and, on the last one, to deliver a result instead of
+ *     continuing to try.
  *
  * Flow:
  *   1. Load conversation history from host via ProxyClient.loadMessages()
@@ -408,6 +406,13 @@ export async function runAgent(
 	//   - beforeToolCall with block:true returns an error result to the LLM,
 	//     which then MUST make one more LLM call to respond with text
 	// This guarantees the agent always produces a visible reply after hitting the cap.
+	//
+	// The cap is a per-agent setting (config.maxToolCallsPerTurn); older runtime
+	// configs may omit it, so fall back to the default.
+	const maxToolCallsPerTurn = config.maxToolCallsPerTurn ?? DEFAULT_MAX_TOOL_CALLS_PER_TURN;
+	// Begin warning the model once this many (or fewer) tool calls remain. Scales
+	// with the cap so large caps still get meaningful lead time, with a 3-call floor.
+	const warnRemaining = Math.max(3, Math.ceil(maxToolCallsPerTurn * 0.25));
 	let toolCallCount = 0;
 
 	// ── Build and run the Agent ───────────────────────────────────────────────
@@ -435,7 +440,43 @@ export async function runAgent(
 		},
 		streamFn,
 		/**
-		 * beforeToolCall: enforces MAX_TOOL_CALLS_PER_TURN.
+		 * transformContext: proactive, model-only tool-budget notice.
+		 *
+		 * Runs before every LLM call. Its return value shapes ONLY that call's LLM
+		 * input — it is never written back to agent.state.messages, so the host
+		 * (which persists only the model's response + tool results) never stores it
+		 * and the chat UI never shows it. As the agent nears the cap we append a
+		 * short "[System notice]" user message to the end of the prompt telling it
+		 * how many tool calls remain and, on the last one, to deliver a result now
+		 * rather than keep trying. The hard stop below remains the backstop.
+		 *
+		 * toolCallCount is incremented in beforeToolCall, so by the next LLM call it
+		 * already reflects every tool call executed so far this turn.
+		 */
+		transformContext: async (messages) => {
+			const remaining = maxToolCallsPerTurn - toolCallCount;
+			if (remaining > warnRemaining) return messages; // not near the cap — no overhead
+			const text =
+				remaining <= 0
+					? `[System notice] You have now used all ${maxToolCallsPerTurn} of your ` +
+						`${maxToolCallsPerTurn} allowed tool calls for this turn. You may NOT make any ` +
+						`more tool calls. Provide your final answer to the user now using what you have ` +
+						`already gathered. If you could not fully complete the task, say so honestly and ` +
+						`state what is missing or what you need from the user — do not keep trying.`
+					: `[System notice] You have used ${toolCallCount} of ${maxToolCallsPerTurn} tool ` +
+						`calls allowed for this turn (${remaining} remaining). Start converging on a final ` +
+						`answer rather than exploring further. Spend any remaining calls only on essential ` +
+						`actions; if you already have enough to answer, reply now instead of calling more tools.`;
+			// Return a NEW array — never mutate or persist the agent's stored messages.
+			const notice: UserMessage = {
+				role: 'user',
+				content: [{ type: 'text', text }],
+				timestamp: Date.now(),
+			};
+			return [...messages, notice];
+		},
+		/**
+		 * beforeToolCall: enforces the per-agent maxToolCallsPerTurn cap.
 		 *
 		 * When the cap is hit, blocks the tool with an explicit reason message.
 		 * The LLM receives the block as a tool error and is forced to make one
@@ -447,10 +488,10 @@ export async function runAgent(
 		beforeToolCall: async () => {
 			toolCallCount++;
 			logger.debug(
-				{ toolCallCount, max: MAX_TOOL_CALLS_PER_TURN },
+				{ toolCallCount, max: maxToolCallsPerTurn },
 				'[agent-runner] tool call preflight',
 			);
-			if (toolCallCount > MAX_TOOL_CALLS_PER_TURN) {
+			if (toolCallCount > maxToolCallsPerTurn) {
 				logger.warn(
 					{ toolCallCount, threadId: config.threadId },
 					'[agent-runner] tool call cap exceeded — blocking tool, forcing text reply',

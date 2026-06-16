@@ -21,6 +21,23 @@ import type {
 const agentService = new AgentService();
 const sessionService = new AgentSessionService();
 
+/** Bounds for the per-agent tool-call cap (matches the frontend input + agent-runner default). */
+const MAX_TOOL_CALLS_MIN = 1;
+const MAX_TOOL_CALLS_MAX = 200;
+
+/**
+ * Validate and clamp the optional maxToolCallsPerTurn field from a request body.
+ * Returns undefined when not provided (service applies its default / leaves unchanged),
+ * a clamped integer in [1, 100] when valid, or throws when present but not a finite number.
+ */
+function parseMaxToolCallsPerTurn(value: unknown): number | undefined {
+	if (value === undefined) return undefined;
+	if (typeof value !== 'number' || !Number.isFinite(value)) {
+		throw new Error('maxToolCallsPerTurn must be a number between 1 and 100');
+	}
+	return Math.min(MAX_TOOL_CALLS_MAX, Math.max(MAX_TOOL_CALLS_MIN, Math.round(value)));
+}
+
 /**
  * Factory — creates the agents router with an injected AuthService instance.
  *
@@ -115,6 +132,17 @@ export function createAgentsRouter(authService: AuthService, skillService: Skill
 			return;
 		}
 
+		let maxToolCallsPerTurn: number | undefined;
+		try {
+			maxToolCallsPerTurn = parseMaxToolCallsPerTurn(
+				(req.body as CreateAgentRequestBody).maxToolCallsPerTurn,
+			);
+		} catch (err) {
+			const body: AgentResponse = { success: false, error: (err as Error).message };
+			res.status(400).json(body);
+			return;
+		}
+
 		try {
 			const agent = await agentService.create({
 				ownerId,
@@ -127,6 +155,7 @@ export function createAgentsRouter(authService: AuthService, skillService: Skill
 				embeddingModelConfigId,
 				embeddingDim,
 				allowInternetAccess,
+				maxToolCallsPerTurn,
 			});
 			const body: AgentResponse = { success: true, data: agent };
 			res.status(201).json(body);
@@ -160,6 +189,7 @@ export function createAgentsRouter(authService: AuthService, skillService: Skill
 			embeddingModelConfigId,
 			embeddingDim,
 			allowInternetAccess,
+			maxToolCallsPerTurn: rawMaxToolCallsPerTurn,
 		} = req.body as UpdateAgentRequestBody;
 
 		if (
@@ -171,12 +201,22 @@ export function createAgentsRouter(authService: AuthService, skillService: Skill
 			modelConfigId === undefined &&
 			embeddingModelConfigId === undefined &&
 			embeddingDim === undefined &&
-			allowInternetAccess === undefined
+			allowInternetAccess === undefined &&
+			rawMaxToolCallsPerTurn === undefined
 		) {
 			const body: AgentResponse = {
 				success: false,
 				error: 'At least one field to update is required',
 			};
+			res.status(400).json(body);
+			return;
+		}
+
+		let maxToolCallsPerTurn: number | undefined;
+		try {
+			maxToolCallsPerTurn = parseMaxToolCallsPerTurn(rawMaxToolCallsPerTurn);
+		} catch (err) {
+			const body: AgentResponse = { success: false, error: (err as Error).message };
 			res.status(400).json(body);
 			return;
 		}
@@ -193,6 +233,7 @@ export function createAgentsRouter(authService: AuthService, skillService: Skill
 				embeddingModelConfigId,
 				embeddingDim,
 				allowInternetAccess,
+				maxToolCallsPerTurn,
 			});
 
 			if (!updated) {

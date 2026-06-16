@@ -48,6 +48,13 @@ export const agents = pgTable(
 		 * credential-proxied call_api requests are unaffected.
 		 */
 		allowInternetAccess: boolean('allow_internet_access').notNull().default(true),
+		/**
+		 * Maximum number of tool calls the agent may make in a single chat turn.
+		 * Enforced by agent-runner.ts (interactive chat) — when exceeded the agent
+		 * is blocked from further tools and forced to give a final reply. Workflow
+		 * steps use their own per-step cap and ignore this value. Default 20.
+		 */
+		maxToolCallsPerTurn: integer('max_tool_calls_per_turn').notNull().default(20),
 		createdAt: timestamp('created_at').defaultNow().notNull(),
 		updatedAt: timestamp('updated_at').defaultNow().notNull(),
 	},

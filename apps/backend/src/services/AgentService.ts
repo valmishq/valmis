@@ -19,6 +19,7 @@ export interface CreateAgentInput {
 	embeddingModelConfigId?: string;
 	embeddingDim?: number;
 	allowInternetAccess?: boolean;
+	maxToolCallsPerTurn?: number;
 }
 
 export interface UpdateAgentInput {
@@ -31,6 +32,7 @@ export interface UpdateAgentInput {
 	embeddingModelConfigId?: string | null;
 	embeddingDim?: number | null;
 	allowInternetAccess?: boolean;
+	maxToolCallsPerTurn?: number;
 }
 
 export interface AddMemoryInput {
@@ -78,6 +80,7 @@ function rowToAgent(row: typeof agents.$inferSelect, credentialIds: string[]): A
 		embeddingModelConfigId: row.embeddingModelConfigId ?? undefined,
 		embeddingDim: row.embeddingDim ?? undefined,
 		allowInternetAccess: row.allowInternetAccess,
+		maxToolCallsPerTurn: row.maxToolCallsPerTurn,
 		createdAt: row.createdAt,
 		updatedAt: row.updatedAt,
 	};
@@ -120,6 +123,7 @@ export class AgentService {
 				embeddingModelConfigId: input.embeddingModelConfigId ?? null,
 				embeddingDim: input.embeddingDim ?? null,
 				allowInternetAccess: input.allowInternetAccess ?? true,
+				maxToolCallsPerTurn: input.maxToolCallsPerTurn ?? 20,
 				createdAt: now,
 				updatedAt: now,
 			})
@@ -222,6 +226,7 @@ export class AgentService {
 			embeddingModelConfigId: string | null;
 			embeddingDim: number | null;
 			allowInternetAccess: boolean;
+			maxToolCallsPerTurn: number;
 			updatedAt: Date;
 		}> = { updatedAt: new Date() };
 
@@ -236,6 +241,8 @@ export class AgentService {
 		if (input.embeddingDim !== undefined) updates.embeddingDim = input.embeddingDim;
 		if (input.allowInternetAccess !== undefined)
 			updates.allowInternetAccess = input.allowInternetAccess;
+		if (input.maxToolCallsPerTurn !== undefined)
+			updates.maxToolCallsPerTurn = input.maxToolCallsPerTurn;
 
 		await db
 			.update(agents)

@@ -149,6 +149,11 @@ export const actions: Actions = {
 		const skillNames = formData.getAll('skillNames') as string[];
 		const knowledgeFileIds = formData.getAll('knowledgeFileIds') as string[];
 		const allowInternetAccess = formData.get('allowInternetAccess') !== 'false';
+		// Clamp to the same 1–100 range the backend enforces; fall back to 20 on non-numeric input.
+		const rawMaxToolCalls = Number(formData.get('maxToolCallsPerTurn'));
+		const maxToolCallsPerTurn = Number.isFinite(rawMaxToolCalls)
+			? Math.min(100, Math.max(1, Math.round(rawMaxToolCalls)))
+			: 20;
 
 		// Step 1: Create or update agent
 		let savedAgentId: string;
@@ -163,7 +168,8 @@ export const actions: Actions = {
 					credentialIds,
 					modelConfigId,
 					embeddingModelConfigId,
-					allowInternetAccess
+					allowInternetAccess,
+					maxToolCallsPerTurn
 				})
 			});
 
@@ -184,7 +190,8 @@ export const actions: Actions = {
 					credentialIds,
 					modelConfigId,
 					embeddingModelConfigId,
-					allowInternetAccess
+					allowInternetAccess,
+					maxToolCallsPerTurn
 				})
 			});
 

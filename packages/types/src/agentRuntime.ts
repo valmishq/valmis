@@ -372,6 +372,13 @@ export interface AgentRuntimeConfig {
 	 */
 	userDatetime?: string;
 	/**
+	 * Maximum number of tool calls allowed in a single chat turn. Read by
+	 * agent-runner.ts to size both the hard cap (beforeToolCall) and the
+	 * proactive tool-budget notice. Optional for backward compatibility —
+	 * the runner falls back to 20 when absent. Workflow runs ignore this.
+	 */
+	maxToolCallsPerTurn?: number;
+	/**
 	 * Present only for workflow runs (triggerType !== 'chat').
 	 * Contains the full workflow definition (steps, etc.) and the normalized
 	 * trigger context (type, triggerName, firedAt, payload) for the run.

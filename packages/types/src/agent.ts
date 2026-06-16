@@ -41,6 +41,11 @@ export interface Agent {
 	 * unaffected either way. Default true.
 	 */
 	allowInternetAccess: boolean;
+	/**
+	 * Maximum number of tool calls the agent may make in a single chat turn.
+	 * Enforced by agent-runner.ts (interactive chat). Default 20.
+	 */
+	maxToolCallsPerTurn: number;
 	createdAt: Date;
 	updatedAt: Date;
 }
@@ -138,6 +143,8 @@ export interface CreateAgentRequestBody {
 	embeddingModelConfigId?: string;
 	embeddingDim?: number;
 	allowInternetAccess?: boolean;
+	/** Max tool calls per chat turn (clamped to 1–100 by the API; defaults to 20). */
+	maxToolCallsPerTurn?: number;
 }
 
 /** PUT /v1/agents/:id — update an existing agent */
@@ -151,6 +158,8 @@ export interface UpdateAgentRequestBody {
 	embeddingModelConfigId?: string;
 	embeddingDim?: number;
 	allowInternetAccess?: boolean;
+	/** Max tool calls per chat turn (clamped to 1–100 by the API). */
+	maxToolCallsPerTurn?: number;
 }
 
 // ─── Run Summary (aggregated per-thread observability) ───────────────────────

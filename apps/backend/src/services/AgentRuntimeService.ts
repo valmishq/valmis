@@ -560,6 +560,9 @@ export class AgentRuntimeService {
 			// User's local datetime — used to inject current date/time context into the system prompt.
 			// Falls back to server time in agent-runner.ts when absent (cron/webhook/manual triggers).
 			...(userDatetime !== undefined ? { userDatetime } : {}),
+			// Per-agent chat tool-call cap — drives both the hard stop and the proactive
+			// budget notice in agent-runner.ts. Defaults to 20 if the column is unset.
+			maxToolCallsPerTurn: agent.maxToolCallsPerTurn ?? 20,
 			// Workflow config — present only for workflow runs. Causes the runtime to route
 			// to workflow-runner.ts rather than agent-runner.ts.
 			...(workflowConfig !== undefined

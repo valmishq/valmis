@@ -79,6 +79,8 @@
 	);
 	/** Sandbox internet egress — only enforced when the backend runs the docker driver */
 	let allowInternetAccess = $state(agent?.allowInternetAccess ?? true);
+	/** Max tool calls the agent may make in a single chat turn (1–100, default 20) */
+	let maxToolCallsPerTurn = $state(agent?.maxToolCallsPerTurn ?? 20);
 
 	// Auto-select first model on create mode when configs load
 	$effect(() => {
@@ -395,6 +397,38 @@
 					id="allow-internet-access"
 					bind:checked={allowInternetAccess}
 					aria-label="Allow internet access"
+				/>
+			</div>
+		</Card.Content>
+	</Card.Root>
+
+	<!-- ── Tool Use ──────────────────────────────────────────────────────────── -->
+	<Card.Root>
+		<Card.Header>
+			<Card.Title class="text-sm font-medium">Tool Use</Card.Title>
+			<Card.Description class="text-xs">
+				Limit how much work the agent does in a single reply.
+			</Card.Description>
+		</Card.Header>
+		<Card.Content>
+			<div class="flex items-center justify-between gap-4">
+				<div class="space-y-0.5">
+					<Label for="max-tool-calls">Max tool calls per turn</Label>
+					<p class="text-xs text-muted-foreground">
+						The most tool calls (API calls, code/terminal runs, memory lookups, etc.) the agent may
+						make while answering one message. When the limit is reached it stops and replies with
+						what it has. Range 1–200. Default 20.
+					</p>
+				</div>
+				<Input
+					id="max-tool-calls"
+					name="maxToolCallsPerTurn"
+					type="number"
+					min={1}
+					max={200}
+					bind:value={maxToolCallsPerTurn}
+					class="w-24"
+					aria-label="Max tool calls per turn"
 				/>
 			</div>
 		</Card.Content>
