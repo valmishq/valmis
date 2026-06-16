@@ -21,6 +21,15 @@ import type {
 	WorkflowSpec,
 } from '@repo/types';
 
+// Per-call request timeouts. Without them, an unreachable backend (e.g. a runtime
+// container that cannot resolve PROXY_HOST in a misconfigured Docker deployment)
+// makes every fetch hang until the host's 40-min hard kill — orphaning the run and
+// holding a concurrency slot. Tight on control-plane calls that only touch the
+// backend DB; generous on the two calls that can legitimately run for minutes (LLM
+// completion and the credential-proxied external API). Both overridable via env.
+const CONTROL_TIMEOUT_MS = parseInt(process.env.RUNTIME_PROXY_CONTROL_TIMEOUT_MS ?? '120000', 10);
+const IO_TIMEOUT_MS = parseInt(process.env.RUNTIME_PROXY_IO_TIMEOUT_MS ?? '600000', 10);
+
 /**
  * HTTP client for communication between the agent sandbox and the host backend.
  *
@@ -72,6 +81,7 @@ export class ProxyClient {
 			method: 'POST',
 			headers: this.authHeaders(),
 			body: JSON.stringify(request),
+			signal: AbortSignal.timeout(IO_TIMEOUT_MS),
 		});
 
 		const json = (await res.json()) as { success: boolean; data?: ProxyResponse; error?: string };
@@ -94,6 +104,7 @@ export class ProxyClient {
 			method: 'POST',
 			headers: this.authHeaders(),
 			body: JSON.stringify(request),
+			signal: AbortSignal.timeout(IO_TIMEOUT_MS),
 		});
 
 		const json = (await res.json()) as {
@@ -113,7 +124,7 @@ export class ProxyClient {
 	async loadMessages(): Promise<AgentMessage[]> {
 		const res = await fetch(
 			`${this.baseUrl}/v1/runtime/internal/thread/${this.threadId}/messages`,
-			{ headers: this.authHeaders() },
+			{ headers: this.authHeaders(), signal: AbortSignal.timeout(CONTROL_TIMEOUT_MS) },
 		);
 
 		const json = (await res.json()) as {
@@ -144,6 +155,7 @@ export class ProxyClient {
 					toolCallId: input.toolCallId,
 					toolName: input.toolName,
 				}),
+				signal: AbortSignal.timeout(CONTROL_TIMEOUT_MS),
 			},
 		);
 
@@ -201,6 +213,7 @@ export class ProxyClient {
 			method: 'POST',
 			headers: this.authHeaders(),
 			body: JSON.stringify(request),
+			signal: AbortSignal.timeout(CONTROL_TIMEOUT_MS),
 		});
 
 		const json = (await res.json()) as {
@@ -225,6 +238,7 @@ export class ProxyClient {
 			method: 'POST',
 			headers: this.authHeaders(),
 			body: JSON.stringify(request),
+			signal: AbortSignal.timeout(CONTROL_TIMEOUT_MS),
 		});
 
 		const json = (await res.json()) as {
@@ -251,6 +265,7 @@ export class ProxyClient {
 			method: 'POST',
 			headers: this.authHeaders(),
 			body: JSON.stringify(request),
+			signal: AbortSignal.timeout(CONTROL_TIMEOUT_MS),
 		});
 
 		const json = (await res.json()) as {
@@ -276,6 +291,7 @@ export class ProxyClient {
 			method: 'POST',
 			headers: this.authHeaders(),
 			body: JSON.stringify(request),
+			signal: AbortSignal.timeout(CONTROL_TIMEOUT_MS),
 		});
 
 		const json = (await res.json()) as { success: boolean; error?: string };
@@ -302,6 +318,7 @@ export class ProxyClient {
 			method: 'POST',
 			headers: this.authHeaders(),
 			body: JSON.stringify(input),
+			signal: AbortSignal.timeout(CONTROL_TIMEOUT_MS),
 		});
 
 		const json = (await res.json()) as {
@@ -328,6 +345,7 @@ export class ProxyClient {
 			method: 'POST',
 			headers: this.authHeaders(),
 			body: JSON.stringify(input),
+			signal: AbortSignal.timeout(CONTROL_TIMEOUT_MS),
 		});
 
 		const json = (await res.json()) as { success: boolean; error?: string };
@@ -349,6 +367,7 @@ export class ProxyClient {
 			method: 'POST',
 			headers: this.authHeaders(),
 			body: JSON.stringify(input),
+			signal: AbortSignal.timeout(CONTROL_TIMEOUT_MS),
 		});
 
 		const json = (await res.json()) as { success: boolean; error?: string };
@@ -366,6 +385,7 @@ export class ProxyClient {
 	async listWorkflows(): Promise<WorkflowSummary[]> {
 		const res = await fetch(`${this.baseUrl}/v1/runtime/internal/workflow/list`, {
 			headers: this.authHeaders(),
+			signal: AbortSignal.timeout(CONTROL_TIMEOUT_MS),
 		});
 
 		const json = (await res.json()) as {
@@ -386,6 +406,7 @@ export class ProxyClient {
 	async readWorkflow(workflowId: string): Promise<Workflow> {
 		const res = await fetch(`${this.baseUrl}/v1/runtime/internal/workflow/${workflowId}`, {
 			headers: this.authHeaders(),
+			signal: AbortSignal.timeout(CONTROL_TIMEOUT_MS),
 		});
 
 		const json = (await res.json()) as {
@@ -430,6 +451,7 @@ export class ProxyClient {
 			method: 'POST',
 			headers: this.authHeaders(),
 			body: JSON.stringify(input),
+			signal: AbortSignal.timeout(CONTROL_TIMEOUT_MS),
 		});
 
 		const json = (await res.json()) as {
@@ -456,6 +478,7 @@ export class ProxyClient {
 			method: 'POST',
 			headers: this.authHeaders(),
 			body: JSON.stringify({ payload }),
+			signal: AbortSignal.timeout(CONTROL_TIMEOUT_MS),
 		});
 
 		const json = (await res.json()) as {
@@ -482,6 +505,7 @@ export class ProxyClient {
 		// Fallback: fetch from host (e.g. for long-running containers)
 		const res = await fetch(`${this.baseUrl}/v1/runtime/internal/config`, {
 			headers: this.authHeaders(),
+			signal: AbortSignal.timeout(CONTROL_TIMEOUT_MS),
 		});
 
 		const json = (await res.json()) as {

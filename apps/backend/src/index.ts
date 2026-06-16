@@ -128,6 +128,9 @@ const knowledgeBaseService = new KnowledgeBaseService(
 //                       reachable Docker daemon (DOCKER_HOST or docker.sock).
 const executionDriver: ExecutionDriver =
 	process.env.AGENT_RUNTIME_DRIVER === 'docker' ? new DockerDriver() : new ProcessDriver();
+// Instantiated before runtimeService so the runtime can reconcile an orphaned
+// workflow run (mark it 'error') if a runtime dies before reporting completion.
+const workflowRunService = new WorkflowRunService();
 const runtimeService = new AgentRuntimeService(
 	executionDriver,
 	sessionService,
@@ -137,6 +140,7 @@ const runtimeService = new AgentRuntimeService(
 	credentialService,
 	skillMaterializerService,
 	knowledgeBaseService,
+	workflowRunService,
 );
 
 // --- Instantiate channel services ---
@@ -179,8 +183,8 @@ const discordGatewayManager = new DiscordGatewayManager(
 );
 
 // --- Instantiate workflow services ---
+// workflowRunService is constructed earlier (wired into runtimeService).
 const workflowService = new WorkflowService();
-const workflowRunService = new WorkflowRunService();
 
 // TriggerService now accepts WorkflowService + WorkflowRunService for workflow routing
 const triggerService = new TriggerService(

@@ -1,4 +1,5 @@
 import { mkdirSync, chownSync, chmodSync, rmSync, readFileSync } from 'fs';
+import { lookup as dnsLookup } from 'dns/promises';
 import { hostname } from 'os';
 import { join } from 'path';
 import { PassThrough } from 'stream';
@@ -40,7 +41,13 @@ export class DockerDriver implements ExecutionDriver {
 
 	private readonly docker: Docker;
 	private readonly image: string;
+	// The configured PROXY_HOST (env or default). The effective per-network hosts
+	// below are reconciled from it at init() — a renaming orchestrator can make the
+	// configured hostname unresolvable on the runtime network even though the
+	// container is correctly attached, so we fall back to the backend's own IP.
 	private readonly proxyHost: string;
+	private proxyHostOpen: string;
+	private proxyHostInternal: string;
 	// Network + workspace identifiers are resolved from env at construction, then
 	// reconciled against the backend's OWN container at init() (autoConfigureFromSelf)
 	// — they are not readonly because a renaming orchestrator (e.g. Coolify) may
@@ -66,6 +73,10 @@ export class DockerDriver implements ExecutionDriver {
 		const backendPort = process.env.BACKEND_PORT ?? '4000';
 		this.proxyHost =
 			process.env.AGENT_RUNTIME_PROXY_HOST ?? `http://host.docker.internal:${backendPort}`;
+		// Effective hosts default to the configured one; init() substitutes the
+		// backend's per-network IP when the configured hostname is unresolvable.
+		this.proxyHostOpen = this.proxyHost;
+		this.proxyHostInternal = this.proxyHost;
 		this.networkOpen = process.env.AGENT_RUNTIME_NETWORK ?? 'openagent_runtime';
 		this.networkInternal =
 			process.env.AGENT_RUNTIME_NETWORK_INTERNAL ?? 'openagent_runtime_internal';
@@ -163,7 +174,8 @@ export class DockerDriver implements ExecutionDriver {
 		logger.info(
 			{
 				image: this.image,
-				proxyHost: this.proxyHost,
+				proxyHostOpen: this.proxyHostOpen,
+				proxyHostInternal: this.proxyHostInternal,
 				networkOpen: this.networkOpen,
 				networkInternal: this.networkInternal,
 				workspaceVolume: this.workspaceVolume,
@@ -209,9 +221,12 @@ export class DockerDriver implements ExecutionDriver {
 	}
 
 	async spawn(req: RuntimeSpawnRequest): Promise<RuntimeHandle> {
+		// The runtime joins one of two networks; the backend's reachable address may
+		// differ per network (see resolveProxyHost), so pick the matching one.
+		const proxyHost = req.allowInternetAccess ? this.proxyHostOpen : this.proxyHostInternal;
 		const env = {
 			...req.env,
-			PROXY_HOST: this.proxyHost,
+			PROXY_HOST: proxyHost,
 			WORKSPACE_ROOT: '/workspace',
 		};
 
@@ -359,15 +374,75 @@ export class DockerDriver implements ExecutionDriver {
 		this.networkOpen = await this.resolveRuntimeNetwork(attached, this.networkOpen, false);
 		this.networkInternal = await this.resolveRuntimeNetwork(attached, this.networkInternal, true);
 
+		// Proxy host: same trust-then-substitute philosophy as networks/volumes.
+		// The runtime calls back to the backend at AGENT_RUNTIME_PROXY_HOST, but a
+		// renaming orchestrator makes the compose service name (e.g. `app`)
+		// unresolvable on the runtime network even though the container is correctly
+		// attached — silently breaking every spawn's callbacks. Resolved per network
+		// because the backend has a different IP on each.
+		this.proxyHostOpen = await this.resolveProxyHost(info, this.networkOpen);
+		this.proxyHostInternal = await this.resolveProxyHost(info, this.networkInternal);
+
 		logger.info(
 			{
 				workspaceVolume: this.workspaceVolume ?? null,
 				workspaceHostPath: this.workspaceHostPath ?? null,
 				networkOpen: this.networkOpen,
 				networkInternal: this.networkInternal,
+				proxyHostOpen: this.proxyHostOpen,
+				proxyHostInternal: this.proxyHostInternal,
 			},
 			'[runtime:docker] resolved runtime resources from backend container',
 		);
+	}
+
+	/**
+	 * Decide the proxy host a runtime on `networkName` should call back on.
+	 *
+	 * Trust the configured AGENT_RUNTIME_PROXY_HOST when its hostname is resolvable,
+	 * otherwise substitute the backend's own IP on that network. The check is sound
+	 * because the backend and a runtime on the same network share Docker's embedded
+	 * DNS resolver (127.0.0.11 via /etc/resolv.conf, which getaddrinfo/dns.lookup
+	 * honours): if the backend can resolve the hostname, a runtime on that network
+	 * can too. A literal IP resolves trivially, so an explicit IP override is kept.
+	 * The backend's per-network IP is always reachable because the runtime joins
+	 * exactly that network. Best-effort: any uncertainty keeps the configured host.
+	 */
+	private async resolveProxyHost(
+		info: Docker.ContainerInspectInfo,
+		networkName: string,
+	): Promise<string> {
+		let host: string;
+		try {
+			host = new URL(this.proxyHost).hostname;
+		} catch {
+			// Not a parseable URL — leave the operator's value untouched.
+			return this.proxyHost;
+		}
+
+		try {
+			await dnsLookup(host);
+			return this.proxyHost;
+		} catch {
+			// Unresolvable on the shared embedded DNS — fall through to IP substitution.
+		}
+
+		const ip = info.NetworkSettings?.Networks?.[networkName]?.IPAddress;
+		if (!ip) {
+			logger.warn(
+				{ configured: this.proxyHost, networkName },
+				'[runtime:docker] proxy host unresolvable and backend has no IP on the runtime network — keeping configured host',
+			);
+			return this.proxyHost;
+		}
+
+		const port = process.env.BACKEND_PORT ?? '4000';
+		const substituted = `http://${ip}:${port}`;
+		logger.warn(
+			{ configured: this.proxyHost, substituted, networkName },
+			'[runtime:docker] configured proxy host is unresolvable on the runtime network — substituting the backend IP (set AGENT_RUNTIME_PROXY_HOST to a resolvable host to override)',
+		);
+		return substituted;
 	}
 
 	/**

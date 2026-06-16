@@ -18,6 +18,7 @@ import { LlmProviderService } from './LlmProviderService.js';
 import { CredentialService } from './CredentialService.js';
 import { SkillMaterializerService } from './SkillMaterializerService.js';
 import { KnowledgeBaseService } from './KnowledgeBaseService.js';
+import { WorkflowRunService } from './WorkflowRunService.js';
 import { agentStreamBus } from './AgentStreamBus.js';
 import { logger } from '../config/logger.js';
 import type { ExecutionDriver, RuntimeHandle } from './runtime/ExecutionDriver.js';
@@ -154,6 +155,7 @@ export class AgentRuntimeService {
 		private readonly credentialService: CredentialService,
 		private readonly skillMaterializer: SkillMaterializerService,
 		private readonly knowledgeBaseService: KnowledgeBaseService,
+		private readonly workflowRunService: WorkflowRunService,
 	) {
 		// Workspaces base: repo root sibling directory by default.
 		// process.cwd() is apps/backend/ so we go up two levels to reach the monorepo root.
@@ -306,6 +308,10 @@ export class AgentRuntimeService {
 			'[runtime] spawning agent runtime',
 		);
 
+		// Captured for onClose: a workflow run is normally marked terminal by the
+		// runtime itself; if the runtime dies before that call lands we reconcile it.
+		const workflowRunId = workflowConfig?.runId;
+
 		let handle: RuntimeHandle;
 		try {
 			handle = await this.driver.spawn({
@@ -372,18 +378,34 @@ export class AgentRuntimeService {
 			}
 
 			if (code !== 0) {
-				if (timedOut) {
-					agentStreamBus.emit(threadId, {
-						type: 'error',
-						message: `Agent run timed out after ${Math.round(this.runTimeoutMs / 60000)} minutes.`,
-					});
-				} else {
-					// Try stderr first (raw Node errors), then fall back to stdout (pino JSON logs).
-					const combinedOutput = stderrTail || stdoutTail;
-					agentStreamBus.emit(threadId, {
-						type: 'error',
-						message: extractUserErrorMessage(combinedOutput),
-					});
+				// Try stderr first (raw Node errors), then fall back to stdout (pino JSON logs).
+				const errorMessage = timedOut
+					? `Agent run timed out after ${Math.round(this.runTimeoutMs / 60000)} minutes.`
+					: extractUserErrorMessage(stderrTail || stdoutTail);
+				agentStreamBus.emit(threadId, { type: 'error', message: errorMessage });
+
+				// Reconcile the workflow run. It is normally marked terminal by the
+				// runtime (POST /workflow/run-complete); if the runtime died, timed
+				// out, or crashed before that call landed — e.g. it could not reach the
+				// backend — the row would otherwise stay 'running' forever. Only flip a
+				// still-running row so we never clobber a run the runtime already
+				// completed (the status read guards the read-modify-write race).
+				if (workflowRunId) {
+					try {
+						const run = await this.workflowRunService.getRunByIdInternal(workflowRunId);
+						if (run && run.status === 'running') {
+							await this.workflowRunService.completeRun(workflowRunId, 'error', errorMessage);
+							logger.warn(
+								{ runId: workflowRunId, threadId, code },
+								'[runtime] reconciled orphaned workflow run to error on abnormal exit',
+							);
+						}
+					} catch (err) {
+						logger.error(
+							{ err, runId: workflowRunId, threadId },
+							'[runtime] failed to reconcile workflow run on exit',
+						);
+					}
 				}
 			}
 			// Always emit 'done' so the SSE subscriber can clean up
