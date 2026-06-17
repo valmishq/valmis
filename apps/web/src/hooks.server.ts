@@ -1,6 +1,6 @@
 import type { Handle, RequestEvent } from '@sveltejs/kit';
 import { jwtVerify } from 'jose';
-import type { AuthTokenPayload } from '@repo/types';
+import type { ApiResponse, AuthTokenPayload } from '@repo/types';
 import { env } from '$env/dynamic/private';
 
 // JWT_SECRET is read via dynamic env (runtime process.env; in dev SvelteKit
@@ -58,7 +58,31 @@ const proxyApiRequest = async (event: RequestEvent): Promise<Response> => {
 		// Pass backend redirects through to the browser untouched
 		redirect: 'manual',
 	};
-	const response = await fetch(target, init);
+
+	let response: Response;
+	try {
+		response = await fetch(target, init);
+	} catch (err) {
+		// fetch only rejects on transport-level failures (backend unreachable,
+		// connection reset, or the request-body stream erroring — e.g. when an
+		// upload exceeds the adapter-node BODY_SIZE_LIMIT). HTTP error statuses do
+		// not throw. Surface a structured ApiResponse so the client gets a usable
+		// error instead of an opaque 500.
+		console.error('[proxy] upstream request failed', {
+			method: event.request.method,
+			path: event.url.pathname,
+			target: target.href,
+			error: err instanceof Error ? err.message : String(err),
+		});
+		const errorBody: ApiResponse = {
+			success: false,
+			error: 'Upstream request failed. The backend may be unavailable or the request body too large.',
+		};
+		return new Response(JSON.stringify(errorBody), {
+			status: 502,
+			headers: { 'content-type': 'application/json' },
+		});
+	}
 
 	const responseHeaders = new Headers(response.headers);
 	for (const header of HOP_BY_HOP_HEADERS) {

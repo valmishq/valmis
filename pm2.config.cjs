@@ -43,6 +43,12 @@ module.exports = {
 				// ORIGIN must match the public URL so SvelteKit's CSRF protection works
 				// Override via ORIGIN env var in .env / docker-compose environment block
 				ORIGIN: process.env.APP_URL || 'http://localhost:3000',
+				// Max file upload size. adapter-node caps request bodies at 512K by
+				// default, which silently breaks knowledge-base uploads proxied through
+				// hooks.server.ts (TypeError: fetch failed). The backend accepts up to 10
+				// files x 20MB = 200MB per upload; 256M leaves headroom for multipart
+				// overhead. Override via the BODY_SIZE_LIMIT env var (.env / compose).
+				BODY_SIZE_LIMIT: process.env.BODY_SIZE_LIMIT || '256M',
 			},
 		},
 	],
