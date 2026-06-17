@@ -60,8 +60,6 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      # Tag scheme: every run → short commit hash (e.g. a1b2c3d);
-      # v1.2.0 tag push additionally → 1.2.0 + 1.2. No "latest".
       - name: Docker metadata
         id: meta
         uses: docker/metadata-action@v5
@@ -77,8 +75,7 @@ jobs:
         with:
           context: .
           file: ${{ matrix.dockerfile }}
-          # platforms: linux/amd64,linux/arm64
-          platforms: linux/arm64
+          platforms: linux/amd64,linux/arm64
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}

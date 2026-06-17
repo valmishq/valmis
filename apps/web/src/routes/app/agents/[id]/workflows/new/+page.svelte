@@ -20,6 +20,13 @@
 	let validationErrors = $state<string[]>([]);
 	let isSaving = $state(false);
 
+	// The save <form>; ⌘S / Ctrl+S in the canvas submits it through use:enhance.
+	let formEl = $state<HTMLFormElement | null>(null);
+	function requestSave() {
+		if (isSaving) return;
+		formEl?.requestSubmit();
+	}
+
 	// Show saved alert after redirect
 	$effect(() => {
 		if ($page.url.searchParams.get('saved') === 'true') {
@@ -65,6 +72,7 @@
 
 <!-- Server-side form action handles create and edit -->
 <form
+	bind:this={formEl}
 	method="POST"
 	action="?/save"
 	use:enhance={({ cancel }) => {
@@ -94,7 +102,13 @@
 					show: true
 				});
 			} else {
-				await update();
+				if (result.type === 'redirect') {
+					// Follow the 303 redirect WITHOUT resetting scroll, so the canvas stays
+					// where the user positioned it (the default navigation jumps to the top).
+					await goto(result.location, { noScroll: true, invalidateAll: true });
+				} else {
+					await update();
+				}
 			}
 		};
 	}}
@@ -115,6 +129,7 @@
 		appTriggerProviders={data.appTriggerProviders}
 		bind:payload
 		bind:validationErrors
+		onRequestSave={requestSave}
 	/>
 
 	{#if validationErrors.length > 0}
@@ -123,7 +138,7 @@
 				Please fix {validationErrors.length} issue{validationErrors.length > 1 ? 's' : ''}:
 			</p>
 			<ul class="list-inside list-disc space-y-0.5">
-				{#each validationErrors as message (message)}
+				{#each validationErrors as message, i (i)}
 					<li>{message}</li>
 				{/each}
 			</ul>

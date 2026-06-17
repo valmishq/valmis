@@ -1,6 +1,6 @@
 import { eq, and, desc, count } from 'drizzle-orm';
 import { db } from '../db/index.js';
-import { workflowRuns, workflowStepLogs } from '../db/schema/index.js';
+import { workflowRuns, workflowStepLogs, workflows, agents } from '../db/schema/index.js';
 import type {
 	WorkflowRun,
 	WorkflowStepLog,
@@ -229,5 +229,44 @@ export class WorkflowRunService {
 			.orderBy(workflowStepLogs.stepIndex, workflowStepLogs.attemptNumber);
 
 		return rows.map(rowToStepLog);
+	}
+
+	/**
+	 * List recent workflow runs across all of an owner's workflows, newest-started
+	 * first, with the workflow + agent names joined in. Powers the dashboard
+	 * activity feed.
+	 */
+	async listRecentByOwner(
+		ownerId: string,
+		limit = 8,
+	): Promise<
+		Array<{
+			id: string;
+			workflowId: string;
+			workflowName: string;
+			agentId: string;
+			agentName: string;
+			status: WorkflowRunStatus;
+			error: string | null;
+			startedAt: Date;
+		}>
+	> {
+		return db
+			.select({
+				id: workflowRuns.id,
+				workflowId: workflowRuns.workflowId,
+				workflowName: workflows.name,
+				agentId: workflowRuns.agentId,
+				agentName: agents.name,
+				status: workflowRuns.status,
+				error: workflowRuns.error,
+				startedAt: workflowRuns.startedAt,
+			})
+			.from(workflowRuns)
+			.innerJoin(workflows, eq(workflows.id, workflowRuns.workflowId))
+			.innerJoin(agents, eq(agents.id, workflowRuns.agentId))
+			.where(eq(workflowRuns.ownerId, ownerId))
+			.orderBy(desc(workflowRuns.startedAt))
+			.limit(limit);
 	}
 }

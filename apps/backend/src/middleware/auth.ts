@@ -18,13 +18,25 @@ declare global {
 const userService = new UserService();
 const authorizationService = new AuthorizationService();
 
+/** Parse a positive-integer env var, falling back to a default when unset/invalid. */
+function envInt(name: string, fallback: number): number {
+	const raw = process.env[name];
+	if (raw === undefined) return fallback;
+	const parsed = Number.parseInt(raw, 10);
+	return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
 /**
  * Rate limiter middleware — keyed by real client IP.
  * Requires app.set('trust proxy', true) so X-Forwarded-For is trusted.
+ *
+ * Window and per-window cap are configurable via env (per IP):
+ *   RATE_LIMIT_WINDOW_MS — window length in ms (default 60000 = 1 minute)
+ *   RATE_LIMIT_MAX       — max requests per window (default 2000)
  */
 export const rateLimiter = rateLimit({
-	windowMs: 1 * 60 * 1000, // 1 minutes
-	max: 200,
+	windowMs: envInt('RATE_LIMIT_WINDOW_MS', 60_000),
+	max: envInt('RATE_LIMIT_MAX', 500),
 	standardHeaders: true,
 	legacyHeaders: false,
 	message: { success: false, error: 'Too many requests, please try again later.' },

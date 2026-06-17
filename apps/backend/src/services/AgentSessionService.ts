@@ -135,6 +135,41 @@ export class AgentSessionService {
 	}
 
 	/**
+	 * List recent interactive chat threads across all of an owner's agents,
+	 * newest-updated first, with the agent name joined in. Workflow-generated
+	 * threads are excluded (they surface via the workflow run feed instead).
+	 * Powers the dashboard activity feed.
+	 */
+	async listRecentChatThreadsByOwner(
+		ownerId: string,
+		limit = 8,
+	): Promise<
+		Array<{
+			id: string;
+			agentId: string;
+			agentName: string;
+			title: string | null;
+			status: AgentThreadStatus;
+			updatedAt: Date;
+		}>
+	> {
+		return db
+			.select({
+				id: agentThreads.id,
+				agentId: agentThreads.agentId,
+				agentName: agents.name,
+				title: agentThreads.title,
+				status: agentThreads.status,
+				updatedAt: agentThreads.updatedAt,
+			})
+			.from(agentThreads)
+			.innerJoin(agents, eq(agents.id, agentThreads.agentId))
+			.where(and(eq(agentThreads.ownerId, ownerId), eq(agentThreads.isWorkflowThread, false)))
+			.orderBy(desc(agentThreads.updatedAt))
+			.limit(limit);
+	}
+
+	/**
 	 * Returns the most recently created thread for an agent, excluding the given threadId.
 	 * Used by the auto-summarize feature to find the previous thread when a new one is created.
 	 * No ownership check beyond the ownerId filter — internal use only.

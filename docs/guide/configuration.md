@@ -25,15 +25,24 @@ The database must have the **pgvector** extension available. The Docker deployme
 
 ## URLs and CORS
 
-| Variable          | Default                 | Description                                                                                                                                         |
-| ----------------- | ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Variable          | Default                 | Description                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| ----------------- | ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `APP_URL`         | `http://localhost:3000` | Public-facing application URL. Also the base for OAuth2 redirect URIs (`<APP_URL>/oauth2/callback`) and app-trigger webhook delivery URLs (`<APP_URL>/api/v1/webhooks/<triggerId>`) — it must match what users open in the browser. For app-trigger webhooks to work, external apps must reach this over public HTTPS; testing locally needs a tunnel ([see Testing locally](/integrations/triggers/#testing-locally-tunneling)), not `localhost`. |
-| `ALLOWED_ORIGINS` | `http://localhost:3000` | Comma-separated CORS allowlist. Set to the same origin(s) as `APP_URL`.                                                                             |
+| `ALLOWED_ORIGINS` | `http://localhost:3000` | Comma-separated CORS allowlist. Set to the same origin(s) as `APP_URL`.                                                                                                                                                                                                                                                                                                                                                                            |
+
+## Rate limiting
+
+A global rate limiter is applied per client IP across the API (public status, OAuth callback, webhook, sandbox-internal, and SSE-stream paths are excluded). Tune it with:
+
+| Variable               | Default | Description                                                                                           |
+| ---------------------- | ------- | ----------------------------------------------------------------------------------------------------- |
+| `RATE_LIMIT_WINDOW_MS` | `60000` | Length of the rate-limit window in milliseconds (default 1 minute).                                   |
+| `RATE_LIMIT_MAX`       | `500`   | Maximum requests allowed per window, per IP. Invalid or non-positive values fall back to the default. |
 
 ## App triggers
 
-| Variable             | Default | Description                                                                                                                                                                            |
-| -------------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Variable              | Default | Description                                                                                                                                                                     |
+| --------------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `GOOGLE_PUBSUB_TOPIC` | —       | Default Google Cloud Pub/Sub topic (`projects/<project>/topics/<topic>`) for the [Gmail app trigger](/integrations/triggers/gmail). Optional — a trigger can set its own topic. |
 
 ## Secrets

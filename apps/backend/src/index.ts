@@ -13,6 +13,7 @@ import { createUsersRouter } from './routes/users.js';
 import { createApiKeysRouter } from './routes/apiKeys.js';
 import { createIamRouter } from './routes/iam.js';
 import { createAgentsRouter } from './routes/agents.js';
+import { createDashboardRouter } from './routes/dashboard.js';
 import { createSkillsRouter } from './routes/skills.js';
 import { createRuntimeRouter } from './routes/runtime.js';
 import { createWebhooksRouter } from './routes/webhooks.js';
@@ -246,6 +247,10 @@ app.use((req, res, next) => {
 		// the per-IP limit. Excluding it prevents false-positive 429s on the stream.
 		// The endpoint itself is protected by requireAuth (JWT/API-key).
 		/^\/v1\/runtime\/[^/]+\/threads\/[^/]+\/stream$/,
+		// Dashboard aggregation endpoints back the home page, which fans out several
+		// reads (and may poll) on every visit. They are read-only and protected by
+		// requireAuth, so excluding them avoids false-positive 429s during normal use.
+		/^\/v1\/dashboard\//,
 	];
 	if (excluded.some((p) => p.test(req.path))) return next();
 	return rateLimiter(req, res, next);
@@ -271,6 +276,7 @@ app.use('/v1/users', createUsersRouter(authService));
 app.use('/v1/api-keys', createApiKeysRouter(authService));
 app.use('/v1/iam', createIamRouter(authService));
 app.use('/v1/agents', createAgentsRouter(authService, skillService));
+app.use('/v1/dashboard', createDashboardRouter(authService, sessionService, workflowRunService));
 app.use('/v1/skills', createSkillsRouter(authService, skillService, skillInstallService));
 
 // Knowledge library routes — user-level files + cloud provider browsing

@@ -14,3 +14,4 @@ export * from './workflow.js';
 export * from './appTrigger.js';
 export * from './channel.js';
 export * from './knowledge.js';
+export * from './activity.js';

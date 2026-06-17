@@ -45,6 +45,8 @@
 		payload: string;
 		/** Client-side validation problems, surfaced by the page on submit. */
 		validationErrors: string[];
+		/** Triggered by ⌘S / Ctrl+S while the canvas is focused — the page submits the form. */
+		onRequestSave?: () => void;
 	}
 
 	let {
@@ -55,7 +57,8 @@
 		definitions,
 		appTriggerProviders,
 		payload = $bindable(''),
-		validationErrors = $bindable([])
+		validationErrors = $bindable([]),
+		onRequestSave
 	}: Props = $props();
 
 	// ── Identity ────────────────────────────────────────────────────────────────
@@ -315,11 +318,45 @@
 				if (isEmpty) errs.push(`App trigger: "${field.label}" is required`);
 			}
 		}
-		return errs;
+		// Dedupe: nodes left at their defaults (e.g. two unconfigured "Condition" nodes)
+		// produce identical messages — collapse them so the list never repeats a line.
+		return [...new Set(errs)];
 	});
 
 	$effect(() => {
 		validationErrors = computedErrors;
+	});
+
+	// ── Keyboard: ⌘S / Ctrl+S saves the workflow while the canvas is focused ──────
+	// SvelteFlow handles keys at the document level, so the canvas doesn't reliably
+	// own DOM focus. We instead track whether the user's last pointer/focus landed
+	// inside the canvas region and only intercept the shortcut while it's active.
+	let canvasEl = $state<HTMLDivElement | null>(null);
+
+	$effect(() => {
+		let active = false;
+		const within = (t: EventTarget | null): boolean =>
+			t instanceof Node && !!canvasEl && canvasEl.contains(t);
+		const onPointerDown = (e: PointerEvent) => {
+			active = within(e.target);
+		};
+		const onFocusIn = (e: FocusEvent) => {
+			active = within(e.target);
+		};
+		const onKeyDown = (e: KeyboardEvent) => {
+			if (!(e.metaKey || e.ctrlKey) || e.key.toLowerCase() !== 's') return;
+			if (!active) return;
+			e.preventDefault();
+			onRequestSave?.();
+		};
+		window.addEventListener('pointerdown', onPointerDown, true);
+		window.addEventListener('focusin', onFocusIn, true);
+		window.addEventListener('keydown', onKeyDown, true);
+		return () => {
+			window.removeEventListener('pointerdown', onPointerDown, true);
+			window.removeEventListener('focusin', onFocusIn, true);
+			window.removeEventListener('keydown', onKeyDown, true);
+		};
 	});
 </script>
 
@@ -354,6 +391,7 @@
 
 	<!-- Canvas -->
 	<div
+		bind:this={canvasEl}
 		class="h-[calc(100vh-20rem)] min-h-[460px] w-full overflow-hidden rounded-lg border border-border bg-muted/20"
 	>
 		{#if browser}
@@ -367,9 +405,10 @@
 		{/if}
 	</div>
 	<p class="text-xs text-muted-foreground">
-		Drag <span class="font-medium">Add node</span> onto the canvas (or click it) to add a step. Connect
-		nodes by dragging from a node's right handle to the next node's left handle. Click any node to configure
-		it. Select an edge or node and press Delete to remove it.
+		Drag <span class="font-medium">Add node</span> onto the canvas (or click it) to add a step.
+		Connect nodes by dragging from a node's right handle to the next node's left handle. Click any
+		node to configure it. Select an edge or node and press Delete to remove it. Press
+		<span class="font-medium">⌘S</span> (Ctrl+S on Windows) to save.
 	</p>
 </div>
 

@@ -9,9 +9,12 @@
 		type Node,
 		type Edge,
 		type Connection,
-		type NodeTypes
+		type NodeTypes,
+		type OnConnectStart,
+		type OnConnectEnd
 	} from '@xyflow/svelte';
 	import '@xyflow/svelte/dist/style.css';
+	import { fly } from 'svelte/transition';
 	import { Graph, layout } from '@dagrejs/dagre';
 	import { DRAG_MIME, newFlowNode, edgeVisual } from '$lib/workflow/graph';
 	import { Button } from '$lib/components/ui/button/index.js';
@@ -137,12 +140,111 @@
 			return { ...e, type: v.type, label: v.label };
 		});
 	}
+	// ── Connect to empty canvas → "Add node" menu ────────────────────────────────
+	// When a connection is dragged out of a handle and dropped on empty canvas, open a
+	// small palette at the drop point; picking a type creates that node there and wires
+	// it to the dragged handle.
+	let wrapperEl = $state<HTMLDivElement | null>(null);
+	// The pointer-up that ends a connection also fires a pane click; this flag makes that
+	// one click a no-op so the just-opened menu isn't immediately dismissed.
+	let skipPaneClick = false;
+	// Captured during the drag (read in the connect-end handler — no need to be reactive).
+	let connectSource: {
+		nodeId: string;
+		handleId: string | null;
+		handleType: 'source' | 'target';
+	} | null = null;
+	let connectMenu = $state<{
+		/** Pixel offset within the canvas wrapper (where the menu renders). */
+		x: number;
+		y: number;
+		/** Graph-space position for the new node. */
+		flow: { x: number; y: number };
+		source: { nodeId: string; handleId: string | null; handleType: 'source' | 'target' };
+	} | null>(null);
+
+	const onConnectStart: OnConnectStart = (_event, params) => {
+		connectMenu = null; // a fresh drag dismisses any open menu
+		connectSource = params.nodeId
+			? {
+					nodeId: params.nodeId,
+					handleId: params.handleId,
+					handleType: params.handleType ?? 'source'
+				}
+			: null;
+	};
+
+	/** Viewport coords from a mouse or touch connect-end event. */
+	function eventPoint(event: MouseEvent | TouchEvent): { x: number; y: number } {
+		if ('changedTouches' in event && event.changedTouches.length > 0) {
+			const t = event.changedTouches[0];
+			return { x: t.clientX, y: t.clientY };
+		}
+		return { x: (event as MouseEvent).clientX, y: (event as MouseEvent).clientY };
+	}
+
+	const onConnectEnd: OnConnectEnd = (event, connection) => {
+		const source = connectSource;
+		connectSource = null;
+		// A drop onto a real handle already became an edge (labelled in onConnect); only
+		// offer the menu when the line ended over empty canvas.
+		if (!source || connection.isValid || connection.toNode) return;
+		const rect = wrapperEl?.getBoundingClientRect();
+		if (!rect) return;
+		// Swallow the pane click that this same pointer-up will fire (otherwise the menu flashes shut).
+		skipPaneClick = true;
+		setTimeout(() => {
+			skipPaneClick = false;
+		}, 0);
+		const { x, y } = eventPoint(event);
+		connectMenu = {
+			x: x - rect.left,
+			y: y - rect.top,
+			flow: screenToFlowPosition({ x, y }),
+			source
+		};
+	};
+
+	/** Create the picked node at the drop point and wire it to the dragged handle. */
+	function addNodeFromConnection(type: WorkflowNodeType) {
+		const menu = connectMenu;
+		connectMenu = null;
+		if (!menu) return;
+		const node = newFlowNode(type, menu.flow);
+		if (!node) return;
+		const { nodeId, handleId, handleType } = menu.source;
+		// Forward (dragged from an output): existing → new. Reverse (from an input): new → existing.
+		const edge: Edge =
+			handleType === 'target'
+				? {
+						id: crypto.randomUUID(),
+						source: node.id,
+						sourceHandle: 'out',
+						target: nodeId,
+						targetHandle: handleId ?? undefined,
+						...edgeVisual('out', handleId),
+						deletable: true
+					}
+				: {
+						id: crypto.randomUUID(),
+						source: nodeId,
+						sourceHandle: handleId ?? undefined,
+						target: node.id,
+						targetHandle: 'in',
+						...edgeVisual(handleId, 'in'),
+						deletable: true
+					};
+		nodes = [...nodes, node];
+		edges = [...edges, edge];
+		onSelect(node.id);
+	}
 </script>
 
 <!-- The wrapper carries the drop handlers so we don't depend on SvelteFlow forwarding
      DOM events; screenToFlowPosition works from screen coords regardless. -->
 <div
-	class="size-full"
+	bind:this={wrapperEl}
+	class="relative size-full"
 	role="application"
 	aria-label="Workflow canvas"
 	ondragover={handleDragOver}
@@ -158,9 +260,18 @@
 		fitViewOptions={{ padding: 0.25, maxZoom: FIT_MAX_ZOOM }}
 		defaultEdgeOptions={{ type: 'smoothstep' }}
 		deleteKey={['Backspace', 'Delete']}
-		onnodeclick={({ node }) => onSelect(node.id)}
-		onpaneclick={() => onSelect(null)}
+		onnodeclick={({ node }) => {
+			connectMenu = null;
+			onSelect(node.id);
+		}}
+		onpaneclick={() => {
+			if (skipPaneClick) return;
+			connectMenu = null;
+			onSelect(null);
+		}}
 		onconnect={onConnect}
+		onconnectstart={onConnectStart}
+		onconnectend={onConnectEnd}
 	>
 		<Background />
 		<Controls />
@@ -181,4 +292,32 @@
 			</Button>
 		</Panel>
 	</SvelteFlow>
+
+	{#if connectMenu}
+		<!-- Floating "Add node" menu anchored at the point where the connection was dropped. -->
+		<div
+			class="absolute z-20"
+			style="left: {connectMenu.x}px; top: {connectMenu.y}px;"
+			transition:fly={{ y: -8, duration: 150 }}
+		>
+			<NodePalette onAdd={addNodeFromConnection} />
+		</div>
+	{/if}
 </div>
+
+<svelte:window
+	onkeydown={(e) => {
+		if (e.key === 'Escape') connectMenu = null;
+	}}
+/>
+
+<style>
+	/* Enlarge the connection handles (the dots) so they're easier to grab and connect.
+	   SvelteFlow centres each handle on the node edge via a translate(±50%) transform,
+	   so a larger size stays aligned — including the % positioned condition/loop handles.
+	   Scoped under .svelte-flow to outrank xyflow's default .svelte-flow__handle rule. */
+	:global(.svelte-flow .svelte-flow__handle) {
+		width: 11px;
+		height: 11px;
+	}
+</style>
