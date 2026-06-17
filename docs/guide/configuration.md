@@ -89,6 +89,27 @@ These apply only when `AGENT_RUNTIME_DRIVER=docker`. The compose file presets al
 | `AGENT_RUNTIME_DOCKER_RUNTIME`      | —                                  | Optional alternate OCI runtime for sandboxes, e.g. `runsc` to run them under gVisor.                                                                                                 |
 | `DOCKER_HOST`                       | —                                  | How the backend reaches the Docker daemon. Compose sets `tcp://docker-socket-proxy:2375` (restricted socket proxy — never a raw socket mount).                                       |
 
+## Web browser
+
+Lets agents drive a real browser to read pages and operate web apps. **Off by default** — see the [Web Browser](/guide/browser) guide. The browser runs separate from the agent sandbox (a dedicated container in Docker deployments, in-process for bare-metal). An agent can browse only when this feature is on **and** the agent has [internet access](/guide/agents#allow-internet-access).
+
+| Variable                          | Default                               | Description                                                                                                                                            |
+| --------------------------------- | ------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `BROWSER_FEATURE_ENABLED`         | `false`                               | Master switch. When off, no browser image is pulled, no browser runs, and no agent sees the browser tools or the browser menu.                       |
+| `BROWSER_MODE`                    | `auto`                                | `auto` = container in Docker deployments (`AGENT_RUNTIME_DRIVER=docker`), in-process `local` otherwise. Force with `container` or `local`.            |
+| `BROWSER_IMAGE`                   | `ghcr.io/browserless/chromium:latest` | Browser container image (container mode). The backend pulls it on startup only when the feature is enabled.                                          |
+| `BROWSER_NETWORK`                 | `openagent_browser`                   | Dedicated Docker network for the browser container. Agent sandboxes are never attached to it, so an agent can't reach the browser directly.          |
+| `BROWSER_WS_ENDPOINT`             | —                                     | Connect to an externally-managed browser instead of launching one. When set, the backend does not launch or pull a container.                        |
+| `BROWSER_MAX_CONCURRENT_SESSIONS` | `10`                                  | Maximum simultaneous browser sessions across all agents.                                                                                             |
+| `BROWSER_SESSION_IDLE_TIMEOUT_MS` | `300000` (5 min)                      | Idle time before an unused session is closed (its state is saved first).                                                                             |
+| `BROWSER_SESSION_MAX_LIFETIME_MS` | `1800000` (30 min)                    | Hard cap on a session's total lifetime regardless of activity.                                                                                       |
+| `BROWSER_MEMORY_LIMIT_MB`         | `1024`                                | Per-browser-container memory limit (container mode).                                                                                                 |
+| `AGENT_BROWSER_STATE_PATH`        | repo-root sibling dir                 | Server-only directory holding each agent's saved logins (cookies + site storage) and history. **Never** mounted into an agent sandbox. Docker preset: a dedicated volume at `/opt/agent-browser-state`. |
+| `BROWSER_LOCAL_EXECUTABLE_PATH`   | —                                     | Local mode only: path to an existing Chromium/Chrome binary, to avoid downloading Playwright's browser.                                              |
+| `BROWSER_LOCAL_CHANNEL`           | —                                     | Local mode only: use an installed branded browser, e.g. `chrome` or `msedge`.                                                                        |
+
+For a bare-metal (no-Docker) deployment using local mode, install the browser once with `pnpm --filter @repo/backend exec playwright install chromium` (or point `BROWSER_LOCAL_CHANNEL`/`BROWSER_LOCAL_EXECUTABLE_PATH` at an existing browser).
+
 ## Skills
 
 | Variable                                | Default       | Description                                                                                                                                                                                                                        |

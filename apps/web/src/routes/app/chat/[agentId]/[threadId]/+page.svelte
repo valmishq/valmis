@@ -13,6 +13,7 @@
 	import AgentAvatar from '$lib/components/custom/chat/AgentAvatar.svelte';
 	import HitlPrompt from '$lib/components/custom/chat/HitlPrompt.svelte';
 	import EditThreadTitleDialog from '$lib/components/custom/chat/EditThreadTitleDialog.svelte';
+	import BrowserSessionDialog from '$lib/components/custom/chat/BrowserSessionDialog.svelte';
 	import * as Dialog from '$lib/components/ui/dialog/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { ScrollArea } from '$lib/components/ui/scroll-area/index.js';
@@ -74,6 +75,25 @@
 	}
 
 	/**
+	 * Build the toolResultImages map from persisted tool_result messages, so image
+	 * results (e.g. browser screenshots) render in the ToolCallIndicator after a
+	 * reload — not just live via the tool_call_end SSE event.
+	 */
+	function buildToolResultImagesFromMessages(
+		msgs: AgentMessage[]
+	): Record<string, { data: string; mimeType: string }[]> {
+		const map: Record<string, { data: string; mimeType: string }[]> = {};
+		for (const msg of msgs) {
+			if (msg.role !== 'tool_result' || !msg.toolCallId) continue;
+			const images = msg.content
+				.filter((b): b is Extract<ContentBlock, { type: 'image' }> => b.type === 'image')
+				.map((b) => ({ data: b.data, mimeType: b.mimeType }));
+			if (images.length > 0) map[msg.toolCallId] = images;
+		}
+		return map;
+	}
+
+	/**
 	 * Build the toolCallArgs map from assistant messages' toolCall content blocks.
 	 * Called on initial load so the Arguments section shows for historical messages.
 	 */
@@ -108,6 +128,7 @@
 		messages = data.messages;
 		threads = data.threads;
 		toolResults = buildToolResultsFromMessages(data.messages);
+		toolResultImages = buildToolResultImagesFromMessages(data.messages);
 		toolCallArgs = buildToolCallArgsFromMessages(data.messages);
 		isStreaming = false;
 		streamingMessageId = null;
@@ -163,6 +184,14 @@
 	 * Seeded from DB tool_result messages on load; updated live by tool_call_end SSE events.
 	 */
 	let toolResults = $state<Record<string, string>>(buildToolResultsFromMessages(data.messages));
+
+	/**
+	 * Map of toolCallId → image content blocks (e.g. browser screenshots).
+	 * Seeded from DB tool_result messages on load; updated live by tool_call_end SSE events.
+	 */
+	let toolResultImages = $state<Record<string, { data: string; mimeType: string }[]>>(
+		buildToolResultImagesFromMessages(data.messages)
+	);
 
 	/**
 	 * Map of toolCallId → { toolName, argsJson }.
@@ -356,6 +385,10 @@
 			case 'tool_call_end': {
 				// Store the execution result for the tool indicator to display
 				toolResults = { ...toolResults, [event.toolCallId]: event.result };
+				// Store any image blocks (e.g. a browser screenshot) so they render live
+				if (event.images && event.images.length > 0) {
+					toolResultImages = { ...toolResultImages, [event.toolCallId]: event.images };
+				}
 				break;
 			}
 
@@ -604,6 +637,15 @@
 	let deleteDialogOpen = $state(false);
 	let isDeleting = $state(false);
 
+	let browserDialogOpen = $state(false);
+	let browserThreadTarget = $state<AgentThread | null>(null);
+
+	/** Open the browser-session management modal for the given thread. */
+	function handleBrowserSession(thread: AgentThread) {
+		browserThreadTarget = thread;
+		browserDialogOpen = true;
+	}
+
 	/** Open the rename dialog pre-populated with the thread's current title. */
 	function handleRenameThread(thread: AgentThread) {
 		renameTarget = thread;
@@ -717,9 +759,11 @@
 		activeThreadId={data.thread.id}
 		{isCreatingThread}
 		bind:open={sidebarOpen}
+		browserAvailable={data.browserAvailable}
 		onNewChat={handleNewChat}
 		onRenameThread={handleRenameThread}
 		onDeleteThread={handleDeleteThread}
+		onBrowserSession={handleBrowserSession}
 	/>
 
 	<!-- Right panel: chat area -->
@@ -748,6 +792,7 @@
 							{userDisplayName}
 							isStreaming={isStreaming && message.id === streamingMessageId}
 							{toolResults}
+							{toolResultImages}
 							{toolCallArgs}
 							credentialMetaMap={data.credentialMetaMap}
 						/>
@@ -791,6 +836,14 @@
 	currentTitle={renameTarget?.title ?? ''}
 	isSaving={isSavingRename}
 	onSave={handleSaveTitle}
+/>
+
+<!-- Browser session management modal -->
+<BrowserSessionDialog
+	bind:open={browserDialogOpen}
+	agentId={data.agent.id}
+	agentName={data.agent.name}
+	threadId={browserThreadTarget?.id}
 />
 
 <!-- Delete thread confirmation dialog -->

@@ -79,13 +79,25 @@ export async function resolveAgentModel(
 	};
 	const contextWindow = catalogEntry?.contextLength ?? 128000;
 
+	// Declare the model's real input modalities so vision models actually receive
+	// image content blocks (e.g. browser screenshots in tool results). Previously
+	// hardcoded to ['text'], which made pi-ai strip every image before the request.
+	// pi-ai's Model.input only accepts 'text'|'image', so map the catalog's broader
+	// modality list down to those and always keep 'text'.
+	const inputModalities = (catalogEntry?.architecture?.inputModalities ?? ['text']).filter(
+		(m): m is 'text' | 'image' => m === 'text' || m === 'image',
+	);
+	const modelInput: ('text' | 'image')[] = inputModalities.includes('text')
+		? inputModalities
+		: ['text', ...inputModalities];
+
 	const model: Model<string> = {
 		id: nativeModelId,
 		api,
 		provider: config.provider,
 		name: config.model,
 		reasoning: false,
-		input: ['text'],
+		input: modelInput,
 		cost: {
 			input: perMillion(catalogEntry?.pricing.promptPerToken),
 			output: perMillion(catalogEntry?.pricing.completionPerToken),

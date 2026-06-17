@@ -274,6 +274,49 @@ export interface LlmProxyRequest {
 	thinkingLevel?: 'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
 }
 
+// ─── Browser Protocol ─────────────────────────────────────────────────────────
+
+/**
+ * One browser operation sent from the agent sandbox to the host. The host owns
+ * the actual browser (a separate, host-managed container or a local Playwright
+ * instance) — the sandbox never touches it directly. Element-targeting actions
+ * use a `ref` (e.g. "e3") obtained from the most recent `snapshot`/`navigate`
+ * result, never raw selectors.
+ */
+export type BrowserCommand =
+	| { action: 'navigate'; url: string }
+	| { action: 'snapshot' }
+	| { action: 'click'; ref: string }
+	| { action: 'type'; ref: string; text: string; submit?: boolean }
+	| { action: 'select'; ref: string; values: string[] }
+	| { action: 'pressKey'; key: string }
+	| { action: 'screenshot'; fullPage?: boolean; path?: string }
+	| { action: 'readPage' }
+	| { action: 'waitFor'; text?: string; state?: 'load' | 'networkidle'; timeoutMs?: number }
+	| { action: 'goBack' }
+	| { action: 'goForward' };
+
+/** POST /v1/runtime/internal/browser/action — one browser command per request */
+export interface BrowserActionRequest {
+	command: BrowserCommand;
+}
+
+/**
+ * Result of a browser command, returned to the sandbox.
+ * A command may yield readable text (title / element snapshot / page text /
+ * error description), an image (screenshot), or both, plus the current URL.
+ */
+export interface BrowserActionResult {
+	/** Human/LLM-readable text: page title, element snapshot, extracted text, or an error description. */
+	text?: string;
+	/** Present only for `screenshot` — base64 PNG, surfaced to the chat as an image block. */
+	image?: { data: string; mimeType: 'image/png' };
+	/** Current page URL after the action, so the agent keeps its orientation. */
+	url?: string;
+	/** True when the action failed in a recoverable way (timeout, element not found) — not a fatal error. */
+	isError?: boolean;
+}
+
 // ─── Sandbox Token ────────────────────────────────────────────────────────────
 
 /**
@@ -379,6 +422,15 @@ export interface AgentRuntimeConfig {
 	 */
 	maxToolCallsPerTurn?: number;
 	/**
+	 * Whether the browser tools (browser_navigate, browser_click, …) are available
+	 * for this turn. The backend sets this to `true` only when the agent has
+	 * internet access AND the project-wide browser feature is enabled. When absent
+	 * or false, agent-runner does not register any browser tools. This is the
+	 * UX/defense-in-depth layer of the gate — the authoritative check is a live DB
+	 * read on every browser action in the backend (BrowserService).
+	 */
+	browserAvailable?: boolean;
+	/**
 	 * Present only for workflow runs (triggerType !== 'chat').
 	 * Contains the full workflow definition (steps, etc.) and the normalized
 	 * trigger context (type, triggerName, firedAt, payload) for the run.
@@ -444,8 +496,17 @@ export type AgentStreamEvent =
 	/**
 	 * Emitted when the tool has finished executing and a result is available.
 	 * result contains the raw tool execution output returned to the agent.
+	 * images carries any image content blocks the tool returned (e.g. a browser
+	 * screenshot) so the chat UI can render them live — the `result` string is
+	 * text-only, so without this the image would only appear after a reload.
 	 */
-	| { type: 'tool_call_end'; messageId: string; toolCallId: string; result: string }
+	| {
+			type: 'tool_call_end';
+			messageId: string;
+			toolCallId: string;
+			result: string;
+			images?: { data: string; mimeType: string }[];
+	  }
 	| { type: 'message_end'; messageId: string; usage?: MessageTokenUsage }
 	/**
 	 * Emitted when the agent invokes the ask_human tool.

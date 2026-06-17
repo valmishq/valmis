@@ -42,6 +42,7 @@ export default defineConfig({
 						{ text: 'Agents', link: '/guide/agents' },
 						{ text: 'Chat', link: '/guide/chat' },
 						{ text: 'Built-in Tools', link: '/guide/tools' },
+						{ text: 'Web Browser', link: '/guide/browser' },
 						{ text: 'LLM Providers', link: '/guide/llm-providers' },
 						{ text: 'Credentials', link: '/guide/credentials' },
 						{ text: 'Skills', link: '/guide/skills' },

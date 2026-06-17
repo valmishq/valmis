@@ -13,6 +13,7 @@ import { createListWorkflowsTool } from './list-workflows.js';
 import { createReadWorkflowTool } from './read-workflow.js';
 import { createTriggerWorkflowTool } from './trigger-workflow.js';
 import { createCreateWorkflowTool } from './create-workflow.js';
+import { createBrowserTools } from './browser.js';
 
 export type { ToolContext } from './types.js';
 export { resolveWorkspacePath } from './types.js';
@@ -33,9 +34,14 @@ export { resolveWorkspacePath } from './types.js';
  *
  * Workflow tools (list_workflows, read_workflow, trigger_workflow) are always
  * included. They return an appropriate message when no workflows are configured.
+ *
+ * Browser tools (browser_navigate, browser_click, …) are included ONLY when
+ * ctx.browserAvailable is true — i.e. the agent has internet access and the
+ * project-wide browser feature is enabled. This is the registration layer of the
+ * gate; the backend independently re-checks on every browser action.
  */
 export function createAgentTools(ctx: Parameters<typeof createCallApiTool>[0]): AgentTool[] {
-	return [
+	const tools = [
 		createCallApiTool(ctx),
 		createReadFileTool(ctx),
 		createWriteFileTool(ctx),
@@ -51,4 +57,8 @@ export function createAgentTools(ctx: Parameters<typeof createCallApiTool>[0]): 
 		createTriggerWorkflowTool(ctx),
 		createCreateWorkflowTool(ctx),
 	];
+	if (ctx.browserAvailable) {
+		tools.push(...createBrowserTools(ctx));
+	}
+	return tools;
 }

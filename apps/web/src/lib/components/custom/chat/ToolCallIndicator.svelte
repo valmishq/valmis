@@ -4,6 +4,7 @@
 	import CheckIcon from '@lucide/svelte/icons/check';
 	import LoaderCircleIcon from '@lucide/svelte/icons/loader-circle';
 	import { DEFAULT_TOOL_ICON } from './tool-icon-map.js';
+	import ImageBlock from './ImageBlock.svelte';
 
 	/**
 	 * Expandable tool call strip shown inside assistant messages.
@@ -26,6 +27,7 @@
 		toolDisplayName,
 		argsJson,
 		result,
+		images,
 		isRunning = false,
 		iconUrl,
 		iconComponent
@@ -37,6 +39,8 @@
 		argsJson?: string;
 		/** Raw tool execution output returned to the agent */
 		result?: string;
+		/** Image content blocks returned by the tool (e.g. a browser screenshot) */
+		images?: { data: string; mimeType: string }[];
 		isRunning?: boolean;
 		/** Integration logo URL — shown when call_api is used with a known credential */
 		iconUrl?: string;
@@ -47,7 +51,7 @@
 	let expanded = $state(false);
 
 	/** Whether there is any expandable content to show */
-	let hasDetails = $derived(!!(argsJson || result));
+	let hasDetails = $derived(!!(argsJson || result || (images && images.length > 0)));
 
 	/** Whether the expand button should be interactive */
 	let canExpand = $derived(!isRunning && hasDetails);
@@ -129,6 +133,20 @@
 					</p>
 					<pre
 						class="overflow-x-auto font-mono text-[11px] leading-relaxed wrap-break-word break-all whitespace-pre-wrap text-muted-foreground/80">{result}</pre>
+				</div>
+			{/if}
+
+			{#if images && images.length > 0}
+				<!-- Image results — e.g. a browser screenshot -->
+				<div class="px-3 py-2">
+					<p
+						class="mb-1 text-[10px] font-semibold tracking-wide text-muted-foreground/60 uppercase"
+					>
+						Image
+					</p>
+					{#each images as image, i (i)}
+						<ImageBlock data={image.data} mimeType={image.mimeType} />
+					{/each}
 				</div>
 			{/if}
 		</div>

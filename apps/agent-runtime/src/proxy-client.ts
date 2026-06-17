@@ -11,6 +11,8 @@ import type {
 	MemorySearchRequest,
 	MemoryDeleteRequest,
 	MemoryDeleteResponse,
+	BrowserActionRequest,
+	BrowserActionResult,
 	SkillTraceRequestBody,
 	AgentMemoryEntry,
 	AgentMemorySearchResult,
@@ -488,6 +490,35 @@ export class ProxyClient {
 		};
 		if (!json.success || !json.data) {
 			throw new Error(`Trigger workflow failed: ${json.error ?? 'unknown error'}`);
+		}
+		return json.data;
+	}
+
+	// ─── Browser ──────────────────────────────────────────────────────────────
+
+	/**
+	 * Execute one browser command via the host-managed browser.
+	 *
+	 * The host owns the browser (a separate container or a local Playwright
+	 * instance) and enforces the hard gate (project feature flag + a live DB read
+	 * of the agent's internet-access setting). Uses the long IO timeout because
+	 * navigation / screenshots can take many seconds.
+	 */
+	async browserAction(request: BrowserActionRequest): Promise<BrowserActionResult> {
+		const res = await fetch(`${this.baseUrl}/v1/runtime/internal/browser/action`, {
+			method: 'POST',
+			headers: this.authHeaders(),
+			body: JSON.stringify(request),
+			signal: AbortSignal.timeout(IO_TIMEOUT_MS),
+		});
+
+		const json = (await res.json()) as {
+			success: boolean;
+			data?: BrowserActionResult;
+			error?: string;
+		};
+		if (!json.success || !json.data) {
+			throw new Error(`Browser action failed: ${json.error ?? 'unknown error'}`);
 		}
 		return json.data;
 	}

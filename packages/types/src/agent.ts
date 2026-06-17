@@ -198,6 +198,42 @@ export interface AgentRunSummary {
 	updatedAt: Date;
 }
 
+// ─── Browser session management (end-user) ───────────────────────────────────
+
+/** One persisted/active browser-session summary for an agent's management modal. */
+export interface BrowserSessionStatus {
+	/** Whether the project-wide browser feature is enabled (BROWSER_FEATURE_ENABLED). */
+	featureEnabled: boolean;
+	/** featureEnabled AND the agent has internet access — the effective gate. */
+	browserAvailable: boolean;
+	/** Persisted login state (Playwright storageState: cookies + localStorage). */
+	persisted: {
+		exists: boolean;
+		cookieCount: number;
+		/** Distinct sites the agent is logged into (cookie domains + localStorage origins). */
+		origins: string[];
+		/** ISO timestamp the state was last saved (file mtime), if any. */
+		lastSavedAt?: string;
+		sizeBytes: number;
+	};
+	/** Recorded visited-URL history summary. */
+	history: { count: number; lastVisitedAt?: string };
+	/** Currently-live browser sessions for this agent (usually 0 or 1). */
+	activeSessions: { threadId: string; url: string; idleSeconds: number }[];
+}
+
+/** A single recorded visited page. */
+export interface BrowserHistoryEntry {
+	url: string;
+	title: string;
+	/** ISO timestamp of the visit. */
+	visitedAt: string;
+}
+
+export type BrowserSessionStatusResponse = ApiResponse<BrowserSessionStatus>;
+export type BrowserHistoryListResponse = ApiResponse<BrowserHistoryEntry[]>;
+export type BrowserActionResponse = ApiResponse<{ ok: true; closed?: number }>;
+
 // ─── API Response Envelopes ───────────────────────────────────────────────────
 
 export type AgentResponse = ApiResponse<Agent>;

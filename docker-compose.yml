@@ -47,15 +47,29 @@ services:
       AGENT_RUNTIME_ENTRY: /repo/apps/agent-runtime/dist/index.js
       # Per-agent workspace storage as seen by the backend (same volume as above)
       AGENT_WORKSPACES_PATH: /opt/agent-workspaces
+      # Headless browser tool (gated by BROWSER_FEATURE_ENABLED in .env; default OFF).
+      # When enabled, the backend pulls BROWSER_IMAGE and launches the browser
+      # container on the dedicated openagent_browser network below — agents never
+      # reach it (only the backend connects), so a shared browser cannot leak one
+      # agent's session cookies to another.
+      BROWSER_MODE: container
+      BROWSER_NETWORK: openagent_browser
+      AGENT_BROWSER_STATE_PATH: /opt/agent-browser-state
     volumes:
       # Persist per-agent workspaces across container restarts
       - agent_workspaces:/opt/agent-workspaces
+      # Persist browser session state (cookies/logins) across restarts. Backend-only —
+      # NEVER mounted into a runtime, so the agent cannot read its own session cookies.
+      - agent_browser_state:/opt/agent-browser-state
     networks:
       - default
       # The app must be reachable from BOTH runtime networks so locked-down
       # (internal) runtimes can still call the backend proxy endpoints
       - agent_runtime
       - agent_runtime_internal
+      # The browser network — only the backend is on it (not agent runtimes), so
+      # the host-managed browser is reachable by the backend but never by agents.
+      - agent_browser
     depends_on:
       postgres:
         condition: service_healthy
@@ -108,6 +122,9 @@ volumes:
     # Stable name so the DockerDriver can reference it for subpath mounts
     # regardless of the compose project prefix
     name: openagent_agent_workspaces
+  # Browser session state (Playwright storageState per agent). Backend-only.
+  agent_browser_state:
+    name: openagent_agent_browser_state
 
 networks:
   default:
@@ -121,3 +138,8 @@ networks:
   agent_runtime_internal:
     name: openagent_runtime_internal
     internal: true
+  # Browser network — the backend launches the host-managed browser container here
+  # (normal egress so it can load pages). Agent runtimes are NEVER attached, so an
+  # agent cannot reach the shared browser's debug port or another agent's session.
+  agent_browser:
+    name: openagent_browser

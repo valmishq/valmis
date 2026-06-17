@@ -1,4 +1,5 @@
 import { error } from '@sveltejs/kit';
+import { env } from '$env/dynamic/private';
 import type { PageServerLoad } from './$types';
 import { api } from '$lib/server/api';
 import type {
@@ -133,6 +134,12 @@ export const load: PageServerLoad = async (event) => {
 
 	return {
 		agent,
+		/**
+		 * Whether the browser-session menu/modal should be offered for this agent:
+		 * the agent has internet access AND the project browser feature is on.
+		 * UX gate only — the backend endpoints enforce it authoritatively.
+		 */
+		browserAvailable: agent.allowInternetAccess && env.BROWSER_FEATURE_ENABLED === 'true',
 		thread,
 		threads,
 		messages,

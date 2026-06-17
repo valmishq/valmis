@@ -34,6 +34,14 @@ export interface ToolContext {
 	 * skill's SKILL.md (or a bundled file) counts as activating the skill.
 	 */
 	onSkillActivated?: (skillName: string) => void;
+	/**
+	 * Whether the browser tools (browser_navigate, browser_click, …) should be
+	 * registered for this turn. Set from AgentRuntimeConfig.browserAvailable — true
+	 * only when the agent has internet access and the project-wide browser feature
+	 * is enabled. The backend independently enforces the same gate on every browser
+	 * action (live DB check), so this flag is only a UX/registration convenience.
+	 */
+	browserAvailable?: boolean;
 }
 
 /**

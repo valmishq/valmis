@@ -1,6 +1,6 @@
 # Built-in Tools
 
-Every agent has the same set of 14 built-in tools. The model decides when to call them; each call and its result is shown inline in [chat](/guide/chat) and recorded in workflow step logs. You don't enable tools individually on an agent — capability is governed by what you attach (credentials, embedding model) and, in workflows, by per-step tool allowlists.
+Every agent has the same core set of built-in tools. The model decides when to call them; each call and its result is shown inline in [chat](/guide/chat) and recorded in workflow step logs. You don't enable tools individually on an agent — capability is governed by what you attach (credentials, embedding model), whether the agent has internet access and the [web browser](/guide/browser) is enabled, and, in workflows, by per-step tool allowlists.
 
 ## External APIs
 
@@ -46,6 +46,10 @@ The workspace persists across conversations, so agents can keep notes, build up 
 | `run_code`     | Runs a JavaScript or Python snippet (written to a temp file and executed under the same limits). |
 
 In Docker-sandboxed deployments these run inside the per-turn container; whether they can reach the internet is controlled by the agent's [internet-access toggle](/guide/agents#allow-internet-access). In `process`-driver deployments they run on the host with code-level guards only — see [Security Overview](/guide/security).
+
+## Web browsing
+
+When the [web browser](/guide/browser) is enabled and the agent has internet access, the agent gains a set of `browser_*` tools to open pages, read them, fill in forms, click through flows, and take screenshots — for sites that have no API. The browser runs on the server, separate from the agent sandbox, and stays logged in between conversations. See the [Web Browser](/guide/browser) guide for the full list and how to manage it.
 
 ## Workflows
 

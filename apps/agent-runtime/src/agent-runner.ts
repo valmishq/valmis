@@ -90,6 +90,9 @@ export async function runAgent(
 		agentId: config.agentId,
 		skillNames: (config.skills ?? []).map((s) => s.name),
 		onSkillActivated: (skillName) => activatedSkills.add(skillName),
+		// Register browser tools only when the host says they are available
+		// (agent has internet access + project browser feature enabled).
+		browserAvailable: config.browserAvailable ?? false,
 	});
 
 	// ── streamFn: routes every LLM call through the host proxy ────────────────
@@ -341,6 +344,60 @@ export async function runAgent(
 		}
 	}
 
+	// Browser automation guidance — only when the host enabled the browser tools.
+	if (config.browserAvailable) {
+		effectiveSystemPrompt +=
+			`\n\n## Web Browser\n` +
+			`You can drive a real headless web browser to read pages and operate web ` +
+			`apps (fill forms, register accounts, click through flows, take screenshots). ` +
+			`The browser runs on the host — your tools send it commands and receive results.\n\n` +
+			`### When to use the browser — DEFAULT TO A PLAIN FETCH FIRST\n` +
+			`The browser is HEAVY (it uses many tool calls). Do NOT reach for it first. For ` +
+			`most web content a lightweight HTTP fetch is faster and cheaper:\n` +
+			`- **Default: fetch the page with \`curl\` via run_terminal** (e.g. ` +
+			`\`curl -sL <url>\`). For APIs/JSON or large pages, the call_api tool is better ` +
+			`(omit credentialId for public URLs; no size cap). If the fetched HTML or text ` +
+			`already contains what you need, USE IT and do not open the browser.\n` +
+			`- **Only use the browser when a plain fetch is not enough**:\n` +
+			`  - the page is rendered by JavaScript (a single-page app) and curl returns an ` +
+			`almost-empty HTML shell with no real content; or\n` +
+			`  - you must INTERACT — fill in or submit a form, log in, click through steps, ` +
+			`pick from menus, or work within a logged-in session; or\n` +
+			`  - you need a screenshot or the visual layout.\n` +
+			`- Rule of thumb: try curl first; fall back to the browser only when curl's ` +
+			`output lacks the needed content or the task requires interaction.\n\n` +
+			`### How to use it\n` +
+			`1. Start with **browser_navigate** to open a URL. It waits for the page to ` +
+			`load (including client-side rendering) and returns the page title and a list ` +
+			`of interactive elements, each with a stable ref like "e3".\n` +
+			`2. Act on those refs: **browser_click(ref)**, **browser_type(ref, text, submit?)**, ` +
+			`**browser_select(ref, values)**, **browser_press_key(key)**.\n` +
+			`3. Refs come ONLY from the most recent snapshot. After the page changes, call ` +
+			`**browser_snapshot** again to get fresh refs before acting.\n` +
+			`4. Use **browser_read_page** to read article/result text, **browser_screenshot** ` +
+			`to inspect a page visually (you receive the image; pass a \`path\` to also save ` +
+			`it into your workspace), and **browser_wait_for** after actions that load ` +
+			`content asynchronously.\n\n` +
+			`### Embedded content & dropdowns\n` +
+			`- Snapshots and read_page ALSO include content inside iframes (embedded forms ` +
+			`like Tally/HubSpot/Typeform, widgets, etc.). Their refs are prefixed with the ` +
+			`frame, e.g. "f1e3". You do NOT need to find an iframe's URL or fetch its ` +
+			`bundle — just snapshot and operate the refs directly.\n` +
+			`- For custom dropdowns (role=combobox/listbox, not a native <select>), use ` +
+			`**browser_select** (it opens the menu and picks the option), or click the ` +
+			`field to open it, browser_snapshot to reveal the options, then browser_click one.\n\n` +
+			`### Session\n` +
+			`- The browser STAYS OPEN across turns in this conversation, so a follow-up ` +
+			`message can keep using the page you left on. It is closed automatically when ` +
+			`the conversation is idle, deleted, or hits a time limit.\n\n` +
+			`### Rules\n` +
+			`- Browser flows use several tool calls; plan efficiently and stop once the task ` +
+			`is done. If a page cannot be operated (blocked, captcha, login wall you lack ` +
+			`credentials for), tell the user honestly instead of retrying endlessly.\n` +
+			`- Never use the browser to attempt to bypass authentication, scrape at abusive ` +
+			`volume, or perform actions the user did not ask for.`;
+	}
+
 	// ── Tool restrictions (workspace boundary + no host exploration) ──────────
 	// These rules apply to all agents regardless of other configuration.
 	// They constrain run_terminal and run_code to the agent workspace, prevent
@@ -378,8 +435,9 @@ export async function runAgent(
 		`Only use run_code when the execution itself produces new information you do not ` +
 		`already have (e.g. computing a hash, parsing data, running a calculation).\n` +
 		`- Keep commands simple and scoped to the task. Do not write scripts that probe ` +
-		`system state, install packages, modify system configuration, or perform network ` +
-		`requests outside the workspace.\n` +
+		`system state, install packages, modify system configuration, or make unsolicited ` +
+		`network requests. Fetching a public web page or API that the user's task needs ` +
+		`(e.g. \`curl -sL <url>\`) is allowed when you have internet access.\n` +
 		`- Never attempt to escalate privileges, bypass sandbox restrictions, or use ` +
 		`creative shell tricks (e.g. base64-encoding payloads, piping to sh, using curl ` +
 		`to download and execute code) to circumvent these rules.\n\n` +
@@ -389,8 +447,9 @@ export async function runAgent(
 		`/proc, /sys, /home, /root, /var, or /tmp (outside the workspace root).\n\n` +
 		`### No Host Exploration\n` +
 		`- Never use any tool to discover the host operating system, enumerate environment ` +
-		`variables, inspect running processes, access network endpoints other than those ` +
-		`provided through credentials, or probe the underlying infrastructure.\n\n` +
+		`variables, inspect running processes, probe internal or host network endpoints, ` +
+		`or probe the underlying infrastructure. (Fetching public web pages or APIs that ` +
+		`the user's task requires is fine — via curl or the call_api tool.)\n\n` +
 		`### No Credential Bypass\n` +
 		`- Never attempt to read API keys, secrets, or tokens from the filesystem, ` +
 		`environment, or process memory. All external API access must go through the ` +

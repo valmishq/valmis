@@ -19,6 +19,7 @@ import { CredentialService } from './CredentialService.js';
 import { SkillMaterializerService } from './SkillMaterializerService.js';
 import { KnowledgeBaseService } from './KnowledgeBaseService.js';
 import { WorkflowRunService } from './WorkflowRunService.js';
+import { BrowserService } from './BrowserService.js';
 import { agentStreamBus } from './AgentStreamBus.js';
 import { logger } from '../config/logger.js';
 import type { ExecutionDriver, RuntimeHandle } from './runtime/ExecutionDriver.js';
@@ -175,6 +176,7 @@ export class AgentRuntimeService {
 		private readonly skillMaterializer: SkillMaterializerService,
 		private readonly knowledgeBaseService: KnowledgeBaseService,
 		private readonly workflowRunService: WorkflowRunService,
+		private readonly browserService: BrowserService,
 	) {
 		// Workspaces base: repo root sibling directory by default.
 		// process.cwd() is apps/backend/ so we go up two levels to reach the monorepo root.
@@ -432,6 +434,12 @@ export class AgentRuntimeService {
 			this.liveHandles.delete(handle);
 			const status = code === 0 ? 'completed' : 'error';
 			logger.info({ agentId, threadId, code, status }, '[runtime] agent runtime exited');
+
+			// Persist any browser session this turn opened, but keep it OPEN across
+			// turns of this thread so a follow-up ("now take a screenshot") stays on
+			// the same page. The session is reaped by the idle/max-lifetime timers,
+			// on thread delete, or at shutdown. Best-effort.
+			void this.browserService.saveOnTurnEnd(threadId);
 			try {
 				await this.sessionService.updateThreadStatus(threadId, status);
 			} catch (err) {
@@ -646,6 +654,11 @@ export class AgentRuntimeService {
 			// Per-agent chat tool-call cap — drives both the hard stop and the proactive
 			// budget notice in agent-runner.ts. Defaults to 20 if the column is unset.
 			maxToolCallsPerTurn: agent.maxToolCallsPerTurn ?? 20,
+			// Browser tools are offered to the runtime only when the agent has internet
+			// access AND the project-wide browser feature is enabled (hard-gate layer 1:
+			// conditional tool registration). The authoritative gate is a live DB check
+			// on every browser action in BrowserService (layer 2).
+			browserAvailable: agent.allowInternetAccess && this.browserService.isEnabled(),
 			// Workflow config — present only for workflow runs. Causes the runtime to route
 			// to workflow-runner.ts rather than agent-runner.ts.
 			...(workflowConfig !== undefined

@@ -12,6 +12,15 @@ import ListIcon from '@lucide/svelte/icons/list';
 import FileSearchIcon from '@lucide/svelte/icons/file-search';
 import PlayIcon from '@lucide/svelte/icons/play';
 import PlusCircleIcon from '@lucide/svelte/icons/plus-circle';
+import GlobeIcon from '@lucide/svelte/icons/globe';
+import ScanLineIcon from '@lucide/svelte/icons/scan-line';
+import MousePointerClickIcon from '@lucide/svelte/icons/mouse-pointer-click';
+import KeyboardIcon from '@lucide/svelte/icons/keyboard';
+import CameraIcon from '@lucide/svelte/icons/camera';
+import BookOpenIcon from '@lucide/svelte/icons/book-open';
+import ClockIcon from '@lucide/svelte/icons/clock';
+import ArrowLeftIcon from '@lucide/svelte/icons/arrow-left';
+import ArrowRightIcon from '@lucide/svelte/icons/arrow-right';
 
 /**
  * Maps built-in agent tool names to their Lucide icon constructors.
@@ -32,7 +41,18 @@ export const TOOL_ICON_MAP: Record<string, typeof WrenchIcon> = {
 	list_workflows: ListIcon,
 	read_workflow: FileSearchIcon,
 	trigger_workflow: PlayIcon,
-	create_workflow: PlusCircleIcon
+	create_workflow: PlusCircleIcon,
+	browser_navigate: GlobeIcon,
+	browser_snapshot: ScanLineIcon,
+	browser_click: MousePointerClickIcon,
+	browser_type: KeyboardIcon,
+	browser_select: ListIcon,
+	browser_press_key: KeyboardIcon,
+	browser_screenshot: CameraIcon,
+	browser_read_page: BookOpenIcon,
+	browser_wait_for: ClockIcon,
+	browser_go_back: ArrowLeftIcon,
+	browser_go_forward: ArrowRightIcon
 };
 
 /** Fallback icon when a tool name is not found in TOOL_ICON_MAP */

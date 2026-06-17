@@ -28,6 +28,8 @@
 		isStreaming = false,
 		/** Map of toolCallId → result string, for matching tool_result back to toolCall */
 		toolResults = {},
+		/** Map of toolCallId → image content blocks (e.g. browser screenshots) */
+		toolResultImages = {},
 		/**
 		 * Map of toolCallId → { toolName, argsJson }.
 		 * Populated by tool_call_delta SSE events so ToolCallIndicator can show
@@ -48,6 +50,7 @@
 		userDisplayName: string;
 		isStreaming?: boolean;
 		toolResults?: Record<string, string>;
+		toolResultImages?: Record<string, { data: string; mimeType: string }[]>;
 		toolCallArgs?: Record<string, { toolName: string; argsJson: string }>;
 		credentialMetaMap?: Record<string, CredentialMeta>;
 	} = $props();
@@ -192,6 +195,7 @@
 						toolDisplayName={display.toolDisplayName}
 						{argsJson}
 						result={toolResults[block.id]}
+						images={toolResultImages[block.id]}
 						isRunning={isStreaming && !toolResults[block.id]}
 						iconUrl={display.type === 'img' ? display.url : undefined}
 						iconComponent={display.type === 'icon' ? display.component : undefined}

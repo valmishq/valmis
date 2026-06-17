@@ -21,6 +21,7 @@ import { createWorkflowsRouter, createGlobalWorkflowsRouter } from './routes/wor
 import { createAppTriggersRouter } from './routes/appTriggers.js';
 import { createChannelsRouter } from './routes/channels.js';
 import { createKnowledgeRouter, createAgentKnowledgeRouter } from './routes/knowledge.js';
+import { createAgentBrowserRouter } from './routes/browser.js';
 import { KnowledgeBaseService } from './services/KnowledgeBaseService.js';
 import { CloudProviderRegistry } from './services/knowledge/providerRegistry.js';
 import { ChannelService } from './services/ChannelService.js';
@@ -42,6 +43,7 @@ import { agentStreamBus } from './services/AgentStreamBus.js';
 import { AgentProxyService } from './services/AgentProxyService.js';
 import { AgentLlmProxyService } from './services/AgentLlmProxyService.js';
 import { AgentRuntimeService } from './services/AgentRuntimeService.js';
+import { BrowserService } from './services/BrowserService.js';
 import { ProcessDriver } from './services/runtime/ProcessDriver.js';
 import { DockerDriver } from './services/runtime/DockerDriver.js';
 import type { ExecutionDriver } from './services/runtime/ExecutionDriver.js';
@@ -132,6 +134,10 @@ const executionDriver: ExecutionDriver =
 // Instantiated before runtimeService so the runtime can reconcile an orphaned
 // workflow run (mark it 'error') if a runtime dies before reporting completion.
 const workflowRunService = new WorkflowRunService();
+// Host-managed headless browser. NO-OP unless BROWSER_FEATURE_ENABLED=true.
+// Passed into runtimeService so turn-end (onClose) can close the browser context
+// and persist its storageState; passed into the runtime router for /internal/browser.
+const browserService = new BrowserService(agentService);
 const runtimeService = new AgentRuntimeService(
 	executionDriver,
 	sessionService,
@@ -142,6 +148,7 @@ const runtimeService = new AgentRuntimeService(
 	skillMaterializerService,
 	knowledgeBaseService,
 	workflowRunService,
+	browserService,
 );
 
 // --- Instantiate channel services ---
@@ -295,6 +302,12 @@ app.use(
 	createAgentKnowledgeRouter(authService, knowledgeBaseService),
 );
 
+// Agent browser-session management (owner-facing) — scoped under agents (mergeParams)
+app.use(
+	'/v1/agents/:agentId/browser',
+	createAgentBrowserRouter(authService, agentService, browserService),
+);
+
 // Runtime routes — user-facing + sandbox-internal (PROXY_TOKEN auth)
 app.use(
 	'/v1/runtime',
@@ -311,6 +324,7 @@ app.use(
 		messagePipeline,
 		webAdapter,
 		skillService,
+		browserService,
 	),
 );
 
@@ -365,6 +379,12 @@ app.use(errorHandler);
 // the first user message.
 await runtimeService.init();
 
+// Prepare the browser provider (pull image + reap orphans in container mode).
+// A NO-OP when BROWSER_FEATURE_ENABLED != true — no image is pulled and no
+// container is started on a default deployment. Runs after the execution driver
+// init() so the runtime network it shares already exists.
+await browserService.init();
+
 app.listen(PORT, async () => {
 	logger.info({ port: PORT, runtimeDriver: executionDriver.name }, '[backend] server running');
 	// Knowledge rows left 'processing' by a previous crash can never complete —
@@ -391,6 +411,8 @@ const gracefulShutdown = (signal: string): void => {
 	logger.info({ signal }, '[backend] shutting down');
 	// Clear app-trigger timers + stream connections before exiting.
 	void appTriggerManager.stopAll();
+	// Close browser sessions (saving state) + stop the browser container.
+	void browserService.shutdown();
 	void runtimeService.shutdown().finally(() => process.exit(0));
 };
 process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));

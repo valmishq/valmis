@@ -16,6 +16,7 @@
 	import Trash2Icon from '@lucide/svelte/icons/trash-2';
 	import PinIcon from '@lucide/svelte/icons/pin';
 	import PinOffIcon from '@lucide/svelte/icons/pin-off';
+	import GlobeIcon from '@lucide/svelte/icons/globe';
 	import type { Agent, AgentThread } from '@repo/types';
 
 	/**
@@ -32,18 +33,24 @@
 		activeThreadId,
 		isCreatingThread = false,
 		open = $bindable(false),
+		browserAvailable = false,
 		onNewChat,
 		onRenameThread,
-		onDeleteThread
+		onDeleteThread,
+		onBrowserSession
 	}: {
 		agent: Agent;
 		threads: AgentThread[];
 		activeThreadId?: string;
 		isCreatingThread?: boolean;
 		open: boolean;
+		/** When true, show the per-thread "Browser" menu item (agent has browser access). */
+		browserAvailable?: boolean;
 		onNewChat: () => void;
 		onRenameThread: (thread: AgentThread) => void;
 		onDeleteThread: (thread: AgentThread) => void;
+		/** Open the browser-session management modal for the given thread. */
+		onBrowserSession?: (thread: AgentThread) => void;
 	} = $props();
 
 	function formatThreadDate(date: Date | string): string {
@@ -328,6 +335,15 @@
 										<PencilIcon class="size-3.5 text-muted-foreground" />
 										Rename
 									</DropdownMenu.Item>
+									{#if browserAvailable}
+										<DropdownMenu.Item
+											onSelect={() => onBrowserSession?.(thread)}
+											class="gap-2"
+										>
+											<GlobeIcon class="size-3.5 text-muted-foreground" />
+											Browser
+										</DropdownMenu.Item>
+									{/if}
 									<DropdownMenu.Separator />
 									<DropdownMenu.Item
 										onSelect={() => onDeleteThread(thread)}

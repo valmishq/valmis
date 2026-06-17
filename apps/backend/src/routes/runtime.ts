@@ -11,6 +11,7 @@ import { TriggerService } from '../services/TriggerService.js';
 import { WorkflowRunService } from '../services/WorkflowRunService.js';
 import { WorkflowService } from '../services/WorkflowService.js';
 import { SkillService } from '../services/SkillService.js';
+import { BrowserService } from '../services/BrowserService.js';
 import { agentStreamBus } from '../services/AgentStreamBus.js';
 import { MessagePipeline } from '../channels/pipeline.js';
 import { WebAdapter } from '../channels/web/adapter.js';
@@ -32,6 +33,7 @@ import type {
 	LlmProxyRequest,
 	SandboxTokenPayload,
 	HitlRequest,
+	BrowserActionRequest,
 	MemoryWriteRequest,
 	MemorySearchRequest,
 	MemoryDeleteRequest,
@@ -110,6 +112,7 @@ export function createRuntimeRouter(
 	messagePipeline: MessagePipeline,
 	webAdapter: WebAdapter,
 	skillService: SkillService,
+	browserService: BrowserService,
 ): Router {
 	const router = Router();
 	const auth = requireAuth(authService);
@@ -237,9 +240,16 @@ export function createRuntimeRouter(
 				// The result string is normalised (text only, truncated to 250 chars) before
 				// being sent to avoid flooding the SSE stream with large payloads.
 				if (toolCallId) {
-					const resultText = formatToolResult(
-						content as Parameters<typeof sessionService.appendMessage>[0]['content'],
-					);
+					const blocks = content as Parameters<
+						typeof sessionService.appendMessage
+					>[0]['content'];
+					const resultText = formatToolResult(blocks);
+					// Carry any image blocks (e.g. a browser screenshot) so the chat UI can
+					// render them live — formatToolResult is text-only, so without this the
+					// image would only appear after a page reload.
+					const images = blocks
+						.filter((b): b is Extract<ContentBlock, { type: 'image' }> => b.type === 'image')
+						.map((b) => ({ data: b.data, mimeType: b.mimeType }));
 					agentStreamBus.emit(sandboxToken.threadId, {
 						type: 'tool_call_end',
 						// messageId is not used by the frontend handler for tool_call_end;
@@ -247,6 +257,7 @@ export function createRuntimeRouter(
 						messageId: '',
 						toolCallId,
 						result: resultText,
+						...(images.length > 0 ? { images } : {}),
 					});
 				}
 
@@ -348,6 +359,37 @@ export function createRuntimeRouter(
 				'[runtime] HITL request failed or timed out',
 			);
 			res.status(408).json({ success: false, error: message });
+		}
+	});
+
+	/**
+	 * POST /v1/runtime/internal/browser/action
+	 * Drives the host-managed browser on behalf of the sandbox — one BrowserCommand
+	 * per call. The authoritative hard gate (BROWSER_FEATURE_ENABLED + a LIVE DB
+	 * read of the agent's allowInternetAccess) lives in BrowserService.execute, so
+	 * a runtime whose agent had internet access revoked mid-session is refused here,
+	 * not merely by the absence of the browser tools. agentId/threadId come from the
+	 * verified PROXY_TOKEN — never from the request body.
+	 */
+	router.post('/internal/browser/action', async (req: Request, res: Response) => {
+		const sandboxToken = (req as Request & { sandboxToken: SandboxTokenPayload }).sandboxToken;
+		const body = req.body as BrowserActionRequest;
+
+		if (!body?.command?.action) {
+			res.status(400).json({ success: false, error: 'command.action is required' });
+			return;
+		}
+
+		try {
+			const result = await browserService.execute(sandboxToken, body);
+			res.json({ success: true, data: result });
+		} catch (err) {
+			const message = err instanceof Error ? err.message : 'Browser action failed';
+			logger.warn(
+				{ err, agentId: sandboxToken.agentId, threadId: sandboxToken.threadId },
+				'[runtime] browser action failed',
+			);
+			res.status(400).json({ success: false, error: message });
 		}
 	});
 
@@ -486,6 +528,9 @@ export function createRuntimeRouter(
 				res.status(404).json(body);
 				return;
 			}
+			// Close any open browser session for this thread (frees the context +
+			// saves its state). Best-effort — never blocks the delete response.
+			void browserService.closeSession(threadId);
 			const body: AgentThreadDeleteResponse = { success: true, data: { deleted: true } };
 			res.json(body);
 		} catch (err) {

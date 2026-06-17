@@ -290,6 +290,9 @@ async function executeStep(
 		workspaceRoot: WORKSPACE_ROOT,
 		skillNames: (config.skills ?? []).map((s) => s.name),
 		onSkillActivated: (skillName) => skillTracker.activatedSkills.add(skillName),
+		// Browser tools follow the same gate as chat (internet access + feature flag);
+		// a step can still narrow them via allowedTools. Backend re-checks every call.
+		browserAvailable: config.browserAvailable ?? false,
 	});
 	const effectiveTools =
 		step.allowedTools.length > 0

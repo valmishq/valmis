@@ -1,4 +1,5 @@
 import { error } from '@sveltejs/kit';
+import { env } from '$env/dynamic/private';
 import type { PageServerLoad } from './$types';
 import { api } from '$lib/server/api';
 import type { Agent, AgentThread } from '@repo/types';
@@ -32,5 +33,9 @@ export const load: PageServerLoad = async (event) => {
 		threads = (threadsBody.data ?? []) as AgentThread[];
 	}
 
-	return { agent, threads };
+	return {
+		agent,
+		threads,
+		browserAvailable: agent.allowInternetAccess && env.BROWSER_FEATURE_ENABLED === 'true'
+	};
 };

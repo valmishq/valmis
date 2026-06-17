@@ -2,6 +2,7 @@
 	import { goto } from '$app/navigation';
 	import { api } from '$lib/api.client.js';
 	import ChatThreadSidebar from '$lib/components/custom/chat/ChatThreadSidebar.svelte';
+	import BrowserSessionDialog from '$lib/components/custom/chat/BrowserSessionDialog.svelte';
 	import AgentAvatar from '$lib/components/custom/chat/AgentAvatar.svelte';
 	import { setAlert } from '$lib/components/custom/alert/alert-state.svelte.js';
 	import type { PageData } from './$types';
@@ -20,6 +21,13 @@
 	let isCreatingThread = $state(false);
 	/** Mobile sidebar overlay open state */
 	let sidebarOpen = $state(false);
+
+	let browserDialogOpen = $state(false);
+	let browserThreadTarget = $state<AgentThread | null>(null);
+	function handleBrowserSession(thread: AgentThread) {
+		browserThreadTarget = thread;
+		browserDialogOpen = true;
+	}
 
 	/** Create a new thread and redirect to the chat view. */
 	async function handleNewChat() {
@@ -74,9 +82,11 @@
 		{threads}
 		{isCreatingThread}
 		bind:open={sidebarOpen}
+		browserAvailable={data.browserAvailable}
 		onNewChat={handleNewChat}
 		onRenameThread={() => {}}
 		onDeleteThread={() => {}}
+		onBrowserSession={handleBrowserSession}
 	/>
 
 	<!-- Right panel: empty state -->
@@ -116,3 +126,11 @@
 		</div>
 	</div>
 </div>
+
+<!-- Browser session management modal -->
+<BrowserSessionDialog
+	bind:open={browserDialogOpen}
+	agentId={data.agent.id}
+	agentName={data.agent.name}
+	threadId={browserThreadTarget?.id}
+/>
