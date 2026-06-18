@@ -435,11 +435,13 @@ export class AgentRuntimeService {
 			const status = code === 0 ? 'completed' : 'error';
 			logger.info({ agentId, threadId, code, status }, '[runtime] agent runtime exited');
 
-			// Persist any browser session this turn opened, but keep it OPEN across
-			// turns of this thread so a follow-up ("now take a screenshot") stays on
-			// the same page. The session is reaped by the idle/max-lifetime timers,
-			// on thread delete, or at shutdown. Best-effort.
-			void this.browserService.saveOnTurnEnd(threadId);
+			// Persist any browser session this turn opened (flush history + storageState),
+			// but keep it OPEN across turns of this thread so a follow-up ("now take a
+			// screenshot") stays on the same page. The session is reaped by the
+			// idle/max-lifetime timers, on thread delete, or at shutdown. Awaited (it is
+			// best-effort and never throws) so the flush completes before the handler
+			// returns — otherwise a restart right after a turn could drop the visits.
+			await this.browserService.saveOnTurnEnd(threadId);
 			try {
 				await this.sessionService.updateThreadStatus(threadId, status);
 			} catch (err) {

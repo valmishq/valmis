@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, writeFileSync, readFileSync, statSync, rmSync } from 'fs';
+import { existsSync, mkdirSync, writeFileSync, readFileSync, statSync, rmSync, renameSync } from 'fs';
 import { resolve, join, dirname, sep } from 'path';
 import { isIP } from 'net';
 import { lookup as dnsLookup } from 'dns/promises';
@@ -34,6 +34,9 @@ const MAX_ERROR_CHARS = 400;
 /** Most-recent visited pages kept per agent (history.json). */
 const HISTORY_CAP = 500;
 
+/** Debounce for incremental history flushes after a visit — durability vs. write rate. */
+const HISTORY_FLUSH_DEBOUNCE_MS = 2000;
+
 /** A live per-thread browser session. */
 interface BrowserSession {
 	context: BrowserContext;
@@ -45,6 +48,8 @@ interface BrowserSession {
 	visitedUrls: BrowserHistoryEntry[];
 	/** Reset on every action — reaps the session after inactivity. */
 	idleTimer: ReturnType<typeof setTimeout>;
+	/** Debounced incremental history flush — coalesces a burst of visits into one write. */
+	historyFlushTimer?: ReturnType<typeof setTimeout>;
 	/** Set once at creation, never reset — hard cap on total session lifetime. */
 	maxTimer: ReturnType<typeof setTimeout>;
 }
@@ -280,15 +285,7 @@ export class BrowserService {
 	/** Export a session's storageState to its backend-only per-agent path + flush history. */
 	private async persistState(session: BrowserSession, threadId: string): Promise<void> {
 		// Flush any pages visited this turn into the agent's history.json (capped).
-		if (session.visitedUrls.length > 0) {
-			try {
-				const merged = [...this.loadHistory(session.agentId), ...session.visitedUrls];
-				this.saveHistory(session.agentId, merged.slice(-HISTORY_CAP));
-				session.visitedUrls = [];
-			} catch (err) {
-				logger.warn({ err, threadId }, '[browser] failed to save history — non-fatal');
-			}
-		}
+		this.flushHistory(session);
 		try {
 			const statePath = this.storageStatePath(session.agentId);
 			mkdirSync(join(this.stateBasePath, session.agentId), { recursive: true });
@@ -296,6 +293,38 @@ export class BrowserService {
 		} catch (err) {
 			logger.warn({ err, threadId }, '[browser] failed to save storageState — non-fatal');
 		}
+	}
+
+	/**
+	 * Persist this session's buffered visits into the agent's history.json (merge +
+	 * cap), then clear the buffer. SYNCHRONOUS — no await between loadHistory and
+	 * saveHistory — so concurrent flushes in this single-process backend cannot
+	 * interleave into a lost update. Touches only in-memory data + the filesystem,
+	 * so it still works when the browser/context is already dead. Best-effort.
+	 */
+	private flushHistory(session: BrowserSession): void {
+		if (session.historyFlushTimer) {
+			clearTimeout(session.historyFlushTimer);
+			session.historyFlushTimer = undefined;
+		}
+		if (session.visitedUrls.length === 0) return;
+		try {
+			const merged = [...this.loadHistory(session.agentId), ...session.visitedUrls];
+			this.saveHistory(session.agentId, merged.slice(-HISTORY_CAP));
+			session.visitedUrls = [];
+		} catch (err) {
+			logger.warn({ err, agentId: session.agentId }, '[browser] failed to flush history — non-fatal');
+		}
+	}
+
+	/** Schedule a debounced history flush so a crash/redeploy loses at most a short window of visits. */
+	private scheduleHistoryFlush(session: BrowserSession): void {
+		if (session.historyFlushTimer) clearTimeout(session.historyFlushTimer);
+		session.historyFlushTimer = setTimeout(() => {
+			session.historyFlushTimer = undefined;
+			this.flushHistory(session);
+		}, HISTORY_FLUSH_DEBOUNCE_MS);
+		session.historyFlushTimer.unref();
 	}
 
 	// ─── Command entry point ───────────────────────────────────────────────────
@@ -401,6 +430,13 @@ export class BrowserService {
 			maxTimer,
 		};
 		this.sessions.set(threadId, session);
+		// Record EVERY committed main-frame navigation — clicks on links, form posts,
+		// type+submit, server/JS redirects, goBack/goForward, and most SPA pushState
+		// route changes — not just explicit browser_navigate. recordVisit's dedup +
+		// about:blank filter make this idempotent; it also schedules a debounced flush.
+		page.on('framenavigated', (frame) => {
+			if (frame === page.mainFrame()) void this.recordVisit(session, page);
+		});
 		logger.info({ threadId, agentId }, '[browser] session created');
 		return session;
 	}
@@ -426,13 +462,18 @@ export class BrowserService {
 		}
 	}
 
-	/** Drop a session without saving state — used when the context is already dead. */
+	/** Drop a session whose browser context is dead — but flush its history first. */
 	private async dropSession(threadId: string): Promise<void> {
 		const session = this.sessions.get(threadId);
 		if (!session) return;
 		this.sessions.delete(threadId);
 		clearTimeout(session.idleTimer);
 		clearTimeout(session.maxTimer);
+		// Persist buffered visits before discarding. visitedUrls is in-memory and the
+		// history write is pure filesystem I/O, so it succeeds even with a dead context
+		// (unlike storageState in persistState, which needs the live context). This
+		// covers the browser-OOM / page-crash loss path.
+		this.flushHistory(session);
 		try {
 			await session.context.close();
 		} catch {
@@ -451,6 +492,9 @@ export class BrowserService {
 			for (const [, session] of this.sessions) {
 				clearTimeout(session.idleTimer);
 				clearTimeout(session.maxTimer);
+				// Persist buffered visits before dropping — the browser is gone but the
+				// history write does not need it (covers the browser-crash loss path).
+				this.flushHistory(session);
 			}
 			this.sessions.clear();
 		});
@@ -647,7 +691,7 @@ export class BrowserService {
 					timeout: this.navigationTimeoutMs,
 				});
 				await this.settle(page);
-				await this.recordVisit(session, page);
+				// Visit recorded by the page 'framenavigated' listener (see getOrCreateSession).
 				return { text: await this.snapshot(page), url: page.url() };
 			}
 			case 'snapshot': {
@@ -723,13 +767,11 @@ export class BrowserService {
 			case 'goBack': {
 				await page.goBack({ waitUntil: 'load' }).catch(() => undefined);
 				await this.settle(page);
-				await this.recordVisit(session, page);
 				return { text: await this.snapshot(page), url: page.url() };
 			}
 			case 'goForward': {
 				await page.goForward({ waitUntil: 'load' }).catch(() => undefined);
 				await this.settle(page);
-				await this.recordVisit(session, page);
 				return { text: await this.snapshot(page), url: page.url() };
 			}
 		}
@@ -1002,6 +1044,7 @@ export class BrowserService {
 			if (last && last.url === url) return;
 			const title = await page.title().catch(() => '');
 			session.visitedUrls.push({ url, title, visitedAt: new Date().toISOString() });
+			this.scheduleHistoryFlush(session);
 		} catch {
 			// history is best-effort
 		}
@@ -1056,7 +1099,14 @@ export class BrowserService {
 
 	private saveHistory(agentId: string, entries: BrowserHistoryEntry[]): void {
 		mkdirSync(join(this.stateBasePath, agentId), { recursive: true });
-		writeFileSync(this.historyPath(agentId), JSON.stringify(entries));
+		// Write to a sibling temp file then atomically rename over history.json, so a
+		// write interrupted by SIGTERM/OOM can never leave a truncated file (which
+		// loadHistory would read as [] and the next save would overwrite — wiping all
+		// prior history). rename is atomic within the same filesystem/volume.
+		const finalPath = this.historyPath(agentId);
+		const tmpPath = `${finalPath}.tmp`;
+		writeFileSync(tmpPath, JSON.stringify(entries));
+		renameSync(tmpPath, finalPath);
 	}
 
 	private rmIfExists(path: string): void {

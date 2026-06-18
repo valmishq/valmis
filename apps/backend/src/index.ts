@@ -405,14 +405,25 @@ app.listen(PORT, async () => {
 // Kill all live agent runtimes on shutdown so containers/processes are not
 // stranded across restarts (driver init() reaps any survivors as a backstop).
 let shuttingDown = false;
-const gracefulShutdown = (signal: string): void => {
+const gracefulShutdown = async (signal: string): Promise<void> => {
 	if (shuttingDown) return;
 	shuttingDown = true;
 	logger.info({ signal }, '[backend] shutting down');
 	// Clear app-trigger timers + stream connections before exiting.
 	void appTriggerManager.stopAll();
-	// Close browser sessions (saving state) + stop the browser container.
-	void browserService.shutdown();
+	// Close browser sessions (flush visited-URL history + save storageState) and stop
+	// the browser container. AWAITED before exit so an in-flight session's history is
+	// persisted — but bounded so a stuck browser/container teardown can't block SIGTERM
+	// until Docker escalates to SIGKILL (and loses the writes anyway).
+	const withTimeout = (p: Promise<unknown>, ms: number): Promise<unknown> =>
+		Promise.race([
+			p.catch(() => undefined),
+			new Promise<void>((res) => {
+				const t = setTimeout(res, ms);
+				t.unref();
+			}),
+		]);
+	await withTimeout(browserService.shutdown(), 8000);
 	void runtimeService.shutdown().finally(() => process.exit(0));
 };
 process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
