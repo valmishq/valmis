@@ -1,7 +1,7 @@
-# Builds and publishes the two deployment images to Docker Hub:
+# Builds and publishes the two deployment images to the GitHub Container Registry (GHCR):
 #
-#   logiclabshq/agent-int       — app image (frontend + backend), root Dockerfile
-#   logiclabshq/agent-runtime   — agent sandbox image, apps/agent-runtime/Dockerfile
+#   ghcr.io/valmishq/valmis           — app image (frontend + backend), root Dockerfile
+#   ghcr.io/valmishq/agent-runtime    — agent sandbox image, apps/agent-runtime/Dockerfile
 #
 # Both images are published with IDENTICAL tags from the same commit — they must
 # stay version-locked: the runtime's ProxyClient and the backend's
@@ -16,11 +16,16 @@
 # No "latest" tag is published — deployments pin an explicit tag via APP_IMAGE
 # and AGENT_RUNTIME_IMAGE in .env, keeping both images version-locked.
 #
-# Required repository secrets:
-#   DOCKERHUB_USERNAME — Docker Hub account with push access to logiclabshq/*
-#   DOCKERHUB_TOKEN    — Docker Hub access token (Read & Write)
+# Authentication: GHCR uses the built-in GITHUB_TOKEN — no repository secrets are
+# required. The job requests `packages: write` permission below.
+#
+# One-time setup: GHCR packages are created PRIVATE on first publish. To allow
+# unauthenticated pulls (so `docker compose up` and the backend's startup pull work
+# without `docker login`), set both packages to Public once after the first run:
+#   github.com/orgs/valmishq → Packages → valmis / agent-runtime
+#     → Package settings → Change visibility → Public
 
-name: Publish Docker images
+name: Publish Docker images to GHCR
 
 on:
   push:
@@ -35,13 +40,16 @@ on:
 jobs:
   publish:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
     strategy:
       fail-fast: true
       matrix:
         include:
-          - image: logiclabshq/agent-int
+          - image: ghcr.io/valmishq/valmis
             dockerfile: Dockerfile
-          - image: logiclabshq/agent-runtime
+          - image: ghcr.io/valmishq/agent-runtime
             dockerfile: apps/agent-runtime/Dockerfile
 
     steps:
@@ -54,11 +62,12 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Log in to Docker Hub
+      - name: Log in to GitHub Container Registry
         uses: docker/login-action@v3
         with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Docker metadata
         id: meta

@@ -15,7 +15,7 @@ Lets agents work with a Shopify store through the Admin API — products, orders
 ## Creating the custom app and getting the credentials
 
 1. In your Shopify admin, go to **Settings → Apps and sales channels → Develop apps** (enable custom app development if prompted).
-2. Click **Create an app** and name it (e.g. "Agent-Int").
+2. Click **Create an app** and name it (e.g. "Valmis").
 3. On the **Configuration** tab, set the **Admin API scopes** the agent needs (e.g. `read_orders`, `write_products`).
 4. **Install the app** on the store.
 5. On the **API credentials** tab:

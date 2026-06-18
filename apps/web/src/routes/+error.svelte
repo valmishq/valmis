@@ -77,7 +77,7 @@
 </script>
 
 <svelte:head>
-	<title>{errorConfig.title} — AgentInt</title>
+	<title>{errorConfig.title} — Valmis</title>
 </svelte:head>
 
 <!-- Root-level error page (standalone, no sidebar) -->

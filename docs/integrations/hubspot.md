@@ -31,7 +31,7 @@ Lets agents work with your HubSpot CRM — contacts, companies, deals, lists, fo
 
 ### Scopes must match exactly
 
-Agent-Int requests this exact scope set during authorization:
+Valmis requests this exact scope set during authorization:
 
 ```
 oauth crm.objects.contacts.read crm.lists.read crm.objects.contacts.write
@@ -41,7 +41,7 @@ crm.schemas.deals.read crm.objects.owners.read crm.lists.write forms tickets
 ```
 
 ::: danger Configure these exact scopes in your HubSpot app
-HubSpot rejects the authorization if the scopes requested don't match the scopes configured on the app. In your public app's **Auth** tab, the scope configuration must contain **exactly** the scopes listed above — a missing scope (or an extra _required_ scope Agent-Int doesn't request) makes the authorize step fail with a scope mismatch error.
+HubSpot rejects the authorization if the scopes requested don't match the scopes configured on the app. In your public app's **Auth** tab, the scope configuration must contain **exactly** the scopes listed above — a missing scope (or an extra _required_ scope Valmis doesn't request) makes the authorize step fail with a scope mismatch error.
 :::
 
 ### Setting up the public app

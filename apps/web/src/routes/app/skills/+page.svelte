@@ -82,7 +82,7 @@
 </script>
 
 <svelte:head>
-	<title>Skills — AgentInt Dashboard</title>
+	<title>Skills — Valmis Dashboard</title>
 </svelte:head>
 
 <div class="flex flex-col gap-6 p-6">

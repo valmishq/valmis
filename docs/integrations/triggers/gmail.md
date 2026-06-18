@@ -2,12 +2,12 @@
 
 Fire a [workflow](/guide/workflows/) when a new email arrives. Gmail pushes notifications through **Google Cloud Pub/Sub** rather than polling, so it needs a one-time Pub/Sub setup in the same Cloud project as your Gmail credential.
 
-| | |
-| --------------- | ------------------------------------------------------------------ |
-| **Event**       | New email received                                                  |
-| **Delivery**    | Push (Google Cloud Pub/Sub → `<APP_URL>/api/v1/webhooks/<triggerId>`) |
-| **Credential**  | [Gmail](/integrations/google) (OAuth2) — `gmail.readonly` is enough for the trigger |
-| **Payload**     | `{ from, to, subject, snippet, body, receivedAt, messageId, threadId, labels, raw }` |
+|                |                                                                                      |
+| -------------- | ------------------------------------------------------------------------------------ |
+| **Event**      | New email received                                                                   |
+| **Delivery**   | Push (Google Cloud Pub/Sub → `<APP_URL>/api/v1/webhooks/<triggerId>`)                |
+| **Credential** | [Gmail](/integrations/google) (OAuth2) — `gmail.readonly` is enough for the trigger  |
+| **Payload**    | `{ from, to, subject, snippet, body, receivedAt, messageId, threadId, labels, raw }` |
 
 ## Prerequisites
 
@@ -34,7 +34,7 @@ Do this once per Cloud project; all Gmail triggers in that project can share the
 4. Optionally restrict it to a **Label** using the dropdown — it lists your Gmail labels (e.g. `INBOX`); search or pick one, or paste a label id manually.
 5. **Save the workflow.** Copy the delivery URL it now shows into the Pub/Sub push subscription (step 4 above).
 
-Agent-Int calls Gmail `users.watch` when the trigger activates and re-issues it automatically before the 7-day watch expires. The push notification only carries a history id — the actual message is always re-fetched from the authenticated Gmail API, so a spoofed delivery cannot inject email content.
+Valmis calls Gmail `users.watch` when the trigger activates and re-issues it automatically before the 7-day watch expires. The push notification only carries a history id — the actual message is always re-fetched from the authenticated Gmail API, so a spoofed delivery cannot inject email content.
 
 ## Payload
 
@@ -42,16 +42,16 @@ Each matching email is delivered as <code v-pre>{{trigger.payload}}</code>:
 
 ```json
 {
-  "from": "alice@example.com",
-  "to": "you@example.com",
-  "subject": "Invoice #1234",
-  "snippet": "Please find attached…",
-  "body": "Please find attached the invoice for…",
-  "receivedAt": "2026-06-14T10:32:00.000Z",
-  "messageId": "18f…",
-  "threadId": "18f…",
-  "labels": ["INBOX", "IMPORTANT"],
-  "raw": { "…": "the original Gmail message resource" }
+	"from": "alice@example.com",
+	"to": "you@example.com",
+	"subject": "Invoice #1234",
+	"snippet": "Please find attached…",
+	"body": "Please find attached the invoice for…",
+	"receivedAt": "2026-06-14T10:32:00.000Z",
+	"messageId": "18f…",
+	"threadId": "18f…",
+	"labels": ["INBOX", "IMPORTANT"],
+	"raw": { "…": "the original Gmail message resource" }
 }
 ```
 

@@ -43,9 +43,9 @@
 </script>
 
 <svelte:head>
-	<title>Sign In — AgentInt</title>
-	<meta name="description" content="Sign in to your AgentInt Integration Hub account." />
-	<meta name="keywords" content="sign in, login, AgentInt, integration hub" />
+	<title>Sign In — Valmis</title>
+	<meta name="description" content="Sign in to your Valmis account." />
+	<meta name="keywords" content="sign in, login, Valmis, integration hub" />
 </svelte:head>
 
 <div class="flex min-h-screen items-center justify-center bg-muted/40 p-4">

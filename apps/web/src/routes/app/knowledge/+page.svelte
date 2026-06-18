@@ -131,7 +131,7 @@
 </script>
 
 <svelte:head>
-	<title>Knowledge — AgentInt Dashboard</title>
+	<title>Knowledge — Valmis Dashboard</title>
 	<meta
 		name="description"
 		content="Manage your knowledge library: upload documents or import from cloud storage, then assign them to agents."

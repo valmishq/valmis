@@ -148,7 +148,7 @@
 </Dialog.Root>
 
 <svelte:head>
-	<title>{data.agent.name} — Memory — AgentInt Dashboard</title>
+	<title>{data.agent.name} — Memory — Valmis Dashboard</title>
 	<meta
 		name="description"
 		content="Manage long-term memory entries stored by {data.agent
@@ -156,7 +156,7 @@
 	/>
 	<meta
 		name="keywords"
-		content="agent memory, AI memory management, vector memory, long-term memory, AgentInt"
+		content="agent memory, AI memory management, vector memory, long-term memory, Valmis"
 	/>
 </svelte:head>
 

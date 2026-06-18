@@ -8,7 +8,7 @@ import { logger } from '../../config/logger.js';
 import type { ExecutionDriver, RuntimeHandle, RuntimeSpawnRequest } from './ExecutionDriver.js';
 
 /** Label applied to every runtime container — used for orphan reaping */
-const RUNTIME_LABEL = 'openagent.runtime';
+const RUNTIME_LABEL = 'valmis.runtime';
 
 /** UID/GID of the non-root `agent` user inside the runtime image */
 const RUNTIME_UID = 10001;
@@ -69,7 +69,7 @@ export class DockerDriver implements ExecutionDriver {
 		// dockerode's modem honours DOCKER_HOST / DOCKER_TLS_VERIFY / DOCKER_CERT_PATH
 		// automatically; with none set it falls back to /var/run/docker.sock.
 		this.docker = new Docker();
-		this.image = process.env.AGENT_RUNTIME_IMAGE ?? 'logiclabshq/agent-runtime:latest';
+		this.image = process.env.AGENT_RUNTIME_IMAGE ?? 'ghcr.io/valmishq/agent-runtime:latest';
 		const backendPort = process.env.BACKEND_PORT ?? '4000';
 		this.proxyHost =
 			process.env.AGENT_RUNTIME_PROXY_HOST ?? `http://host.docker.internal:${backendPort}`;
@@ -77,9 +77,8 @@ export class DockerDriver implements ExecutionDriver {
 		// backend's per-network IP when the configured hostname is unresolvable.
 		this.proxyHostOpen = this.proxyHost;
 		this.proxyHostInternal = this.proxyHost;
-		this.networkOpen = process.env.AGENT_RUNTIME_NETWORK ?? 'openagent_runtime';
-		this.networkInternal =
-			process.env.AGENT_RUNTIME_NETWORK_INTERNAL ?? 'openagent_runtime_internal';
+		this.networkOpen = process.env.AGENT_RUNTIME_NETWORK ?? 'valmis_runtime';
+		this.networkInternal = process.env.AGENT_RUNTIME_NETWORK_INTERNAL ?? 'valmis_runtime_internal';
 		this.addHostGateway = process.env.AGENT_RUNTIME_ADD_HOST_GATEWAY === 'true';
 		this.workspaceVolume = process.env.AGENT_RUNTIME_WORKSPACE_VOLUME;
 		this.workspaceHostPath = process.env.AGENT_RUNTIME_WORKSPACE_HOST_PATH;
@@ -235,8 +234,8 @@ export class DockerDriver implements ExecutionDriver {
 			Env: Object.entries(env).map(([key, value]) => `${key}=${value}`),
 			Labels: {
 				[RUNTIME_LABEL]: 'true',
-				'openagent.agent': req.agentId,
-				'openagent.thread': req.threadId,
+				'valmis.agent': req.agentId,
+				'valmis.thread': req.threadId,
 			},
 			User: `${RUNTIME_UID}:${RUNTIME_UID}`,
 			WorkingDir: '/workspace',
@@ -361,7 +360,11 @@ export class DockerDriver implements ExecutionDriver {
 		} else if (mount.Type === 'bind') {
 			if (this.workspaceHostPath !== mount.Source) {
 				logger.warn(
-					{ configured: this.workspaceHostPath ?? null, detected: mount.Source, workspacesBasePath },
+					{
+						configured: this.workspaceHostPath ?? null,
+						detected: mount.Source,
+						workspacesBasePath,
+					},
 					'[runtime:docker] workspace host path auto-detected from the backend mount (overriding AGENT_RUNTIME_WORKSPACE_HOST_PATH)',
 				);
 			}

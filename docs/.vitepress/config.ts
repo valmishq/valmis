@@ -1,29 +1,29 @@
 import { defineConfig } from 'vitepress';
 
 export default defineConfig({
-	title: 'Agent-Int',
+	title: 'Valmis Docs',
 	description:
 		'Self-hosted AI agent platform — create LLM-powered agents that talk to your apps via chat, messaging channels, and automated workflows.',
 	lang: 'en-US',
-	// Served as a GitHub Pages project site at https://wayneshn.github.io/agent-int/,
+	// Served as a GitHub Pages project site at https://docs.valm.is,
 	// so every asset/link must be prefixed with the repo name.
-	base: '/agent-int/',
+	base: '/',
 	lastUpdated: true,
 	themeConfig: {
 		nav: [
-			{ text: 'Guide', link: '/guide/what-is-agent-int' },
+			{ text: 'Guide', link: '/guide/what-is-valmis' },
 			{ text: 'Integrations', link: '/integrations/' },
 		],
 		search: {
 			provider: 'local',
 		},
-		socialLinks: [{ icon: 'github', link: 'https://github.com/wayneshn/agent-int' }],
+		socialLinks: [{ icon: 'github', link: 'https://github.com/valmishq/valmis' }],
 		sidebar: {
 			'/guide/': [
 				{
 					text: 'Introduction',
 					items: [
-						{ text: 'What is Agent-Int?', link: '/guide/what-is-agent-int' },
+						{ text: 'What is Valmis?', link: '/guide/what-is-valmis' },
 						{ text: 'Security Overview', link: '/guide/security' },
 						{ text: 'Getting Started', link: '/guide/getting-started' },
 					],
@@ -153,7 +153,7 @@ export default defineConfig({
 		},
 		outline: { level: [2, 3] },
 		footer: {
-			message: 'Agent-Int — the AI agent that talks to your apps.',
+			message: 'Valmis — the AI agent that talks to your apps.',
 		},
 	},
 });

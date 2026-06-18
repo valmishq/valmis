@@ -33,7 +33,7 @@ For OAuth2 services (Gmail, Slack, Notion, HubSpot, …) the flow has two parts:
 
    with copy button provided. `APP_URL` must be your real public URL ([configuration](/guide/configuration#urls-and-cors)).
 
-2. **Authorize** — after saving, click the authorize action. You're redirected to the provider to grant access, then back to Agent-Int. Status updates to verified on success.
+2. **Authorize** — after saving, click the authorize action. You're redirected to the provider to grant access, then back to Valmis. Status updates to verified on success.
 
 Tokens are refreshed automatically: the platform proactively refreshes expiring OAuth2 access tokens and retries once on a 401 by refreshing. If a grant is revoked on the provider side, use **Re-authorize** on the credential.
 

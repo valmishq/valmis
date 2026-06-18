@@ -124,12 +124,12 @@
 </script>
 
 <svelte:head>
-	<title>Profile — AgentInt Dashboard</title>
+	<title>Profile — Valmis Dashboard</title>
 	<meta
 		name="description"
-		content="Manage your AgentInt profile. Update your name and change your password."
+		content="Manage your Valmis profile. Update your name and change your password."
 	/>
-	<meta name="keywords" content="profile, settings, account, password, AgentInt" />
+	<meta name="keywords" content="profile, settings, account, password, Valmis" />
 </svelte:head>
 
 <!-- Change password dialog -->

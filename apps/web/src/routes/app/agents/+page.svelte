@@ -84,14 +84,14 @@
 </script>
 
 <svelte:head>
-	<title>Agents — AgentInt Dashboard</title>
+	<title>Agents — Valmis Dashboard</title>
 	<meta
 		name="description"
 		content="Create and manage your AI agents. Configure custom personas with unique instructions, knowledge, and service credentials."
 	/>
 	<meta
 		name="keywords"
-		content="AI agents, custom agents, personas, knowledge base, AgentInt, agent management"
+		content="AI agents, custom agents, personas, knowledge base, Valmis, agent management"
 	/>
 </svelte:head>
 

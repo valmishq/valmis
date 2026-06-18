@@ -1,6 +1,6 @@
 # Security Overview
 
-Agent-Int is built for self-hosters who give AI agents real credentials. The design goal: even a fully misbehaving agent — one following malicious instructions — should not be able to read your secrets or escape its box. This page explains how the platform isolates agent execution and protects your credentials and LLM API keys.
+Valmis is built for self-hosters who give AI agents real credentials. The design goal: even a fully misbehaving agent — one following malicious instructions — should not be able to read your secrets or escape its box. This page explains how the platform isolates agent execution and protects your credentials and LLM API keys.
 
 ## The sandbox: no secrets, ever
 
@@ -62,7 +62,7 @@ Each turn is a Node.js child process with a sanitized environment. The no-secret
 
 ## What you should still do
 
-Agent-Int contains the blast radius of a misbehaving agent, but some risk decisions are yours:
+Valmis contains the blast radius of a misbehaving agent, but some risk decisions are yours:
 
 - **Attach credentials sparingly.** An agent's attached credentials define what a prompt-injected agent could misuse. Prefer narrowly-scoped tokens (most [integrations](/integrations/) support them).
 - **Review skills before installing.** [Skill](/guide/skills) instructions steer the agent; the install scan warns but does not block.

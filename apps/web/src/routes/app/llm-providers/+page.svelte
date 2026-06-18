@@ -313,14 +313,14 @@
 </script>
 
 <svelte:head>
-	<title>LLM Providers — AgentInt Dashboard</title>
+	<title>LLM Providers — Valmis Dashboard</title>
 	<meta
 		name="description"
-		content="Configure AI language model providers for your AgentInt integrations. Connect OpenAI, Anthropic, Google Gemini, and more."
+		content="Configure AI language model providers for your Valmis integrations. Connect OpenAI, Anthropic, Google Gemini, and more."
 	/>
 	<meta
 		name="keywords"
-		content="LLM, AI providers, OpenAI, Anthropic, Gemini, language models, AgentInt"
+		content="LLM, AI providers, OpenAI, Anthropic, Gemini, language models, Valmis"
 	/>
 </svelte:head>
 

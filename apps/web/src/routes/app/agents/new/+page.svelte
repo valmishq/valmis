@@ -122,19 +122,19 @@
 
 <svelte:head>
 	{#if isEditMode && agent}
-		<title>{agent.name} — Edit Agent — AgentInt Dashboard</title>
+		<title>{agent.name} — Edit Agent — Valmis Dashboard</title>
 		<meta
 			name="description"
 			content="Edit the configuration of your AI agent: update instructions, credentials, and memory."
 		/>
-		<meta name="keywords" content="edit agent, agent settings, AI agent configuration, AgentInt" />
+		<meta name="keywords" content="edit agent, agent settings, AI agent configuration, Valmis" />
 	{:else}
-		<title>New Agent — AgentInt Dashboard</title>
+		<title>New Agent — Valmis Dashboard</title>
 		<meta
 			name="description"
 			content="Create a new AI agent with custom instructions, personality, and access to your service credentials."
 		/>
-		<meta name="keywords" content="create agent, new AI agent, custom persona, AgentInt" />
+		<meta name="keywords" content="create agent, new AI agent, custom persona, Valmis" />
 	{/if}
 </svelte:head>
 

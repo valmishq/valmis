@@ -92,7 +92,7 @@
 </script>
 
 <svelte:head>
-	<title>{data.agent.name} — Details — AgentInt</title>
+	<title>{data.agent.name} — Details — Valmis</title>
 	<meta
 		name="description"
 		content="View execution history, token usage, and costs for {data.agent.name}."

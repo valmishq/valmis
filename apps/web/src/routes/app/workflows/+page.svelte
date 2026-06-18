@@ -189,12 +189,12 @@
 </script>
 
 <svelte:head>
-	<title>Workflows — AgentInt</title>
+	<title>Workflows — Valmis</title>
 	<meta
 		name="description"
 		content="Manage all automated workflows across your agents. Build multi-step automation pipelines triggered by cron, webhook, or manually."
 	/>
-	<meta name="keywords" content="workflows, automation, AI agent, pipeline, AgentInt" />
+	<meta name="keywords" content="workflows, automation, AI agent, pipeline, Valmis" />
 </svelte:head>
 
 <!-- ── Delete confirmation dialog ───────────────────────────────────────── -->

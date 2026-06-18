@@ -1,9 +1,23 @@
-import { existsSync, mkdirSync, writeFileSync, readFileSync, statSync, rmSync, renameSync } from 'fs';
+import {
+	existsSync,
+	mkdirSync,
+	writeFileSync,
+	readFileSync,
+	statSync,
+	rmSync,
+	renameSync,
+} from 'fs';
 import { resolve, join, dirname, sep } from 'path';
 import { isIP } from 'net';
 import { lookup as dnsLookup } from 'dns/promises';
 import Docker from 'dockerode';
-import { chromium, type Browser, type BrowserContext, type Page, type Locator } from 'playwright-core';
+import {
+	chromium,
+	type Browser,
+	type BrowserContext,
+	type Page,
+	type Locator,
+} from 'playwright-core';
 import type {
 	BrowserCommand,
 	BrowserActionRequest,
@@ -21,7 +35,7 @@ import {
 } from './browser/pageScripts.js';
 
 /** Label applied to every browser container — used for orphan reaping. */
-const BROWSER_LABEL = 'openagent.browser';
+const BROWSER_LABEL = 'valmis.browser';
 
 /** Default viewport for every browser context. */
 const VIEWPORT = { width: 1280, height: 800 };
@@ -141,7 +155,7 @@ export class BrowserService {
 		// Dedicated browser network — kept separate from the agent runtime networks so
 		// agents can never reach the shared browser's debug port (cross-agent cookie
 		// theft guard). The backend must be attached to it (compose does this).
-		this.network = process.env.BROWSER_NETWORK ?? 'openagent_browser';
+		this.network = process.env.BROWSER_NETWORK ?? 'valmis_browser';
 		this.containerPort = parseInt(process.env.BROWSER_CONTAINER_PORT ?? '3000', 10);
 		this.connectMode = process.env.BROWSER_CONNECT_MODE === 'ws' ? 'ws' : 'cdp';
 		this.wsEndpointOverride = process.env.BROWSER_WS_ENDPOINT || undefined;
@@ -160,8 +174,7 @@ export class BrowserService {
 		// Backend-only state dir — NEVER under AGENT_WORKSPACES_PATH (cookies must
 		// not be readable by the agent's file tools). Default: repo-root sibling.
 		this.stateBasePath =
-			process.env.AGENT_BROWSER_STATE_PATH ??
-			resolve(process.cwd(), '../../.agent-browser-state');
+			process.env.AGENT_BROWSER_STATE_PATH ?? resolve(process.cwd(), '../../.agent-browser-state');
 		this.workspacesBasePath =
 			process.env.AGENT_WORKSPACES_PATH ?? resolve(process.cwd(), '../../.agent-workspaces');
 		this.maxLifetimeMs = parseInt(process.env.BROWSER_SESSION_MAX_LIFETIME_MS ?? '1800000', 10);
@@ -313,7 +326,10 @@ export class BrowserService {
 			this.saveHistory(session.agentId, merged.slice(-HISTORY_CAP));
 			session.visitedUrls = [];
 		} catch (err) {
-			logger.warn({ err, agentId: session.agentId }, '[browser] failed to flush history — non-fatal');
+			logger.warn(
+				{ err, agentId: session.agentId },
+				'[browser] failed to flush history — non-fatal',
+			);
 		}
 	}
 
@@ -336,7 +352,10 @@ export class BrowserService {
 	 * the LLM can react; only the gate/availability checks throw (→ the route
 	 * returns { success:false }).
 	 */
-	async execute(token: SandboxTokenPayload, req: BrowserActionRequest): Promise<BrowserActionResult> {
+	async execute(
+		token: SandboxTokenPayload,
+		req: BrowserActionRequest,
+	): Promise<BrowserActionResult> {
 		if (!this.enabled) {
 			throw new Error('Browser automation is not enabled in this deployment.');
 		}
@@ -353,9 +372,7 @@ export class BrowserService {
 				{ agentId: token.agentId, threadId: token.threadId },
 				'[browser] access denied — allowInternetAccess is off for this agent',
 			);
-			throw new Error(
-				'Browser access denied: this agent does not have internet access enabled.',
-			);
+			throw new Error('Browser access denied: this agent does not have internet access enabled.');
 		}
 
 		const session = await this.getOrCreateSession(token.threadId, token.agentId);
@@ -641,7 +658,10 @@ export class BrowserService {
 		} catch {
 			try {
 				logger.info({ network: this.network }, '[browser] creating missing browser network');
-				await this.docker.createNetwork({ Name: this.network, Labels: { [BROWSER_LABEL]: 'true' } });
+				await this.docker.createNetwork({
+					Name: this.network,
+					Labels: { [BROWSER_LABEL]: 'true' },
+				});
 			} catch (err) {
 				logger.warn(
 					{ err, network: this.network },

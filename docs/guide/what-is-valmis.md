@@ -1,6 +1,6 @@
-# What is Agent-Int?
+# What is Valmis?
 
-Agent-Int is a **self-hosted AI agent platform**. You install it on your own server, connect it to the LLM providers you already have API keys for, and build agents that can:
+Valmis is a **self-hosted AI agent platform**. You install it on your own server, connect it to the LLM providers you already have API keys for, and build agents that can:
 
 - **Chat with you** in a real-time streaming web UI — or from your phone via [Telegram and Discord](/guide/channels)
 - **Call external services** (Slack, GitHub, Gmail, Notion, Stripe, Home Assistant, and [many more](/integrations/)) using credentials you store once
@@ -18,7 +18,7 @@ Everything — LLM API keys, third-party credentials, conversation history, agen
                         │
                         ▼
               ┌───────────────────┐
-              │  Agent-Int server  │   web UI + API + workflow engine
+              │  Valmis server  │   web UI + API + workflow engine
               │  (single container)│   credentials encrypted at rest
               └─────────┬─────────┘
                         │ spawns one sandbox per agent turn
@@ -44,10 +44,10 @@ When you send a message to an agent, the server spawns a short-lived, isolated *
 | [Skill](/guide/skills)                  | A markdown-defined behavioral profile assigned to an agent. Install community skills from GitHub or use the built-ins.                            |
 | [Knowledge base](/guide/knowledge-base) | A library of your documents (uploaded or imported from cloud storage), converted to searchable text and assigned to agents as reference material. |
 | [Memory](/guide/memory)                 | A per-agent vector store with four memory types. The agent writes and searches it autonomously.                                                   |
-| [Workflow](/guide/workflows/)            | A multi-step pipeline attached to an agent, where each step is a full agent turn. Triggered manually, by cron, by webhook, or by an app event.    |
+| [Workflow](/guide/workflows/)           | A multi-step pipeline attached to an agent, where each step is a full agent turn. Triggered manually, by cron, by webhook, or by an app event.    |
 | [Channel](/guide/channels)              | A pairing between an agent and your own Telegram or Discord bot, so you can talk to the agent outside the web UI.                                 |
 
-## What Agent-Int is not
+## What Valmis is not
 
 - **Not a hosted SaaS.** There is no cloud version; you run it yourself with Docker Compose or from source.
 - **Not tied to one LLM vendor.** The model catalog covers 175 models across 20 providers, and any OpenAI-compatible endpoint (including self-hosted models) works via a custom base URL.

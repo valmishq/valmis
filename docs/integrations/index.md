@@ -1,6 +1,6 @@
 # Integrations
 
-Agent-Int ships with ready-made credential definitions for the services below. Each page explains what the integration does, which credentials it needs, and **exactly where to find them** on the service's website.
+Valmis ships with ready-made credential definitions for the services below. Each page explains what the integration does, which credentials it needs, and **exactly where to find them** on the service's website.
 
 To use any of them: **Credentials → Add credential**, pick the service, fill in the fields, then attach the credential to an agent. See the [credentials guide](/guide/credentials) for concepts like testing, OAuth2 authorization, and revocation.
 
@@ -12,12 +12,12 @@ Every OAuth2 integration requires registering the same redirect URI in the provi
 
 Some integrations can also **start a [workflow](/guide/workflows/)** when something happens in the app — a new email, a database change, a form response, a chat message. See [App Triggers](/integrations/triggers/) for the full list, or jump to one:
 
-| Trigger                                              | Fires on                         | Delivery |
-| ---------------------------------------------------- | -------------------------------- | -------- |
-| [Gmail](/integrations/triggers/gmail)                | New email received               | Push     |
-| [Google Forms](/integrations/triggers/google-forms)  | New form response                | Polling  |
-| [Notion](/integrations/triggers/notion)              | Database item created or updated | Push     |
-| [Slack](/integrations/triggers/slack)                | New message                      | Push     |
+| Trigger                                             | Fires on                         | Delivery |
+| --------------------------------------------------- | -------------------------------- | -------- |
+| [Gmail](/integrations/triggers/gmail)               | New email received               | Push     |
+| [Google Forms](/integrations/triggers/google-forms) | New form response                | Polling  |
+| [Notion](/integrations/triggers/notion)             | Database item created or updated | Push     |
+| [Slack](/integrations/triggers/slack)               | New message                      | Push     |
 
 ## Communication & bots
 

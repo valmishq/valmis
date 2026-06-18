@@ -1,6 +1,6 @@
 # Microsoft OneDrive
 
-Lets Agent-Int browse and read files in OneDrive and SharePoint document libraries via the Microsoft Graph API — used by the [knowledge base](/guide/knowledge-base) cloud import, and available to agents through `call_api`. Authenticates with Azure AD OAuth2 using an app registration you create in the Azure Portal.
+Lets Valmis browse and read files in OneDrive and SharePoint document libraries via the Microsoft Graph API — used by the [knowledge base](/guide/knowledge-base) cloud import, and available to agents through `call_api`. Authenticates with Azure AD OAuth2 using an app registration you create in the Azure Portal.
 
 [Microsoft Graph OneDrive API documentation](https://learn.microsoft.com/en-us/graph/api/resources/onedrive)
 
@@ -21,7 +21,7 @@ Default scopes: `User.Read`, `Files.Read.All` (OneDrive files), `Sites.Read.All`
 3. Under **Redirect URI**, choose platform **Web** and enter the URI from the credential form: `<APP_URL>/oauth2/callback`.
 4. Register, then on the **Overview** page copy the **Application (client) ID** into the credential form.
 5. Go to **Certificates & secrets → New client secret**, create one, and copy its **Value** (not the Secret ID) immediately — it's shown only once.
-6. Save the credential in Agent-Int, click **Authorize**, and sign in with the account whose files you want to access.
+6. Save the credential in Valmis, click **Authorize**, and sign in with the account whose files you want to access.
 
 ::: tip Reuse one app registration
 If you already created an Azure app registration for the [Microsoft Outlook](/integrations/microsoft-outlook) integration, the same Client ID and Secret work here — each credential still only requests its own scopes during authorization.

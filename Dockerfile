@@ -104,7 +104,7 @@ COPY --from=builder /repo/apps/web/build       apps/web/build
 
 # Agent-runtime compiled output (tsc → dist/).
 # Used only by the process driver (AGENT_RUNTIME_DRIVER=process) — the docker
-# driver runs the separate logiclabshq/agent-runtime image instead (built from
+# driver runs the separate ghcr.io/valmishq/agent-runtime image instead (built from
 # apps/agent-runtime/Dockerfile). AGENT_RUNTIME_ENTRY points to this path.
 COPY --from=builder /repo/apps/agent-runtime/dist  apps/agent-runtime/dist
 

@@ -1,6 +1,6 @@
 # API Keys
 
-API keys give scripts and external tools programmatic access to your Agent-Int account — the same REST API the web UI uses — without a browser session. Manage them under **Account → API Keys**.
+API keys give scripts and external tools programmatic access to your Valmis account — the same REST API the web UI uses — without a browser session. Manage them under **Account → API Keys**.
 
 ## Generating a key
 
@@ -11,7 +11,7 @@ API keys give scripts and external tools programmatic access to your Agent-Int a
 The raw key is displayed **once**, with a copy button. Store it in your secret manager immediately.
 
 ::: danger Shown only once
-Agent-Int stores only a hash of the key (SHA-256). After you leave the page, the raw value cannot be retrieved — if you lose it, delete the key and generate a new one.
+Valmis stores only a hash of the key (SHA-256). After you leave the page, the raw value cannot be retrieved — if you lose it, delete the key and generate a new one.
 :::
 
 ## Using a key
@@ -20,7 +20,7 @@ Send the key as a Bearer token on requests to the API:
 
 ```bash
 curl -H "Authorization: Bearer <your-api-key>" \
-  https://your-agent-int.example.com/api/v1/agents
+  https://your-valmis.example.com/api/v1/agents
 ```
 
 A key authenticates as **you** — it can do whatever your account can do.

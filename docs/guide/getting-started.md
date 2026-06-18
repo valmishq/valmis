@@ -1,10 +1,10 @@
 # Getting Started
 
-This walkthrough takes you from a fresh installation to a working agent in about ten minutes. It assumes Agent-Int is already [installed and running](/guide/installation).
+This walkthrough takes you from a fresh installation to a working agent in about ten minutes. It assumes Valmis is already [installed and running](/guide/installation).
 
 ## 1. Create the admin account
 
-Open your Agent-Int URL. On a fresh install you are redirected to the **setup page** — create the first admin account with an email and password, then sign in. Setup is a one-time step; the endpoint locks once any user exists.
+Open your Valmis URL. On a fresh install you are redirected to the **setup page** — create the first admin account with an email and password, then sign in. Setup is a one-time step; the endpoint locks once any user exists.
 
 ## 2. Add an LLM provider
 
@@ -60,11 +60,11 @@ Now ask the agent something like _"list my open GitHub pull requests"_ — it wi
 
 ## Where to go next
 
-| Goal                                          | Read                                  |
-| --------------------------------------------- | ------------------------------------- |
-| Let the agent remember preferences and facts  | [Agent Memory](/guide/memory)         |
-| Run the agent on a schedule, webhook, or app event | [Workflows](/guide/workflows/)    |
-| Talk to the agent from Telegram or Discord    | [Messaging Channels](/guide/channels) |
-| Give the agent specialized behaviors          | [Skills](/guide/skills)               |
-| Automate against the platform API             | [API Keys](/guide/api-keys)           |
-| Understand the isolation model                | [Security Overview](/guide/security)  |
+| Goal                                               | Read                                  |
+| -------------------------------------------------- | ------------------------------------- |
+| Let the agent remember preferences and facts       | [Agent Memory](/guide/memory)         |
+| Run the agent on a schedule, webhook, or app event | [Workflows](/guide/workflows/)        |
+| Talk to the agent from Telegram or Discord         | [Messaging Channels](/guide/channels) |
+| Give the agent specialized behaviors               | [Skills](/guide/skills)               |
+| Automate against the platform API                  | [API Keys](/guide/api-keys)           |
+| Understand the isolation model                     | [Security Overview](/guide/security)  |

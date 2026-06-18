@@ -125,12 +125,12 @@
 </script>
 
 <svelte:head>
-	<title>API Keys — AgentInt Dashboard</title>
+	<title>API Keys — Valmis Dashboard</title>
 	<meta
 		name="description"
-		content="Manage your AgentInt API keys for secure programmatic access to integrations."
+		content="Manage your Valmis API keys for secure programmatic access to integrations."
 	/>
-	<meta name="keywords" content="API keys, authentication, AgentInt, integration, access tokens" />
+	<meta name="keywords" content="API keys, authentication, Valmis, integration, access tokens" />
 </svelte:head>
 
 <!-- Delete confirmation dialog -->

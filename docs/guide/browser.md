@@ -21,19 +21,19 @@ A browser is a way onto the internet. An agent with internet access **Off** is m
 
 You don't call these yourself — the model decides when to use them as it works on your request. Each call and its result appears inline in [chat](/guide/chat), just like other tools.
 
-| Tool                 | What it does                                                                        |
-| -------------------- | ----------------------------------------------------------------------------------- |
-| `browser_navigate`   | Opens a URL and waits for the page to finish loading.                               |
-| `browser_snapshot`   | Lists the interactive elements on the current page (links, buttons, fields).        |
-| `browser_click`      | Clicks an element.                                                                  |
-| `browser_type`       | Types text into a field (optionally pressing Enter to submit).                      |
-| `browser_select`     | Chooses an option from a dropdown — native or custom.                               |
-| `browser_press_key`  | Presses a key (Enter, Tab, Escape, arrow keys, …).                                  |
-| `browser_screenshot` | Captures a picture of the page. You see it in chat; it can also be saved to files.  |
-| `browser_read_page`  | Returns the readable text of the page.                                              |
-| `browser_wait_for`   | Waits for content to appear or the page to settle after an action.                  |
-| `browser_go_back`    | Goes back to the previous page.                                                     |
-| `browser_go_forward` | Goes forward again.                                                                 |
+| Tool                 | What it does                                                                       |
+| -------------------- | ---------------------------------------------------------------------------------- |
+| `browser_navigate`   | Opens a URL and waits for the page to finish loading.                              |
+| `browser_snapshot`   | Lists the interactive elements on the current page (links, buttons, fields).       |
+| `browser_click`      | Clicks an element.                                                                 |
+| `browser_type`       | Types text into a field (optionally pressing Enter to submit).                     |
+| `browser_select`     | Chooses an option from a dropdown — native or custom.                              |
+| `browser_press_key`  | Presses a key (Enter, Tab, Escape, arrow keys, …).                                 |
+| `browser_screenshot` | Captures a picture of the page. You see it in chat; it can also be saved to files. |
+| `browser_read_page`  | Returns the readable text of the page.                                             |
+| `browser_wait_for`   | Waits for content to appear or the page to settle after an action.                 |
+| `browser_go_back`    | Goes back to the previous page.                                                    |
+| `browser_go_forward` | Goes forward again.                                                                |
 
 A few things the browser handles well:
 
@@ -66,12 +66,12 @@ As the agent visits pages, the platform keeps a short **history** of the URLs it
 
 Open any conversation with a browser-capable agent, hover a conversation in the left list, and open its **⋯ menu → Browser**. A panel opens with everything you can manage:
 
-| Action                          | What it does                                                                                                          |
-| ------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
-| **Close session**               | Quits the live browser for **this conversation** right now. (Shows "no active session" if it was already closed.)     |
-| **Clear saved logins & cookies** | Signs the agent out everywhere by deleting its saved cookies and site storage. The next browse starts logged out.     |
-| **View / Clear history**        | Shows the agent's recent browsing history and lets you erase it.                                                      |
-| **Reset everything**            | One click to do all of the above — close the session, clear logins/cookies, and clear history. A clean slate.         |
+| Action                           | What it does                                                                                                      |
+| -------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| **Close session**                | Quits the live browser for **this conversation** right now. (Shows "no active session" if it was already closed.) |
+| **Clear saved logins & cookies** | Signs the agent out everywhere by deleting its saved cookies and site storage. The next browse starts logged out. |
+| **View / Clear history**         | Shows the agent's recent browsing history and lets you erase it.                                                  |
+| **Reset everything**             | One click to do all of the above — close the session, clear logins/cookies, and clear history. A clean slate.     |
 
 The panel also shows, at a glance, the current page of any active session, the sites the agent is logged into, the number of saved cookies, and when they were last saved.
 
@@ -96,15 +96,15 @@ Clearing logins/cookies or history applies to the agent across **all** its conve
 
 Browsing is **off by default**. To turn it on, set `BROWSER_FEATURE_ENABLED=true`. In the standard Docker Compose deployment that's all that's required — the platform pulls the browser image and runs it on a dedicated network the moment the feature is enabled.
 
-| Variable                          | Default                              | Description                                                                                                                       |
-| --------------------------------- | ------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------- |
-| `BROWSER_FEATURE_ENABLED`         | `false`                              | Master switch. When off, no browser image is pulled, no browser runs, and no agent sees the browser tools or menu.               |
-| `BROWSER_MODE`                    | `auto`                               | `auto` runs the browser in a container in Docker deployments and in-process for bare-metal/dev. Force with `container` or `local`. |
-| `BROWSER_IMAGE`                   | `ghcr.io/browserless/chromium:latest` | The browser container image (container mode).                                                                                     |
-| `BROWSER_NETWORK`                 | `openagent_browser`                  | Dedicated Docker network for the browser. Agents are never on it, so they can't reach the browser directly.                      |
-| `BROWSER_MAX_CONCURRENT_SESSIONS` | `10`                                 | Maximum simultaneous browser sessions across all agents.                                                                         |
-| `BROWSER_SESSION_IDLE_TIMEOUT_MS` | `300000` (5 min)                     | Idle time before an unused session is closed.                                                                                     |
-| `BROWSER_SESSION_MAX_LIFETIME_MS` | `1800000` (30 min)                   | Hard cap on a session's total lifetime, regardless of activity.                                                                  |
-| `AGENT_BROWSER_STATE_PATH`        | server-managed dir                   | Where saved logins/history are stored. This is server-only and never mounted into agent sandboxes.                              |
+| Variable                          | Default                               | Description                                                                                                                        |
+| --------------------------------- | ------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `BROWSER_FEATURE_ENABLED`         | `false`                               | Master switch. When off, no browser image is pulled, no browser runs, and no agent sees the browser tools or menu.                 |
+| `BROWSER_MODE`                    | `auto`                                | `auto` runs the browser in a container in Docker deployments and in-process for bare-metal/dev. Force with `container` or `local`. |
+| `BROWSER_IMAGE`                   | `ghcr.io/browserless/chromium:latest` | The browser container image (container mode).                                                                                      |
+| `BROWSER_NETWORK`                 | `valmis_browser`                      | Dedicated Docker network for the browser. Agents are never on it, so they can't reach the browser directly.                        |
+| `BROWSER_MAX_CONCURRENT_SESSIONS` | `10`                                  | Maximum simultaneous browser sessions across all agents.                                                                           |
+| `BROWSER_SESSION_IDLE_TIMEOUT_MS` | `300000` (5 min)                      | Idle time before an unused session is closed.                                                                                      |
+| `BROWSER_SESSION_MAX_LIFETIME_MS` | `1800000` (30 min)                    | Hard cap on a session's total lifetime, regardless of activity.                                                                    |
+| `AGENT_BROWSER_STATE_PATH`        | server-managed dir                    | Where saved logins/history are stored. This is server-only and never mounted into agent sandboxes.                                 |
 
 For bare-metal (no Docker) deployments, the browser runs in-process; install the browser binary once with `pnpm --filter @repo/backend exec playwright install chromium`, or point `BROWSER_LOCAL_CHANNEL=chrome` at an installed Chrome. See the full [Configuration Reference](/guide/configuration#web-browser) for every option.

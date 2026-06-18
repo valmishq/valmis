@@ -2,7 +2,7 @@
 layout: home
 
 hero:
-  name: 'Agent-Int'
+  name: 'Valmis'
   text: 'The AI agent that talks to your apps'
   tagline: A self-hosted platform for building LLM-powered agents that chat with you, call your services, remember what matters, and run on a schedule — with every credential and API key staying on your own server.
   actions:
@@ -13,8 +13,8 @@ hero:
       text: Install with Docker
       link: /guide/installation
     - theme: alt
-      text: What is Agent-Int?
-      link: /guide/what-is-agent-int
+      text: What is Valmis?
+      link: /guide/what-is-valmis
 
 features:
   - icon: 🤖

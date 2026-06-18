@@ -46,11 +46,8 @@
 
 <svelte:head>
 	<title>Setup — Create Admin Account</title>
-	<meta
-		name="description"
-		content="Create your first admin account to get started with AgentInt Integration Hub."
-	/>
-	<meta name="keywords" content="setup, admin, account, AgentInt, integration hub" />
+	<meta name="description" content="Create your first admin account to get started with Valmis." />
+	<meta name="keywords" content="setup, admin, account, Valmis, integration hub, ai agent" />
 </svelte:head>
 
 <div class="flex min-h-screen items-center justify-center bg-muted/40 p-4">

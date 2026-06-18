@@ -1,7 +1,7 @@
 # Builds the VitePress documentation (docs/) and deploys it to GitHub Pages.
 #
-# Published at: https://wayneshn.github.io/agent-int/
-# The site's base path is configured as '/agent-int/' in docs/.vitepress/config.ts.
+# Published at: https://docs.valm.is/
+# The site's base path is configured as '/' in docs/.vitepress/config.ts.
 #
 # One-time setup in the repo: Settings → Pages → Build and deployment →
 # Source = "GitHub Actions".

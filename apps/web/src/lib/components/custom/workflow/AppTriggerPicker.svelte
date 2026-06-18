@@ -216,10 +216,7 @@
 			<div class="space-y-1.5">
 				<Label for="app-credential">Credential</Label>
 				{#if compatibleCredentials.length === 0}
-					<p
-						class="rounded-md bg-destructive/10 px-3 py-2 text-xs text-destructive"
-						role="alert"
-					>
+					<p class="rounded-md bg-destructive/10 px-3 py-2 text-xs text-destructive" role="alert">
 						No compatible credential found. Create a
 						<span class="font-medium">{selectedProvider.displayName}</span> credential first.
 					</p>
@@ -295,8 +292,8 @@
 								onValueChange={(v) => setParam(field.name, v)}
 							>
 								<Select.Trigger id={`app-param-${field.name}`} class="w-full">
-									{(field.options?.find((o) => o.value === String(params[field.name] ?? ''))
-										?.label) ?? 'Select…'}
+									{field.options?.find((o) => o.value === String(params[field.name] ?? ''))
+										?.label ?? 'Select…'}
 								</Select.Trigger>
 								<Select.Content>
 									{#each field.options ?? [] as opt (opt.value)}
@@ -322,9 +319,7 @@
 								oninput={(e) =>
 									setParam(
 										field.name,
-										field.type === 'number'
-											? Number(e.currentTarget.value)
-											: e.currentTarget.value
+										field.type === 'number' ? Number(e.currentTarget.value) : e.currentTarget.value
 									)}
 								class="text-sm"
 							/>
@@ -349,9 +344,7 @@
 						value={pollIntervalSec ?? ''}
 						placeholder="60"
 						oninput={(e) =>
-							(pollIntervalSec = e.currentTarget.value
-								? Number(e.currentTarget.value)
-								: undefined)}
+							(pollIntervalSec = e.currentTarget.value ? Number(e.currentTarget.value) : undefined)}
 						class="text-sm"
 					/>
 				</div>
@@ -364,13 +357,7 @@
 						<Label class="text-xs">Delivery URL</Label>
 						<div class="flex items-center gap-2">
 							<Input type="text" value={deliveryUrl} readonly class="font-mono text-xs" />
-							<Button
-								type="button"
-								variant="outline"
-								size="sm"
-								onclick={copyUrl}
-								class="shrink-0"
-							>
+							<Button type="button" variant="outline" size="sm" onclick={copyUrl} class="shrink-0">
 								<CopyIcon class="size-4" />
 								<span class="sr-only">{copiedUrl ? 'Copied!' : 'Copy URL'}</span>
 							</Button>
@@ -379,11 +366,11 @@
 							{#if copiedUrl}
 								✓ Copied to clipboard
 							{:else if currentRegistration?.mode === 'manual'}
-								Add this URL to {selectedProvider.displayName} yourself (see the setup steps below),
-								then re-check the registration.
+								Add this URL to {selectedProvider.displayName} yourself (see the setup steps below), then
+								re-check the registration.
 							{:else}
-								Agent-Int registers this with {selectedProvider.displayName} automatically on save. It
-								is also shown here if you need it.
+								Valmis registers this with {selectedProvider.displayName} automatically on save. It is
+								also shown here if you need it.
 							{/if}
 						</p>
 					</div>
@@ -402,10 +389,7 @@
 			{#if selectedProvider.deliveryMode === 'webhook' && currentRegistration}
 				<div class="space-y-1.5">
 					{#if currentRegistration.error}
-						<p
-							class="rounded-md bg-destructive/10 px-3 py-2 text-xs text-destructive"
-							role="alert"
-						>
+						<p class="rounded-md bg-destructive/10 px-3 py-2 text-xs text-destructive" role="alert">
 							⚠ Setup failed: {currentRegistration.error} — fix the cause, then re-check.
 						</p>
 					{:else if currentRegistration.mode === 'manual'}
@@ -413,9 +397,9 @@
 							class="rounded-md bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-500"
 							role="status"
 						>
-							⚠ Manual setup required — Agent-Int can't register this with {selectedProvider.displayName}
-							automatically. Add the delivery URL above in {selectedProvider.displayName} (see the
-							setup steps below), then re-check.
+							⚠ Manual setup required — Valmis can't register this with {selectedProvider.displayName}
+							automatically. Add the delivery URL above in {selectedProvider.displayName} (see the setup
+							steps below), then re-check.
 						</p>
 					{:else if currentRegistration.registeredAt}
 						<p class="text-xs text-green-600 dark:text-green-500">

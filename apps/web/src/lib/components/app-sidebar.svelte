@@ -104,8 +104,8 @@
 						<BotIcon class="size-4" />
 					</div>
 					<div class="flex flex-col gap-0.5 leading-none">
-						<span class="text-sm font-semibold">AgentInt</span>
-						<span class="text-xs text-muted-foreground">Integration Hub</span>
+						<span class="text-sm font-semibold">Valmis</span>
+						<span class="text-xs text-muted-foreground">Get work done</span>
 					</div>
 				</Sidebar.MenuButton>
 			</Sidebar.MenuItem>

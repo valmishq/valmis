@@ -66,7 +66,7 @@
 </script>
 
 <svelte:head>
-	<title>{data.workflow.name} — Runs — AgentInt</title>
+	<title>{data.workflow.name} — Runs — Valmis</title>
 	<meta
 		name="description"
 		content="View execution history for the workflow {data.workflow.name}."

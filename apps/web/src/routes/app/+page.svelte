@@ -10,10 +10,10 @@
 </script>
 
 <svelte:head>
-	<title>Home — AgentInt</title>
+	<title>Home — Valmis</title>
 	<meta
 		name="description"
-		content="Your AgentInt workspace — agents, workflows, and recent activity at a glance."
+		content="Your Valmis workspace — agents, workflows, and recent activity at a glance."
 	/>
 </svelte:head>
 

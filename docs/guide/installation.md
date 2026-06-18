@@ -1,10 +1,10 @@
 # Install with Docker Compose
 
-This is the recommended way to run Agent-Int. A single `docker compose up` gives you:
+This is the recommended way to run Valmis. A single `docker compose up` gives you:
 
-- The **app container** (web UI on port 3000 + API), from the published `logiclabshq/agent-int` image
+- The **app container** (web UI on port 3000 + API), from the published `ghcr.io/valmishq/valmis` image
 - **PostgreSQL 17 with pgvector** (the vector extension agents use for memory), with a persistent volume
-- The hardened **agent sandbox**: every agent turn runs in its own locked-down Docker container (`logiclabshq/agent-runtime`), spawned through a restricted Docker socket proxy
+- The hardened **agent sandbox**: every agent turn runs in its own locked-down Docker container (`ghcr.io/valmishq/agent-runtime`), spawned through a restricted Docker socket proxy
 - **Automatic database migrations** on startup — no manual schema steps
 
 ## Prerequisites
@@ -19,8 +19,8 @@ The compose file is pull-only: you can deploy with just `docker-compose.yml` and
 ## 1. Get the compose file and environment template
 
 ```bash
-git clone https://github.com/wayneshn/agent-int.git
-cd agent-int
+git clone https://github.com/valmishq/valmis.git
+cd valmis
 cp .env.example .env
 ```
 
@@ -31,7 +31,7 @@ Open `.env` and set the values below. Everything else has a working default for 
 ### Database
 
 ```ini
-POSTGRES_DB=agent-int
+POSTGRES_DB=valmis
 POSTGRES_USER=postgres
 POSTGRES_PASSWORD=<choose-a-strong-password>
 POSTGRES_PORT=5432
@@ -77,7 +77,7 @@ ALLOWED_ORIGINS=http://localhost:3000
 # Published host port for the web UI (container-internal port stays 3000)
 FRONTEND_PORT=3000
 
-# Set to 1 if you run nginx/Caddy/Traefik in front of Agent-Int, otherwise 0
+# Set to 1 if you run nginx/Caddy/Traefik in front of Valmis, otherwise 0
 TRUST_PROXY_HOPS=0
 ```
 
@@ -92,11 +92,11 @@ TRUST_PROXY_HOPS=0
 CI publishes both images tagged with the short commit hash (and semver tags for releases) — the two images from the same build are always protocol-compatible. Pin **both to the same tag** and bump them together:
 
 ```ini
-APP_IMAGE=logiclabshq/agent-int:<tag>
-AGENT_RUNTIME_IMAGE=logiclabshq/agent-runtime:<tag>
+APP_IMAGE=ghcr.io/valmishq/valmis:<tag>
+AGENT_RUNTIME_IMAGE=ghcr.io/valmishq/agent-runtime:<tag>
 ```
 
-Browse available tags on Docker Hub: [logiclabshq/agent-int](https://hub.docker.com/r/logiclabshq/agent-int/tags) and [logiclabshq/agent-runtime](https://hub.docker.com/r/logiclabshq/agent-runtime/tags).
+Browse available tags on GHCR: [valmis](https://github.com/valmishq/valmis/pkgs/container/valmis) and [agent-runtime](https://github.com/valmishq/valmis/pkgs/container/agent-runtime).
 
 ## 3. Start the stack
 
@@ -147,10 +147,10 @@ Migrations run automatically on startup.
 
 ### Data persistence
 
-| Volume                       | Contents                                                                         |
-| ---------------------------- | -------------------------------------------------------------------------------- |
-| `postgres_data`              | The entire database: users, agents, conversations, memory, encrypted credentials |
-| `openagent_agent_workspaces` | Per-agent file workspaces (`read_file` / `write_file` / code execution)          |
+| Volume                    | Contents                                                                         |
+| ------------------------- | -------------------------------------------------------------------------------- |
+| `postgres_data`           | The entire database: users, agents, conversations, memory, encrypted credentials |
+| `valmis_agent_workspaces` | Per-agent file workspaces (`read_file` / `write_file` / code execution)          |
 
 Back up the Postgres volume (or use `pg_dump`) and keep your `.env` — especially `CREDENTIAL_ENCRYPTION_KEY` — somewhere safe.
 

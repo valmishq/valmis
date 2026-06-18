@@ -193,7 +193,7 @@
 </script>
 
 <svelte:head>
-	<title>Channels — Account — AgentInt</title>
+	<title>Channels — Account — Valmis</title>
 	<meta
 		name="description"
 		content="Connect your AI agents to external messaging channels like Telegram, WhatsApp, and Discord."

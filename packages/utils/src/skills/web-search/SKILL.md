@@ -2,7 +2,7 @@
 name: web-search
 description: Search the web for current information, news, facts, and URLs. Use when the user asks for up-to-date information, real-time data, recent events, or anything that requires browsing the internet.
 metadata:
-  author: openagent
+  author: valmis
   version: '1.0'
   evolvable: false
 ---

@@ -1,6 +1,6 @@
 # Google (Gmail, Calendar, Docs, Sheets, Drive, Forms, Workspace)
 
-Agent-Int has seven Google OAuth2 integrations. They all authenticate the same way — an OAuth client you create once in Google Cloud Console — but each requests only the scopes it needs:
+Valmis has seven Google OAuth2 integrations. They all authenticate the same way — an OAuth client you create once in Google Cloud Console — but each requests only the scopes it needs:
 
 | Integration          | What agents can do                                                                                             | Scopes requested                                                                                                            |
 | -------------------- | -------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
@@ -9,13 +9,13 @@ Agent-Int has seven Google OAuth2 integrations. They all authenticate the same w
 | **Google Docs**      | Read, write, and manage documents                                                                              | `documents`                                                                                                                 |
 | **Google Sheets**    | Read, write, and manage spreadsheets                                                                           | `spreadsheets`                                                                                                              |
 | **Google Drive**     | Browse and manage Drive files — **scopes editable**; powers the [knowledge base](/guide/knowledge-base) import | Your own list (default: `drive` — full read/write; use `drive.readonly` for read-only)                                      |
-| **Google Forms**     | Read form responses — powers the [Google Forms app trigger](/integrations/triggers/google-forms)               | `forms.responses.readonly`                                                                                                 |
+| **Google Forms**     | Read form responses — powers the [Google Forms app trigger](/integrations/triggers/google-forms)               | `forms.responses.readonly`                                                                                                  |
 | **Google Workspace** | Any Google API — **you choose the scopes**                                                                     | Your own list (default: `drive.readonly`)                                                                                   |
 
 All of them also request `openid email` (your identity) and offline access (`access_type=offline`, `prompt=consent`) so the credential keeps working without re-authorizing.
 
 ::: tip One Cloud project can serve all of them
-You can create a **single Google Cloud project and OAuth client** and reuse its Client ID/Secret for every Google credential in Agent-Int. Enable all the APIs you'll use and add all their scopes to the consent screen — each Agent-Int integration still only requests its own scopes during authorization, so a Calendar credential never gets Gmail access. Or create separate projects per product if you prefer strict separation.
+You can create a **single Google Cloud project and OAuth client** and reuse its Client ID/Secret for every Google credential in Valmis. Enable all the APIs you'll use and add all their scopes to the consent screen — each Valmis integration still only requests its own scopes during authorization, so a Calendar credential never gets Gmail access. Or create separate projects per product if you prefer strict separation.
 :::
 
 ## What you need (every Google integration)
@@ -30,7 +30,7 @@ You can create a **single Google Cloud project and OAuth client** and reuse its 
 
 1. Open [console.cloud.google.com](https://console.cloud.google.com/) and sign in.
 2. Click the project picker in the top bar → **New Project**.
-3. Name it (e.g. "Agent-Int") and create it. Make sure it stays selected for all following steps.
+3. Name it (e.g. "Valmis") and create it. Make sure it stays selected for all following steps.
 
 ## Step 2 — Enable the APIs
 
@@ -63,7 +63,7 @@ While the consent screen is in _Testing_ status, Google expires refresh tokens a
 
 1. Go to **APIs & Services → Credentials → Create credentials → OAuth client ID**.
 2. Application type: **Web application**.
-3. Under **Authorized redirect URIs**, add the URI shown on the Agent-Int credential form:
+3. Under **Authorized redirect URIs**, add the URI shown on the Valmis credential form:
 
    ```
    <APP_URL>/oauth2/callback
@@ -73,7 +73,7 @@ While the consent screen is in _Testing_ status, Google expires refresh tokens a
 
 4. Create the client and copy the **Client ID** and **Client Secret**.
 
-## Step 5 — Create the credential in Agent-Int
+## Step 5 — Create the credential in Valmis
 
 1. **Credentials → Add credential** → pick the Google integration you want (Gmail, Google Calendar, Google Docs, Google Sheets, Google Drive, or Google Workspace).
 2. Paste the **Client ID** and **Client Secret**. The same pair can be reused across all six integrations.

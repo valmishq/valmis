@@ -747,8 +747,8 @@
 </script>
 
 <svelte:head>
-	<title>{data.agent.name} — Chat — AgentInt</title>
-	<meta name="description" content="Chatting with {data.agent.name} on AgentInt." />
+	<title>{data.agent.name} — Chat — Valmis</title>
+	<meta name="description" content="Chatting with {data.agent.name} on Valmis." />
 </svelte:head>
 
 <div class="flex h-full overflow-hidden">

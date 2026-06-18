@@ -31,5 +31,5 @@ Once the credential exists, connect it under **Account → Channels**: pick Tele
 See the [channels guide](/guide/channels) for the full command list, session handling, and settings. Human-in-the-loop questions arrive as tappable inline-keyboard buttons.
 
 ::: tip One bot, one platform instance
-The bot token is consumed by your Agent-Int server's polling loop. Don't reuse the same bot token in another bot framework or a second Agent-Int install — Telegram delivers each update to only one consumer.
+The bot token is consumed by your Valmis server's polling loop. Don't reuse the same bot token in another bot framework or a second Valmis install — Telegram delivers each update to only one consumer.
 :::

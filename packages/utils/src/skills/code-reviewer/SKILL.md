@@ -2,7 +2,7 @@
 name: code-reviewer
 description: Review code for bugs, security vulnerabilities, style issues, and best practices. Use when the user asks you to review, audit, or critique a code snippet, pull request, or file.
 metadata:
-  author: openagent
+  author: valmis
   version: '1.0'
   evolvable: true
 ---

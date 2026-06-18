@@ -157,7 +157,10 @@ const SCAN_RULES: ScanRule[] = [
 		rule: 'prompt-injection-marker',
 		pattern: /ignore (all |any )?(previous|prior|above) (instructions|rules)/i,
 	},
-	{ rule: 'prompt-injection-marker', pattern: /disregard[\s\S]{0,40}(system prompt|instructions)/i },
+	{
+		rule: 'prompt-injection-marker',
+		pattern: /disregard[\s\S]{0,40}(system prompt|instructions)/i,
+	},
 	{
 		rule: 'prompt-injection-marker',
 		pattern: /do not (tell|inform|reveal to|mention to) the user/i,
@@ -368,7 +371,10 @@ export class SkillInstallService {
 	 *   - {owner}/{repo} shorthand (skills.sh convention)
 	 */
 	private parseRepoUrl(repoUrl: string): ParsedRepoRef {
-		const trimmed = repoUrl.trim().replace(/\.git$/, '').replace(/\/+$/, '');
+		const trimmed = repoUrl
+			.trim()
+			.replace(/\.git$/, '')
+			.replace(/\/+$/, '');
 		const segmentRe = /^[\w.-]+$/;
 
 		// owner/repo shorthand
@@ -432,7 +438,7 @@ export class SkillInstallService {
 	private async githubGet<T>(path: string, failureContext: string): Promise<T> {
 		const headers: Record<string, string> = {
 			Accept: 'application/vnd.github+json',
-			'User-Agent': 'OpenAgentIntegration-skill-install',
+			'User-Agent': 'Valmis-skill-install',
 			'X-GitHub-Api-Version': '2022-11-28',
 		};
 		if (process.env.GITHUB_TOKEN) {
@@ -498,7 +504,9 @@ export class SkillInstallService {
 				throw new SkillInstallError(`Bundle contains a symlink ("${relativePath}") — rejected.`);
 			}
 			if (entry.mode === '160000' || entry.type === 'commit') {
-				throw new SkillInstallError(`Bundle contains a git submodule ("${relativePath}") — rejected.`);
+				throw new SkillInstallError(
+					`Bundle contains a git submodule ("${relativePath}") — rejected.`,
+				);
 			}
 			if (entry.type !== 'blob') continue;
 

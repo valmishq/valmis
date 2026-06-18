@@ -347,8 +347,8 @@ export class DiscordGateway {
 				intents: GATEWAY_INTENTS,
 				properties: {
 					os: 'linux',
-					browser: 'openagent',
-					device: 'openagent',
+					browser: 'valmis',
+					device: 'valmis',
 				},
 			},
 		});

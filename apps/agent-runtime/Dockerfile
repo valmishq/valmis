@@ -8,7 +8,7 @@
 # context):
 #   docker compose -f docker-compose.build.yml build agent-runtime
 # or:
-#   docker build -f apps/agent-runtime/Dockerfile -t logiclabshq/agent-runtime:latest .
+#   docker build -f apps/agent-runtime/Dockerfile -t ghcr.io/valmishq/agent-runtime:latest .
 # ────────────────────────────────────────────────────────────────────────────────
 
 FROM node:22-slim AS builder

@@ -14,7 +14,7 @@
 
 services:
   app:
-    image: ${APP_IMAGE:-logiclabshq/agent-int:latest}
+    image: ${APP_IMAGE:-ghcr.io/valmishq/valmis:latest}
     build:
       context: .
       dockerfile: Dockerfile
@@ -22,7 +22,7 @@ services:
   # Agent runtime sandbox image — spawned per agent turn by the backend's
   # DockerDriver, never started by compose itself.
   agent-runtime:
-    image: ${AGENT_RUNTIME_IMAGE:-logiclabshq/agent-runtime:latest}
+    image: ${AGENT_RUNTIME_IMAGE:-ghcr.io/valmishq/agent-runtime:latest}
     build:
       context: .
       dockerfile: apps/agent-runtime/Dockerfile

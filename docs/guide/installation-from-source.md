@@ -1,6 +1,6 @@
 # Install from Source
 
-Run Agent-Int directly on a machine with Node.js — useful for development, contribution, or platforms where Docker isn't available. For production deployments, [Docker Compose](/guide/installation) is recommended.
+Run Valmis directly on a machine with Node.js — useful for development, contribution, or platforms where Docker isn't available. For production deployments, [Docker Compose](/guide/installation) is recommended.
 
 ## Prerequisites
 
@@ -11,8 +11,8 @@ Run Agent-Int directly on a machine with Node.js — useful for development, con
 ## 1. Clone and install
 
 ```bash
-git clone https://github.com/wayneshn/agent-int.git
-cd agent-int
+git clone https://github.com/valmishq/valmis.git
+cd valmis
 pnpm install
 ```
 
@@ -28,7 +28,7 @@ Set at minimum:
 
 ```ini
 # Point at your PostgreSQL instance
-DATABASE_URL="postgresql://user:password@localhost:5432/agent-int"
+DATABASE_URL="postgresql://user:password@localhost:5432/valmis"
 
 # Three independent secrets — generate each with:
 # node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
@@ -89,7 +89,7 @@ You can keep the app on bare metal but run agent turns in hardened Docker contai
 
 ```ini
 AGENT_RUNTIME_DRIVER=docker
-AGENT_RUNTIME_IMAGE=logiclabshq/agent-runtime:latest
+AGENT_RUNTIME_IMAGE=ghcr.io/valmishq/agent-runtime:latest
 # Runtime containers must reach your bare-metal backend:
 AGENT_RUNTIME_PROXY_HOST=http://host.docker.internal:4000
 # Absolute HOST path for per-agent workspace bind mounts:

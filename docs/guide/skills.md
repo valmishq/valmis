@@ -19,7 +19,7 @@ You can install community skills that follow the `SKILL.md` convention (an Agent
 
 **Skills → Install from GitHub** runs a two-step review:
 
-1. **Preview** — Agent-Int fetches the skill from the repository and shows you exactly what will be installed: the full `SKILL.md`, the bundled files, any files filtered out by the file-type policy, and warnings from a heuristic content scan.
+1. **Preview** — Valmis fetches the skill from the repository and shows you exactly what will be installed: the full `SKILL.md`, the bundled files, any files filtered out by the file-type policy, and warnings from a heuristic content scan.
 2. **Confirm** — what you reviewed is byte-identical to what gets installed (the previewed bundle is cached server-side and re-verified by content hash).
 
 ### What the installer enforces

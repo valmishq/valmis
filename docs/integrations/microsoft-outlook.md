@@ -20,7 +20,7 @@ Scopes requested: `User.Read`, `Mail.Read`, `Mail.Send`, `Mail.ReadWrite`, `Mail
 3. Under **Redirect URI**, choose platform **Web** and enter the URI from the credential form: `<APP_URL>/oauth2/callback`.
 4. Register, then on the **Overview** page copy the **Application (client) ID** into the credential form.
 5. Go to **Certificates & secrets → New client secret**, create one, and copy its **Value** (not the Secret ID) immediately — it's shown only once.
-6. Save the credential in Agent-Int, click **Authorize**, and sign in with the mailbox account.
+6. Save the credential in Valmis, click **Authorize**, and sign in with the mailbox account.
 
 ::: tip Client secret expiry
 Azure client secrets always have an expiry (up to 24 months). Note the date — when it lapses, create a new secret in **Certificates & secrets**, update the credential, and re-authorize.

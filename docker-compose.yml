@@ -22,7 +22,7 @@
 services:
   app:
     # Published image (CI: .github/workflows/docker-publish.yml)
-    image: ${APP_IMAGE:-logiclabshq/agent-int:latest}
+    image: ${APP_IMAGE:-ghcr.io/valmishq/valmis:latest}
     restart: unless-stopped
     ports:
       # Only the frontend is exposed to the internet
@@ -32,14 +32,14 @@ services:
     environment:
       # Agent runs execute in sibling Docker containers (real OS-level isolation)
       AGENT_RUNTIME_DRIVER: ${AGENT_RUNTIME_DRIVER:-docker}
-      AGENT_RUNTIME_IMAGE: ${AGENT_RUNTIME_IMAGE:-logiclabshq/agent-runtime:latest}
+      AGENT_RUNTIME_IMAGE: ${AGENT_RUNTIME_IMAGE:-ghcr.io/valmishq/agent-runtime:latest}
       # Runtime containers reach the backend via the compose service name
       AGENT_RUNTIME_PROXY_HOST: http://app:4000
-      AGENT_RUNTIME_NETWORK: openagent_runtime
-      AGENT_RUNTIME_NETWORK_INTERNAL: openagent_runtime_internal
+      AGENT_RUNTIME_NETWORK: valmis_runtime
+      AGENT_RUNTIME_NETWORK_INTERNAL: valmis_runtime_internal
       # Per-agent workspace subpaths of this named volume are mounted into
       # runtime containers (requires Docker Engine >= 26)
-      AGENT_RUNTIME_WORKSPACE_VOLUME: openagent_agent_workspaces
+      AGENT_RUNTIME_WORKSPACE_VOLUME: valmis_agent_workspaces
       # The backend talks to the Docker daemon through the socket proxy below —
       # never via a raw socket mount
       DOCKER_HOST: tcp://docker-socket-proxy:2375
@@ -49,11 +49,11 @@ services:
       AGENT_WORKSPACES_PATH: /opt/agent-workspaces
       # Headless browser tool (gated by BROWSER_FEATURE_ENABLED in .env; default OFF).
       # When enabled, the backend pulls BROWSER_IMAGE and launches the browser
-      # container on the dedicated openagent_browser network below — agents never
+      # container on the dedicated valmis_browser network below — agents never
       # reach it (only the backend connects), so a shared browser cannot leak one
       # agent's session cookies to another.
       BROWSER_MODE: container
-      BROWSER_NETWORK: openagent_browser
+      BROWSER_NETWORK: valmis_browser
       AGENT_BROWSER_STATE_PATH: /opt/agent-browser-state
     volumes:
       # Persist per-agent workspaces across container restarts
@@ -104,14 +104,14 @@ services:
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
-      POSTGRES_DB: ${POSTGRES_DB:-agent-int}
+      POSTGRES_DB: ${POSTGRES_DB:-valmis}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     ports:
       # Expose to host for local DB access/migrations — remove in production if not needed
       - '5432:5432'
     healthcheck:
-      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-agent-int}']
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-valmis}']
       interval: 5s
       timeout: 5s
       retries: 10
@@ -121,25 +121,25 @@ volumes:
   agent_workspaces:
     # Stable name so the DockerDriver can reference it for subpath mounts
     # regardless of the compose project prefix
-    name: openagent_agent_workspaces
+    name: valmis_agent_workspaces
   # Browser session state (Playwright storageState per agent). Backend-only.
   agent_browser_state:
-    name: openagent_agent_browser_state
+    name: valmis_agent_browser_state
 
 networks:
   default:
-    name: openagentintegration_default
+    name: valmis_default
   # Runtime network for agents WITH internet access (normal egress)
   agent_runtime:
-    name: openagent_runtime
+    name: valmis_runtime
   # Runtime network for agents WITHOUT internet access — internal: true blocks
   # all egress except other containers on this network (i.e. the backend).
   # Credential-proxied call_api requests still work; run_terminal curl/pip do not.
   agent_runtime_internal:
-    name: openagent_runtime_internal
+    name: valmis_runtime_internal
     internal: true
   # Browser network — the backend launches the host-managed browser container here
   # (normal egress so it can load pages). Agent runtimes are NEVER attached, so an
   # agent cannot reach the shared browser's debug port or another agent's session.
   agent_browser:
-    name: openagent_browser
+    name: valmis_browser

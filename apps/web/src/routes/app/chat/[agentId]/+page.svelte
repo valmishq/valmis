@@ -68,7 +68,7 @@
 </script>
 
 <svelte:head>
-	<title>{data.agent.name} — Chat — AgentInt</title>
+	<title>{data.agent.name} — Chat — Valmis</title>
 	<meta
 		name="description"
 		content="Chat with {data.agent.name}. Start a new conversation or continue a previous one."

@@ -17,9 +17,9 @@ Base URL examples: `http://192.168.1.10:8123`, `https://homeassistant.local:8123
 
 1. Open your Home Assistant web UI and click your **user profile** (bottom-left avatar).
 2. On the **Security** tab, scroll to **Long-Lived Access Tokens**.
-3. Click **Create Token**, name it (e.g. "Agent-Int"), and copy the token — it is shown only once.
+3. Click **Create Token**, name it (e.g. "Valmis"), and copy the token — it is shown only once.
 4. Paste the token and your instance's base URL into the credential form.
 
 ::: tip Reachability
-The Agent-Int **server** makes the API calls, so the base URL must be reachable from where Agent-Int runs — not from your browser. If Agent-Int runs in Docker on the same LAN, a local IP like `http://192.168.1.10:8123` works; `localhost` does not.
+The Valmis **server** makes the API calls, so the base URL must be reachable from where Valmis runs — not from your browser. If Valmis runs in Docker on the same LAN, a local IP like `http://192.168.1.10:8123` works; `localhost` does not.
 :::

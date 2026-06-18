@@ -16,7 +16,7 @@ Lets agents send push notifications to your iOS, Android, and desktop devices â€
 **Application token:**
 
 1. Sign in at [pushover.net](https://pushover.net/) and go to [Create an Application](https://pushover.net/apps/build).
-2. Name the application (e.g. "Agent-Int") and register it.
+2. Name the application (e.g. "Valmis") and register it.
 3. Copy the **API Token/Key** shown on the application page.
 
 **User key:**

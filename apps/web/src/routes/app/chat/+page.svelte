@@ -11,12 +11,12 @@
 </script>
 
 <svelte:head>
-	<title>Chat — AgentInt</title>
+	<title>Chat — Valmis</title>
 	<meta
 		name="description"
-		content="Choose an AI agent to start a conversation. Chat with your custom agents powered by AgentInt."
+		content="Choose an AI agent to start a conversation. Chat with your custom agents powered by Valmis."
 	/>
-	<meta name="keywords" content="AI chat, agent chat, AgentInt, conversation, AI assistant" />
+	<meta name="keywords" content="AI chat, agent chat, Valmis, conversation, AI assistant" />
 </svelte:head>
 
 <PageHeader title="Chat" description="Select an agent to start a conversation." />
