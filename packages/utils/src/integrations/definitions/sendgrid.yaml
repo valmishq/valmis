@@ -1,0 +1,34 @@
+id: sendgrid
+name: SendGrid
+brandName: SendGrid
+type: bearerToken
+icon: /logos/sendgrid.svg
+description: >
+  Connect to Twilio SendGrid to send transactional and marketing email and manage
+  templates, contacts and statistics. The API key is sent as a Bearer token on every
+  request.
+documentationUrl: https://www.twilio.com/docs/sendgrid/api-reference/how-to-use-the-sendgrid-v3-api/authentication
+properties:
+  - name: apiKey
+    displayName: API Key
+    type: secret
+    required: true
+    description: >
+      Your SendGrid API key (starts with "SG."). Create one under Settings → API Keys →
+      Create API Key. It is shown only once.
+  - name: baseUrl
+    displayName: API Base URL
+    type: string
+    required: true
+    default: https://api.sendgrid.com
+    description: >
+      Global: https://api.sendgrid.com. EU data residency: https://api.eu.sendgrid.com.
+
+requestMapping:
+  headers:
+    Authorization: 'Bearer {{properties.apiKey}}'
+
+testRequest:
+  method: GET
+  url: '{{properties.baseUrl}}/v3/user/username'
+  accountIdentifierKey: username

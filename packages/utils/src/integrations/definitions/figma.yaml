@@ -1,0 +1,27 @@
+id: figma
+name: Figma (Personal Token)
+brandName: Figma
+type: apiKey
+icon: /logos/figma.svg
+description: >
+  Connect to Figma to read files, projects, comments and components. The personal access
+  token is sent in the X-Figma-Token header (not a Bearer token).
+documentationUrl: https://developers.figma.com/docs/rest-api/personal-access-tokens/
+properties:
+  - name: token
+    displayName: Personal Access Token
+    type: secret
+    required: true
+    description: >
+      A Figma personal access token. Generate one under Settings → Security → Personal
+      access tokens. Include the "current_user:read" scope for the connection test.
+
+# Figma personal access tokens use the X-Figma-Token header (NOT Authorization: Bearer).
+requestMapping:
+  headers:
+    X-Figma-Token: '{{properties.token}}'
+
+testRequest:
+  method: GET
+  url: 'https://api.figma.com/v1/me'
+  accountIdentifierKey: email

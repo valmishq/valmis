@@ -1,0 +1,31 @@
+id: monday
+name: monday.com
+brandName: monday.com
+type: apiKey
+icon: /logos/monday.svg
+description: >
+  Connect to monday.com to manage boards, items, columns and updates through its GraphQL
+  API. The personal API token is sent raw in the Authorization header (no "Bearer" prefix).
+documentationUrl: https://developer.monday.com/api-reference/docs/authentication
+properties:
+  - name: apiToken
+    displayName: API Token
+    type: secret
+    required: true
+    description: >
+      Your monday.com personal V2 API token. Find it via your avatar → Developers → My
+      access tokens, or (admins) Administration → Connections → Personal API token.
+
+# monday.com expects the raw token with NO "Bearer" prefix.
+requestMapping:
+  headers:
+    Authorization: '{{properties.apiToken}}'
+
+# monday.com is GraphQL (POST only); the Authorization header above is applied to the test.
+testRequest:
+  method: POST
+  url: 'https://api.monday.com/v2'
+  headers:
+    Content-Type: 'application/json'
+  body: '{"query":"query { me { id name email } }"}'
+  accountIdentifierKey: data.me.email

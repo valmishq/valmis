@@ -1,0 +1,35 @@
+id: intercom
+name: Intercom
+brandName: Intercom
+type: bearerToken
+icon: /logos/intercom.svg
+description: >
+  Connect to Intercom to manage contacts, conversations and companies. Uses an access
+  token from a private Intercom app, sent as a Bearer token on every request.
+documentationUrl: https://developers.intercom.com/docs/build-an-integration/learn-more/rest-apis/make-an-api-call
+properties:
+  - name: accessToken
+    displayName: Access Token
+    type: secret
+    required: true
+    description: >
+      The access token for your Intercom app. Find it in the Developer Hub under your
+      app → Configure → Authentication.
+  - name: baseUrl
+    displayName: API Base URL
+    type: string
+    required: true
+    default: https://api.intercom.io
+    description: >
+      Regional API host. US: https://api.intercom.io, EU: https://api.eu.intercom.io,
+      AU: https://api.au.intercom.io.
+
+requestMapping:
+  headers:
+    Authorization: 'Bearer {{properties.accessToken}}'
+    Intercom-Version: '2.14'
+
+testRequest:
+  method: GET
+  url: '{{properties.baseUrl}}/me'
+  accountIdentifierKey: email

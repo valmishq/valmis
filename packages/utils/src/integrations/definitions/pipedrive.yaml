@@ -1,0 +1,26 @@
+id: pipedrive
+name: Pipedrive
+brandName: Pipedrive
+type: apiKey
+icon: /logos/pipedrive.svg
+description: >
+  Connect to the Pipedrive CRM to manage deals, persons, organizations and activities.
+  The personal API token is sent in the x-api-token header on every request.
+documentationUrl: https://pipedrive.readme.io/docs/core-api-concepts-authentication
+properties:
+  - name: apiToken
+    displayName: API Token
+    type: secret
+    required: true
+    description: >
+      Your personal Pipedrive API token. Find it under your account name (top right) →
+      Company settings → Personal preferences → API.
+
+requestMapping:
+  headers:
+    x-api-token: '{{properties.apiToken}}'
+
+testRequest:
+  method: GET
+  url: 'https://api.pipedrive.com/v1/users/me'
+  accountIdentifierKey: data.email

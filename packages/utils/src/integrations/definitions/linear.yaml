@@ -1,0 +1,31 @@
+id: linear
+name: Linear
+brandName: Linear
+type: apiKey
+icon: /logos/linear.svg
+description: >
+  Connect to Linear to manage issues, projects, cycles and teams through its GraphQL API.
+  The personal API key is sent raw in the Authorization header (no "Bearer" prefix).
+documentationUrl: https://linear.app/developers/graphql
+properties:
+  - name: apiKey
+    displayName: Personal API Key
+    type: secret
+    required: true
+    description: >
+      Your Linear personal API key. Create one under Settings → Account → Security & access.
+      It is sent raw, with no "Bearer" prefix.
+
+# Linear expects the raw key with NO "Bearer" prefix.
+requestMapping:
+  headers:
+    Authorization: '{{properties.apiKey}}'
+
+# Linear is GraphQL (POST only); the Authorization header above is applied to the test.
+testRequest:
+  method: POST
+  url: 'https://api.linear.app/graphql'
+  headers:
+    Content-Type: 'application/json'
+  body: '{"query":"query { viewer { id name email } }"}'
+  accountIdentifierKey: data.viewer.email

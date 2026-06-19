@@ -1,0 +1,35 @@
+id: square
+name: Square
+brandName: Square
+type: bearerToken
+icon: /logos/square.svg
+description: >
+  Connect to the Square API to manage payments, orders, customers and catalog items. The
+  access token is sent as a Bearer token, alongside a required dated Square-Version header.
+documentationUrl: https://developer.squareup.com/docs/build-basics/using-rest-api
+properties:
+  - name: accessToken
+    displayName: Access Token
+    type: secret
+    required: true
+    description: >
+      A Square access token (personal or OAuth) created in the Square Developer Console.
+      The token must match the chosen environment (production or sandbox).
+  - name: baseUrl
+    displayName: API Base URL
+    type: string
+    required: true
+    default: https://connect.squareup.com/v2
+    description: >
+      Production: https://connect.squareup.com/v2. Sandbox:
+      https://connect.squareupsandbox.com/v2.
+
+requestMapping:
+  headers:
+    Authorization: 'Bearer {{properties.accessToken}}'
+    Square-Version: '2026-05-20'
+
+testRequest:
+  method: GET
+  url: '{{properties.baseUrl}}/merchants/me'
+  accountIdentifierKey: merchant.business_name

@@ -1,0 +1,30 @@
+id: klaviyo
+name: Klaviyo
+brandName: Klaviyo
+type: apiKey
+icon: /logos/klaviyo.svg
+description: >
+  Connect to Klaviyo for ecommerce email and SMS marketing — manage profiles, lists,
+  events and campaigns. The private API key is sent using the Klaviyo-API-Key scheme in
+  the Authorization header, alongside a required dated revision header.
+documentationUrl: https://developers.klaviyo.com/en/docs/authenticate_
+properties:
+  - name: apiKey
+    displayName: Private API Key
+    type: secret
+    required: true
+    description: >
+      Your Klaviyo private API key (starts with "pk_"). Create one under Settings →
+      Account → API keys → Private API Keys. The "accounts:read" scope is needed for the
+      connection test.
+
+requestMapping:
+  headers:
+    Authorization: 'Klaviyo-API-Key {{properties.apiKey}}'
+    revision: '2026-04-15'
+    Accept: 'application/vnd.api+json'
+
+testRequest:
+  method: GET
+  url: 'https://a.klaviyo.com/api/accounts'
+  accountIdentifierKey: data.0.id

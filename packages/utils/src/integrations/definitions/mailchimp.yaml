@@ -1,0 +1,41 @@
+id: mailchimp
+name: Mailchimp
+brandName: Mailchimp
+type: basicAuth
+icon: /logos/mailchimp.svg
+description: >
+  Connect to Mailchimp to manage audiences, campaigns and subscribers. Authenticates via
+  HTTP Basic Auth (any username, API key as the password). The API host includes the
+  datacenter suffix taken from the end of your API key.
+documentationUrl: https://mailchimp.com/developer/marketing/docs/fundamentals/
+properties:
+  - name: username
+    displayName: Username (any value)
+    type: options
+    required: true
+    default: anystring
+    description: >
+      Mailchimp ignores the username (the API key is the password). This is fixed —
+      leave it as "anystring".
+    options:
+      - name: anystring
+        value: anystring
+  - name: password
+    displayName: API Key
+    type: secret
+    required: true
+    description: >
+      Your Mailchimp API key. Create one in Account & billing → Extras → API keys.
+  - name: dc
+    displayName: Datacenter
+    type: string
+    required: true
+    description: >
+      The datacenter prefix — the part after the final dash in your API key, e.g. a key
+      ending in "-us6" means the datacenter is "us6".
+
+# basicAuth auto-injects Authorization: Basic base64(username:password) — no requestMapping.
+testRequest:
+  method: GET
+  url: 'https://{{properties.dc}}.api.mailchimp.com/3.0/'
+  accountIdentifierKey: account_name

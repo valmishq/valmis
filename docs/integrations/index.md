@@ -29,6 +29,30 @@ Some integrations can also **start a [workflow](/guide/workflows/)** when someth
 | [Pushover](/integrations/pushover)                   | API token + user key |
 | [Slack](/integrations/slack)                         | OAuth2               |
 | [Telegram Bot](/integrations/telegram-bot)           | Bot token            |
+| [Twilio](/integrations/twilio)                       | Account SID + Auth Token |
+
+## Customer support & CRM
+
+| Service                                        | Auth method                |
+| ---------------------------------------------- | -------------------------- |
+| [ActiveCampaign](/integrations/activecampaign) | API key + account base URL |
+| [Freshdesk](/integrations/freshdesk)           | API key (Basic Auth)       |
+| [Front](/integrations/front)                   | API token                  |
+| [Intercom](/integrations/intercom)             | Access token               |
+| [Pipedrive](/integrations/pipedrive)           | API token                  |
+| [Zendesk](/integrations/zendesk)               | Email + API token          |
+
+## Email & marketing
+
+| Service                              | Auth method                   |
+| ------------------------------------ | ----------------------------- |
+| [Brevo](/integrations/brevo)         | API key                       |
+| [Klaviyo](/integrations/klaviyo)     | Private API key               |
+| [Mailchimp](/integrations/mailchimp) | API key + datacenter          |
+| [Mailgun](/integrations/mailgun)     | API key (Basic Auth) + region |
+| [Postmark](/integrations/postmark)   | Server API token              |
+| [Resend](/integrations/resend)       | API key                       |
+| [SendGrid](/integrations/sendgrid)   | API key                       |
 
 ## Productivity & docs
 
@@ -39,6 +63,9 @@ Some integrations can also **start a [workflow](/guide/workflows/)** when someth
 | [Cal.com](/integrations/cal-com)                       | API key                         |
 | [Calendly](/integrations/calendly)                     | Personal access token           |
 | [Canva](/integrations/canva)                           | OAuth2                          |
+| [ClickUp](/integrations/clickup)                       | Personal API token              |
+| [Coda](/integrations/coda)                             | API token                       |
+| [Confluence](/integrations/confluence)                 | Email + API token               |
 | [Dropbox](/integrations/dropbox)                       | Access token                    |
 | [Google Calendar](/integrations/google)                | OAuth2 (Google)                 |
 | [Google Docs](/integrations/google)                    | OAuth2 (Google)                 |
@@ -46,11 +73,33 @@ Some integrations can also **start a [workflow](/guide/workflows/)** when someth
 | [Google Forms](/integrations/google)                   | OAuth2 (Google)                 |
 | [Google Sheets](/integrations/google)                  | OAuth2 (Google)                 |
 | [Google Workspace](/integrations/google)               | OAuth2 (Google, custom scopes)  |
-| [Microsoft OneDrive](/integrations/microsoft-onedrive) | OAuth2 (Azure AD)               |
 | [Jira](/integrations/jira)                             | Email + API token               |
+| [Linear](/integrations/linear)                         | Personal API key                |
+| [Microsoft OneDrive](/integrations/microsoft-onedrive) | OAuth2 (Azure AD)               |
+| [monday.com](/integrations/monday)                     | API token                       |
 | [Notion](/integrations/notion)                         | Integration token or OAuth2     |
+| [Smartsheet](/integrations/smartsheet)                 | API access token                |
 | [Tally](/integrations/tally)                           | API key                         |
+| [Todoist](/integrations/todoist)                       | API token                       |
+| [Toggl Track](/integrations/toggl)                     | API token (Basic Auth)          |
 | [Trello](/integrations/trello)                         | API key + token                 |
+
+## Content, CMS & forms
+
+| Service                                  | Auth method                       |
+| ---------------------------------------- | --------------------------------- |
+| [Contentful](/integrations/contentful)   | CMA token + space                 |
+| [Ghost](/integrations/ghost)             | Content API key                   |
+| [Typeform](/integrations/typeform)       | Personal access token             |
+| [Webflow](/integrations/webflow)         | API token                         |
+| [WordPress](/integrations/wordpress)     | Username + application password   |
+
+## Design & collaboration
+
+| Service                          | Auth method                     |
+| -------------------------------- | ------------------------------- |
+| [Figma](/integrations/figma)     | Personal access token or OAuth2 |
+| [Miro](/integrations/miro)       | Access token                    |
 
 ## Business & commerce
 
@@ -58,6 +107,7 @@ Some integrations can also **start a [workflow](/guide/workflows/)** when someth
 | -------------------------------- | ----------------------- |
 | [HubSpot](/integrations/hubspot) | Service key or OAuth2   |
 | [Shopify](/integrations/shopify) | Custom app access token |
+| [Square](/integrations/square)   | Access token            |
 | [Stripe](/integrations/stripe)   | Secret key              |
 
 ## Developer & data

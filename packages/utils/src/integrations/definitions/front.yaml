@@ -1,0 +1,26 @@
+id: front
+name: Front
+brandName: Front
+type: bearerToken
+icon: /logos/front.svg
+description: >
+  Connect to Front, the shared inbox platform, to manage conversations, messages,
+  contacts and comments. Uses an API token sent as a Bearer token on every request.
+documentationUrl: https://dev.frontapp.com/docs/authentication
+properties:
+  - name: token
+    displayName: API Token
+    type: secret
+    required: true
+    description: >
+      A Front API token with the scopes you need. Create one in Settings → Developers →
+      API Tokens → Create API token.
+
+requestMapping:
+  headers:
+    Authorization: 'Bearer {{properties.token}}'
+
+testRequest:
+  method: GET
+  url: 'https://api2.frontapp.com/me'
+  accountIdentifierKey: email

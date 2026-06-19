@@ -1,0 +1,27 @@
+id: resend
+name: Resend
+brandName: Resend
+type: bearerToken
+icon: /logos/resend.svg
+description: >
+  Connect to Resend to send transactional email and manage domains and audiences. The API
+  key is sent as a Bearer token; Resend also requires a User-Agent header on every request.
+documentationUrl: https://resend.com/docs/api-reference/introduction
+properties:
+  - name: apiKey
+    displayName: API Key
+    type: secret
+    required: true
+    description: >
+      Your Resend API key (starts with "re_"). Create one at https://resend.com/api-keys.
+
+# Resend rejects requests without a User-Agent header (HTTP 403) — it is set statically here.
+requestMapping:
+  headers:
+    Authorization: 'Bearer {{properties.apiKey}}'
+    User-Agent: 'Valmis'
+
+# Resend has no current-user endpoint — listing domains validates the key (200 = valid).
+testRequest:
+  method: GET
+  url: 'https://api.resend.com/domains'

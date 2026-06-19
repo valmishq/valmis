@@ -1,0 +1,36 @@
+id: confluence
+name: Confluence (API Token)
+brandName: Atlassian Confluence
+type: basicAuth
+icon: /logos/confluence.svg
+description: >
+  Connect to Confluence Cloud to manage pages, spaces and content. Authenticates via HTTP
+  Basic Auth with your Atlassian account email as the username and an API token as the
+  password (the same scheme as Jira Cloud).
+documentationUrl: https://developer.atlassian.com/cloud/confluence/basic-auth-for-rest-apis/
+properties:
+  - name: username
+    displayName: Atlassian Account Email
+    type: string
+    required: true
+    description: >
+      The email address of your Atlassian account.
+  - name: password
+    displayName: API Token
+    type: secret
+    required: true
+    description: >
+      An Atlassian API token. Create one at
+      https://id.atlassian.com/manage-profile/security/api-tokens.
+  - name: subdomain
+    displayName: Site Subdomain
+    type: string
+    required: true
+    description: >
+      Your Atlassian site subdomain — the "xxx" in https://xxx.atlassian.net.
+
+# basicAuth auto-injects Authorization: Basic base64(username:password) — no requestMapping.
+testRequest:
+  method: GET
+  url: 'https://{{properties.subdomain}}.atlassian.net/rest/api/2/myself'
+  accountIdentifierKey: displayName

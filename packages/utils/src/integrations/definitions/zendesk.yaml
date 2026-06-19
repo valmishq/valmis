@@ -1,0 +1,37 @@
+id: zendeskApi
+name: Zendesk (API Token)
+brandName: Zendesk
+type: basicAuth
+icon: /logos/zendesk.svg
+description: >
+  Connect to Zendesk Support to manage tickets, users and organizations. Authenticates
+  via HTTP Basic Auth where the username is your agent email plus the literal "/token"
+  suffix and the password is your Zendesk API token.
+documentationUrl: https://developer.zendesk.com/api-reference/introduction/security-and-auth/
+properties:
+  - name: username
+    displayName: Email/token
+    type: string
+    required: true
+    description: >
+      Your agent email followed by the literal "/token" suffix, e.g.
+      you@example.com/token — the "/token" part is required.
+  - name: password
+    displayName: API Token
+    type: secret
+    required: true
+    description: >
+      A Zendesk API token. An admin can create one in Admin Center →
+      Apps and integrations → APIs → Zendesk API.
+  - name: subdomain
+    displayName: Subdomain
+    type: string
+    required: true
+    description: >
+      Your Zendesk subdomain — the "xxx" in https://xxx.zendesk.com.
+
+# basicAuth auto-injects Authorization: Basic base64(username:password) — no requestMapping.
+testRequest:
+  method: GET
+  url: 'https://{{properties.subdomain}}.zendesk.com/api/v2/users/me.json'
+  accountIdentifierKey: user.name

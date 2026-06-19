@@ -1,0 +1,27 @@
+id: webflow
+name: Webflow
+brandName: Webflow
+type: bearerToken
+icon: /logos/webflow.svg
+description: >
+  Connect to the Webflow Data API (v2) to manage sites, CMS collections and items. The
+  site API token is sent as a Bearer token on every request.
+documentationUrl: https://developers.webflow.com/data/reference/authentication
+properties:
+  - name: token
+    displayName: API Token
+    type: secret
+    required: true
+    description: >
+      A Webflow Site API token. Generate one under Site settings → Apps & integrations →
+      API access → Generate API token. The "authorized_user:read" scope is needed for the
+      connection test.
+
+requestMapping:
+  headers:
+    Authorization: 'Bearer {{properties.token}}'
+
+testRequest:
+  method: GET
+  url: 'https://api.webflow.com/v2/token/authorized_by'
+  accountIdentifierKey: email

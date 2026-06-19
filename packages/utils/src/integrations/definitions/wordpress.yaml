@@ -1,0 +1,36 @@
+id: wordpress
+name: WordPress
+brandName: WordPress
+type: basicAuth
+icon: /logos/wordpress.svg
+description: >
+  Connect to a self-hosted WordPress site's REST API to manage posts, pages, media and
+  comments. Authenticates via HTTP Basic Auth with your WordPress username and an
+  Application Password.
+documentationUrl: https://developer.wordpress.org/rest-api/using-the-rest-api/authentication/
+properties:
+  - name: username
+    displayName: Username
+    type: string
+    required: true
+    description: >
+      Your WordPress login username (not the application-password label).
+  - name: password
+    displayName: Application Password
+    type: secret
+    required: true
+    description: >
+      An Application Password generated in wp-admin under Users → Profile → Application
+      Passwords.
+  - name: siteUrl
+    displayName: Site URL
+    type: string
+    required: true
+    description: >
+      The full base URL of your site, e.g. https://example.com (HTTPS, no trailing slash).
+
+# basicAuth auto-injects Authorization: Basic base64(username:password) — no requestMapping.
+testRequest:
+  method: GET
+  url: '{{properties.siteUrl}}/wp-json/wp/v2/users/me'
+  accountIdentifierKey: name

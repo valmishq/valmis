@@ -1,0 +1,41 @@
+id: freshdesk
+name: Freshdesk
+brandName: Freshdesk
+type: basicAuth
+icon: /logos/freshdesk.svg
+description: >
+  Connect to Freshdesk to manage support tickets, contacts and agents. Authenticates via
+  HTTP Basic Auth where the username is your API key and the password is any placeholder
+  (the literal "X").
+documentationUrl: https://developers.freshdesk.com/api/
+properties:
+  - name: username
+    displayName: API Key
+    type: secret
+    required: true
+    description: >
+      Your Freshdesk API key, found in your Profile Settings page below the
+      change-password section.
+  - name: password
+    displayName: Password (always "X")
+    type: options
+    required: true
+    default: X
+    description: >
+      Freshdesk ignores the password (the API key is the username). This is fixed —
+      leave it as "X".
+    options:
+      - name: X
+        value: X
+  - name: domain
+    displayName: Domain
+    type: string
+    required: true
+    description: >
+      Your Freshdesk domain — the "xxx" in https://xxx.freshdesk.com.
+
+# basicAuth auto-injects Authorization: Basic base64(username:password) — no requestMapping.
+testRequest:
+  method: GET
+  url: 'https://{{properties.domain}}.freshdesk.com/api/v2/agents/me'
+  accountIdentifierKey: contact.email

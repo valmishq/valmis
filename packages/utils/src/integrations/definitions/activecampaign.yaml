@@ -1,0 +1,33 @@
+id: activeCampaign
+name: ActiveCampaign
+brandName: ActiveCampaign
+type: apiKey
+icon: /logos/activecampaign.svg
+description: >
+  Connect to ActiveCampaign for CRM, email marketing and automation. The API key is sent
+  in the Api-Token header on every request. Because the API host is account-specific, you
+  also supply your account's API base URL.
+documentationUrl: https://developers.activecampaign.com/reference/authentication
+properties:
+  - name: apiKey
+    displayName: API Key
+    type: secret
+    required: true
+    description: >
+      Your ActiveCampaign API key, found under Settings → Developer.
+  - name: baseUrl
+    displayName: API Base URL
+    type: string
+    required: true
+    description: >
+      Your account API URL, found under Settings → Developer, e.g.
+      https://youraccount.api-us1.com (no trailing slash, no /api/3).
+
+requestMapping:
+  headers:
+    Api-Token: '{{properties.apiKey}}'
+
+testRequest:
+  method: GET
+  url: '{{properties.baseUrl}}/api/3/users/me'
+  accountIdentifierKey: user.email

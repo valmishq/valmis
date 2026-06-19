@@ -1,0 +1,31 @@
+id: twilio
+name: Twilio
+brandName: Twilio
+type: basicAuth
+icon: /logos/twilio.svg
+description: >
+  Connect to the Twilio REST API to send SMS, WhatsApp and voice messages and manage
+  phone numbers. Credentials are sent as HTTP Basic Auth with the Account SID as the
+  username and the Auth Token as the password on every request.
+documentationUrl: https://www.twilio.com/docs/usage/api
+properties:
+  - name: username
+    displayName: Account SID
+    type: string
+    required: true
+    description: >
+      Your Twilio Account SID (starts with "AC"). Found on the Twilio Console dashboard
+      at https://console.twilio.com.
+  - name: password
+    displayName: Auth Token
+    type: secret
+    required: true
+    description: >
+      Your Twilio Auth Token, found next to the Account SID on the Twilio Console dashboard.
+
+# basicAuth auto-injects Authorization: Basic base64(username:password) — no requestMapping.
+# The Account SID (username) doubles as a path parameter in the test URL below.
+testRequest:
+  method: GET
+  url: 'https://api.twilio.com/2010-04-01/Accounts/{{properties.username}}.json'
+  accountIdentifierKey: friendly_name

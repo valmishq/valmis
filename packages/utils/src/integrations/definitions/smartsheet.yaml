@@ -1,0 +1,34 @@
+id: smartsheet
+name: Smartsheet
+brandName: Smartsheet
+type: bearerToken
+icon: /logos/smartsheet.svg
+description: >
+  Connect to Smartsheet to manage sheets, rows, columns and reports. The personal API
+  access token is sent as a Bearer token on every request.
+documentationUrl: https://developers.smartsheet.com/api/smartsheet/guides/basics/authentication
+properties:
+  - name: accessToken
+    displayName: API Access Token
+    type: secret
+    required: true
+    description: >
+      Your Smartsheet API access token. Generate one under Account → Personal Settings →
+      API Access → Generate new access token (shown once).
+  - name: baseUrl
+    displayName: API Base URL
+    type: string
+    required: true
+    default: https://api.smartsheet.com/2.0
+    description: >
+      US commercial: https://api.smartsheet.com/2.0. Gov and EU Regions use separate
+      base URLs and tokens.
+
+requestMapping:
+  headers:
+    Authorization: 'Bearer {{properties.accessToken}}'
+
+testRequest:
+  method: GET
+  url: '{{properties.baseUrl}}/users/me'
+  accountIdentifierKey: email

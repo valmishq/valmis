@@ -1,0 +1,26 @@
+id: postmark
+name: Postmark
+brandName: Postmark
+type: apiKey
+icon: /logos/postmark.svg
+description: >
+  Connect to Postmark to send transactional email and read delivery stats. The server
+  token is sent in the X-Postmark-Server-Token header on every request.
+documentationUrl: https://postmarkapp.com/developer/api/overview
+properties:
+  - name: serverToken
+    displayName: Server API Token
+    type: secret
+    required: true
+    description: >
+      A Postmark Server API Token, found under your Server → API Tokens tab.
+
+requestMapping:
+  headers:
+    X-Postmark-Server-Token: '{{properties.serverToken}}'
+    Accept: 'application/json'
+
+testRequest:
+  method: GET
+  url: 'https://api.postmarkapp.com/server'
+  accountIdentifierKey: Name

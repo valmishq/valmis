@@ -1,0 +1,26 @@
+id: brevo
+name: Brevo
+brandName: Brevo
+type: apiKey
+icon: /logos/brevo.svg
+description: >
+  Connect to Brevo (formerly Sendinblue) for transactional and marketing email, SMS and
+  contact management. The API key is sent in the api-key header on every request.
+documentationUrl: https://developers.brevo.com/docs/api-key-authentication
+properties:
+  - name: apiKey
+    displayName: API Key
+    type: secret
+    required: true
+    description: >
+      Your Brevo API key. Generate one under SMTP & API settings → API keys → Generate a
+      new API key (https://app.brevo.com/settings/keys/api).
+
+requestMapping:
+  headers:
+    api-key: '{{properties.apiKey}}'
+
+testRequest:
+  method: GET
+  url: 'https://api.brevo.com/v3/account'
+  accountIdentifierKey: email

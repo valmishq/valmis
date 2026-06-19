@@ -1,0 +1,27 @@
+id: clickup
+name: ClickUp
+brandName: ClickUp
+type: apiKey
+icon: /logos/clickup.svg
+description: >
+  Connect to ClickUp to manage tasks, lists, folders and spaces. The personal API token
+  is sent raw in the Authorization header (no "Bearer" prefix).
+documentationUrl: https://developer.clickup.com/docs/authentication
+properties:
+  - name: apiToken
+    displayName: Personal API Token
+    type: secret
+    required: true
+    description: >
+      Your ClickUp personal API token (starts with "pk_"). Generate it under Settings →
+      Apps → API Token → Generate.
+
+# ClickUp expects the raw token with NO "Bearer" prefix.
+requestMapping:
+  headers:
+    Authorization: '{{properties.apiToken}}'
+
+testRequest:
+  method: GET
+  url: 'https://api.clickup.com/api/v2/user'
+  accountIdentifierKey: user.username

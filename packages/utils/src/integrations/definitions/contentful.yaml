@@ -1,0 +1,39 @@
+id: contentful
+name: Contentful (CMA)
+brandName: Contentful
+type: bearerToken
+icon: /logos/contentful.svg
+description: >
+  Connect to the Contentful Content Management API to create and edit entries, assets and
+  content types. The personal CMA token is sent as a Bearer token on every request.
+documentationUrl: https://www.contentful.com/developers/docs/references/authentication/
+properties:
+  - name: cmaToken
+    displayName: CMA Token
+    type: secret
+    required: true
+    description: >
+      A Content Management API personal access token. Create one in the web app under
+      Settings → CMA tokens (or API keys).
+  - name: baseUrl
+    displayName: API Base URL
+    type: string
+    required: true
+    default: https://api.contentful.com
+    description: >
+      Global: https://api.contentful.com. EU data residency: https://api.eu.contentful.com.
+  - name: spaceId
+    displayName: Space ID
+    type: string
+    required: true
+    description: >
+      The Space ID the agent should operate on (used when building content API paths).
+
+requestMapping:
+  headers:
+    Authorization: 'Bearer {{properties.cmaToken}}'
+
+testRequest:
+  method: GET
+  url: '{{properties.baseUrl}}/users/me'
+  accountIdentifierKey: email

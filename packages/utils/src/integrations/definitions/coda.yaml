@@ -1,0 +1,26 @@
+id: coda
+name: Coda
+brandName: Coda
+type: bearerToken
+icon: /logos/coda.svg
+description: >
+  Connect to Coda to read and write docs, tables, rows and controls. The personal API
+  token is sent as a Bearer token on every request.
+documentationUrl: https://coda.io/developers
+properties:
+  - name: apiToken
+    displayName: API Token
+    type: secret
+    required: true
+    description: >
+      Your Coda API token. Create one in Account Settings → API settings
+      (https://coda.io/account).
+
+requestMapping:
+  headers:
+    Authorization: 'Bearer {{properties.apiToken}}'
+
+testRequest:
+  method: GET
+  url: 'https://coda.io/apis/v1/whoami'
+  accountIdentifierKey: loginId

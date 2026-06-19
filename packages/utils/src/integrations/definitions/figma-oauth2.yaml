@@ -1,0 +1,41 @@
+id: figma-oauth2
+name: Figma (OAuth2)
+brandName: Figma
+type: oauth2
+icon: /logos/figma.svg
+description: >
+  Connect to Figma via OAuth2 so users can grant access to their own files, projects and
+  comments without sharing a personal access token. The OAuth access token is sent as a
+  Bearer token on every request.
+documentationUrl: https://developers.figma.com/docs/rest-api/oauth-apps/
+properties:
+  - name: clientId
+    displayName: OAuth Client ID
+    type: string
+    required: true
+    description: >
+      Client ID from your Figma OAuth app (figma.com → Settings → OAuth apps).
+  - name: clientSecret
+    displayName: OAuth Client Secret
+    type: secret
+    required: true
+    description: >
+      Client Secret from your Figma OAuth app.
+
+oauth2:
+  authorizationUrl: 'https://www.figma.com/oauth'
+  accessTokenUrl: 'https://api.figma.com/v1/oauth/token'
+  clientIdProperty: clientId
+  clientSecretProperty: clientSecret
+  # Figma requires HTTP Basic auth (base64 clientId:clientSecret) for token exchange.
+  authStyle: inHeader
+  scope: 'current_user:read file_content:read file_metadata:read projects:read file_comments:read'
+
+requestMapping:
+  headers:
+    Authorization: 'Bearer {{properties.accessToken}}'
+
+testRequest:
+  method: GET
+  url: 'https://api.figma.com/v1/me'
+  accountIdentifierKey: handle

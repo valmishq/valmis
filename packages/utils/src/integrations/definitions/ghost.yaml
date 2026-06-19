@@ -1,0 +1,36 @@
+id: ghost
+name: Ghost (Content API)
+brandName: Ghost
+type: apiKey
+icon: /logos/ghost.png
+description: >
+  Connect to a Ghost site's Content API to read published posts, pages, tags and authors.
+  The Content API key is sent as a "key" query parameter, alongside a required
+  Accept-Version header.
+documentationUrl: https://docs.ghost.org/content-api
+properties:
+  - name: contentApiKey
+    displayName: Content API Key
+    type: secret
+    required: true
+    description: >
+      A Content API key from a Custom Integration in Ghost Admin → Settings →
+      Integrations.
+  - name: siteUrl
+    displayName: Site URL
+    type: string
+    required: true
+    description: >
+      The full base URL of your Ghost site, e.g. https://example.com (no trailing slash).
+
+# Ghost Content API authenticates with the key as a query parameter.
+requestMapping:
+  qs:
+    key: '{{properties.contentApiKey}}'
+  headers:
+    Accept-Version: 'v6.0'
+
+testRequest:
+  method: GET
+  url: '{{properties.siteUrl}}/ghost/api/content/settings/'
+  accountIdentifierKey: settings.title

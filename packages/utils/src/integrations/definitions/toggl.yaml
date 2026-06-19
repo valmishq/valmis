@@ -1,0 +1,34 @@
+id: toggl
+name: Toggl Track
+brandName: Toggl Track
+type: basicAuth
+icon: /logos/toggl.svg
+description: >
+  Connect to Toggl Track to manage time entries, projects, clients and workspaces.
+  Authenticates via HTTP Basic Auth where the username is your API token and the password
+  is the literal "api_token".
+documentationUrl: https://engineering.toggl.com/docs/authentication/
+properties:
+  - name: username
+    displayName: API Token
+    type: secret
+    required: true
+    description: >
+      Your Toggl Track API token, found at the bottom of your Profile settings page.
+  - name: password
+    displayName: Password (always "api_token")
+    type: options
+    required: true
+    default: api_token
+    description: >
+      Toggl Track uses your API token as the username and the literal text "api_token"
+      as the password. This is fixed — leave it as "api_token".
+    options:
+      - name: api_token
+        value: api_token
+
+# basicAuth auto-injects Authorization: Basic base64(username:password) — no requestMapping.
+testRequest:
+  method: GET
+  url: 'https://api.track.toggl.com/api/v9/me'
+  accountIdentifierKey: email

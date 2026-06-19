@@ -1,0 +1,33 @@
+id: typeform
+name: Typeform
+brandName: Typeform
+type: bearerToken
+icon: /logos/typeform.svg
+description: >
+  Connect to Typeform to manage forms and read responses. The personal access token is
+  sent as a Bearer token on every request.
+documentationUrl: https://www.typeform.com/developers/get-started/personal-access-token/
+properties:
+  - name: accessToken
+    displayName: Personal Access Token
+    type: secret
+    required: true
+    description: >
+      Your Typeform personal access token (starts with "tfp_"). Create one under Account →
+      Personal tokens (https://admin.typeform.com/user/tokens).
+  - name: baseUrl
+    displayName: API Base URL
+    type: string
+    required: true
+    default: https://api.typeform.com
+    description: >
+      Global: https://api.typeform.com. EU: https://api.eu.typeform.com.
+
+requestMapping:
+  headers:
+    Authorization: 'Bearer {{properties.accessToken}}'
+
+testRequest:
+  method: GET
+  url: '{{properties.baseUrl}}/me'
+  accountIdentifierKey: email

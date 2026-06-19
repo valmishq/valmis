@@ -1,0 +1,28 @@
+id: miro
+name: Miro
+brandName: Miro
+type: bearerToken
+icon: /logos/miro.svg
+description: >
+  Connect to Miro to manage boards, items and connectors. The access token is sent as a
+  Bearer token on every request.
+documentationUrl: https://developers.miro.com/reference/use-access-token-for-rest-api-requests
+properties:
+  - name: accessToken
+    displayName: Access Token
+    type: secret
+    required: true
+    description: >
+      A Miro access token. Create an app in your Developer team, leave the token
+      non-expiring, then use "Install app & get OAuth token" to copy a token bound to
+      your team (https://miro.com/app/settings/).
+
+requestMapping:
+  headers:
+    Authorization: 'Bearer {{properties.accessToken}}'
+
+# Miro v2 has no /users/me; the access-token context returns the token's user/team.
+testRequest:
+  method: GET
+  url: 'https://api.miro.com/v1/oauth-token'
+  accountIdentifierKey: user.name
