@@ -1,0 +1,36 @@
+id: paddle
+name: Paddle (Billing)
+brandName: Paddle
+type: bearerToken
+icon: /logos/paddle.svg
+description: >
+  Connect to the Paddle Billing API (v2) to manage products, prices, customers,
+  subscriptions and transactions. The API key is sent as a Bearer token; a key only works
+  against the environment it was created in.
+documentationUrl: https://developer.paddle.com/api-reference/about/authentication
+properties:
+  - name: apiKey
+    displayName: API Key
+    type: secret
+    required: true
+    description: >
+      A Paddle API key (starts with pdl_live_apikey_ or pdl_sdbx_apikey_). Create one under
+      Paddle → Developer tools → Authentication.
+  - name: baseUrl
+    displayName: API Base URL
+    type: string
+    required: true
+    default: https://api.paddle.com
+    description: >
+      Production: https://api.paddle.com. Sandbox: https://sandbox-api.paddle.com. Must match
+      the environment your API key belongs to.
+
+requestMapping:
+  headers:
+    Authorization: 'Bearer {{properties.apiKey}}'
+    Paddle-Version: '1'
+
+# /event-types is a cheap, always-available read that proves the key.
+testRequest:
+  method: GET
+  url: '{{properties.baseUrl}}/event-types'

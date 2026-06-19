@@ -1,0 +1,36 @@
+id: posthog
+name: PostHog
+brandName: PostHog
+type: bearerToken
+icon: /logos/posthog.svg
+description: >
+  Connect to PostHog to query events, insights, persons and feature flags via the read API. A
+  personal API key is sent as a Bearer token. Pick the host that matches your PostHog Cloud
+  region.
+documentationUrl: https://posthog.com/docs/api
+properties:
+  - name: personalApiKey
+    displayName: Personal API Key
+    type: secret
+    required: true
+    description: >
+      A PostHog personal API key (Settings → Personal API keys). Grant it the scopes you need,
+      e.g. query:read, insight:read.
+  - name: host
+    displayName: API Host
+    type: string
+    required: true
+    default: https://us.posthog.com
+    description: >
+      US Cloud: https://us.posthog.com. EU Cloud: https://eu.posthog.com. For self-hosted, use
+      your instance URL.
+
+requestMapping:
+  headers:
+    Authorization: 'Bearer {{properties.personalApiKey}}'
+
+# /api/users/@me/ is a clean whoami for the key owner.
+testRequest:
+  method: GET
+  url: '{{properties.host}}/api/users/@me/'
+  accountIdentifierKey: email

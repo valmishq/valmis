@@ -1,0 +1,26 @@
+id: elevenlabs
+name: ElevenLabs
+brandName: ElevenLabs
+type: apiKey
+icon: /logos/elevenlabs.svg
+description: >
+  Connect to ElevenLabs for text-to-speech, voices and audio generation. The API key is sent
+  in the xi-api-key header (not an Authorization/Bearer header).
+documentationUrl: https://elevenlabs.io/docs/api-reference/authentication
+properties:
+  - name: apiKey
+    displayName: API Key
+    type: secret
+    required: true
+    description: >
+      Your ElevenLabs API key, found under your profile → API Keys at elevenlabs.io.
+
+# ElevenLabs authenticates with the xi-api-key header.
+requestMapping:
+  headers:
+    xi-api-key: '{{properties.apiKey}}'
+
+testRequest:
+  method: GET
+  url: 'https://api.elevenlabs.io/v1/user'
+  accountIdentifierKey: user_id

@@ -1,0 +1,44 @@
+id: xero
+name: Xero (OAuth2)
+brandName: Xero
+type: oauth2
+icon: /logos/xero.svg
+description: >
+  Connect to Xero via OAuth2 to manage invoices, contacts, bank transactions and accounts.
+  After authorizing, call GET https://api.xero.com/connections to list the organisations
+  you have access to, then send the chosen tenant's id as a "Xero-tenant-id" header on every
+  Accounting API call.
+documentationUrl: https://developer.xero.com/documentation/guides/oauth2/overview/
+properties:
+  - name: clientId
+    displayName: Client ID
+    type: string
+    required: true
+    description: Client ID from your Xero app (developer.xero.com → My Apps → your app).
+  - name: clientSecret
+    displayName: Client Secret
+    type: secret
+    required: true
+    description: Client Secret from your Xero app (developer.xero.com → My Apps → your app).
+
+oauth2:
+  authorizationUrl: 'https://login.xero.com/identity/connect/authorize'
+  accessTokenUrl: 'https://identity.xero.com/connect/token'
+  clientIdProperty: clientId
+  clientSecretProperty: clientSecret
+  # Xero accepts client credentials as HTTP Basic on the token request.
+  authStyle: inHeader
+  # offline_access is required to receive a refresh_token.
+  scope: >-
+    openid email profile offline_access
+    accounting.transactions accounting.contacts accounting.settings
+
+requestMapping:
+  headers:
+    Authorization: 'Bearer {{properties.accessToken}}'
+
+# /connections needs only the Bearer (no tenant header) and lists every authorized organisation.
+testRequest:
+  method: GET
+  url: 'https://api.xero.com/connections'
+  accountIdentifierKey: '0.tenantId'

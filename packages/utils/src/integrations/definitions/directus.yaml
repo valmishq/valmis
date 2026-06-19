@@ -1,0 +1,34 @@
+id: directus
+name: Directus
+brandName: Directus
+type: bearerToken
+icon: /logos/directus.svg
+description: >
+  Connect to a self-hosted Directus instance to read and write items, collections and files.
+  Authenticates with a static access token sent as a Bearer token.
+documentationUrl: https://directus.io/docs/guides/connect/authentication
+properties:
+  - name: baseUrl
+    displayName: Base URL
+    type: string
+    required: true
+    description: >
+      The root URL of your Directus instance, e.g. https://directus.example.com (no trailing
+      slash).
+  - name: staticToken
+    displayName: Static Token
+    type: secret
+    required: true
+    description: >
+      A static access token assigned to a Directus user (User → Token field, or via the Admin
+      app). Non-expiring.
+
+requestMapping:
+  headers:
+    Authorization: 'Bearer {{properties.staticToken}}'
+
+# /users/me is a clean whoami that returns the token owner.
+testRequest:
+  method: GET
+  url: '{{properties.baseUrl}}/users/me'
+  accountIdentifierKey: data.email

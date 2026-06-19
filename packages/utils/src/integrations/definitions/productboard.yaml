@@ -1,0 +1,27 @@
+id: productboard
+name: Productboard
+brandName: Productboard
+type: custom
+icon: /logos/productboard.svg
+description: >
+  Connect to Productboard to manage features, notes, components and releases via its public
+  API. The access token is sent as a Bearer token alongside a mandatory X-Version header.
+documentationUrl: https://developer.productboard.com/reference/authentication
+properties:
+  - name: accessToken
+    displayName: Access Token
+    type: secret
+    required: true
+    description: >
+      A Productboard public API access token. Generate one under Workspace Settings →
+      Integrations → Public API.
+
+# Productboard requires both the Bearer token and the X-Version header on every request.
+requestMapping:
+  headers:
+    Authorization: 'Bearer {{properties.accessToken}}'
+    X-Version: '1'
+
+testRequest:
+  method: GET
+  url: 'https://api.productboard.com/companies'

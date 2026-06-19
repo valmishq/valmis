@@ -5,7 +5,7 @@
 	import { Badge } from '$lib/components/ui/badge/index.js';
 	import { formatRelativeTime } from '$lib/format.js';
 	import type { Workflow, Agent, CronTriggerConfig } from '@repo/types';
-	import ZapIcon from '@lucide/svelte/icons/zap';
+	import WorkflowIcon from '@lucide/svelte/icons/workflow';
 	import PlusIcon from '@lucide/svelte/icons/plus';
 	import ClockIcon from '@lucide/svelte/icons/clock';
 	import WebhookIcon from '@lucide/svelte/icons/webhook';
@@ -62,7 +62,7 @@
 				<div
 					class="flex size-10 items-center justify-center rounded-full bg-muted text-muted-foreground"
 				>
-					<ZapIcon class="size-5" />
+					<WorkflowIcon class="size-5" />
 				</div>
 				<div class="text-center">
 					<p class="text-sm font-medium text-foreground">No workflows yet</p>
@@ -100,7 +100,7 @@
 								<div
 									class="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-lg bg-muted"
 								>
-									<ZapIcon class="size-4 text-muted-foreground" />
+									<WorkflowIcon class="size-4 text-muted-foreground" />
 								</div>
 								<div class="min-w-0 flex-1">
 									<div class="flex flex-wrap items-center gap-2">

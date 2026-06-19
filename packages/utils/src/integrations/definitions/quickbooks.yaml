@@ -1,0 +1,58 @@
+id: quickbooks
+name: QuickBooks Online (OAuth2)
+brandName: QuickBooks
+type: oauth2
+icon: /logos/quickbooks.svg
+description: >
+  Connect to QuickBooks Online (Intuit) via OAuth2 to read and write invoices, customers,
+  payments, accounts and reports. The Company ID (realmId) returned during authorization
+  is required in every API path; set it below and choose production or sandbox.
+documentationUrl: https://developer.intuit.com/app/developer/qbo/docs/develop/authentication-and-authorization/oauth-2.0
+properties:
+  - name: clientId
+    displayName: Client ID
+    type: string
+    required: true
+    description: >
+      Client ID from your Intuit app (developer.intuit.com → your app → Keys & credentials).
+  - name: clientSecret
+    displayName: Client Secret
+    type: secret
+    required: true
+    description: >
+      Client Secret from your Intuit app (developer.intuit.com → your app → Keys & credentials).
+  - name: realmId
+    displayName: Company ID (realmId)
+    type: string
+    required: true
+    description: >
+      The Company ID (a.k.a. realmId) of the QuickBooks company. Intuit returns it as a
+      query parameter on the OAuth redirect; it is also shown in your app's Playground.
+  - name: baseUrl
+    displayName: API Base URL
+    type: string
+    required: true
+    default: https://quickbooks.api.intuit.com
+    description: >
+      Production: https://quickbooks.api.intuit.com. Sandbox:
+      https://sandbox-quickbooks.api.intuit.com.
+
+oauth2:
+  authorizationUrl: 'https://appcenter.intuit.com/connect/oauth2'
+  accessTokenUrl: 'https://oauth.platform.intuit.com/oauth2/v1/tokens/bearer'
+  clientIdProperty: clientId
+  clientSecretProperty: clientSecret
+  # Intuit accepts client credentials as HTTP Basic on the token request.
+  authStyle: inHeader
+  scope: 'com.intuit.quickbooks.accounting openid email'
+
+requestMapping:
+  headers:
+    Authorization: 'Bearer {{properties.accessToken}}'
+    Accept: 'application/json'
+
+# companyinfo is the cheapest authenticated read; realmId appears twice (path + resource id).
+testRequest:
+  method: GET
+  url: '{{properties.baseUrl}}/v3/company/{{properties.realmId}}/companyinfo/{{properties.realmId}}?minorversion=75'
+  accountIdentifierKey: CompanyInfo.CompanyName

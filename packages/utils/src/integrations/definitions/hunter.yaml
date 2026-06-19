@@ -1,0 +1,26 @@
+id: hunter
+name: Hunter.io
+brandName: Hunter
+type: apiKey
+icon: /logos/hunter.svg
+description: >
+  Connect to Hunter.io to find and verify professional email addresses and look up domains. The
+  API key is sent as an "api_key" query-string parameter.
+documentationUrl: https://hunter.io/api-documentation/v2
+properties:
+  - name: apiKey
+    displayName: API Key
+    type: secret
+    required: true
+    description: >
+      Your Hunter API key, found under your account's API page at https://hunter.io/api-keys.
+
+requestMapping:
+  qs:
+    api_key: '{{properties.apiKey}}'
+
+# /account returns the authenticated account and does not consume request quota.
+testRequest:
+  method: GET
+  url: 'https://api.hunter.io/v2/account'
+  accountIdentifierKey: data.email

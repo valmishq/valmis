@@ -1,0 +1,30 @@
+id: chargebee
+name: Chargebee
+brandName: Chargebee
+type: basicAuth
+icon: /logos/chargebee.svg
+description: >
+  Connect to Chargebee to manage subscriptions, customers, invoices and plans. Authenticates
+  via HTTP Basic Auth where the API key is the username and the password is left blank.
+documentationUrl: https://apidocs.chargebee.com/docs/api/auth
+properties:
+  - name: username
+    displayName: API Key
+    type: secret
+    required: true
+    description: >
+      A Chargebee API key (Settings → Configure Chargebee → API Keys). It is sent as the Basic
+      Auth username with a blank password.
+  - name: site
+    displayName: Site
+    type: string
+    required: true
+    description: >
+      Your Chargebee site name — the "xxx" in https://xxx.chargebee.com. Test sites are usually
+      named "{site}-test".
+
+# basicAuth auto-injects Authorization: Basic base64(username:password); with a blank password
+# this becomes base64(apiKey:) exactly as Chargebee expects — so no requestMapping is defined.
+testRequest:
+  method: GET
+  url: 'https://{{properties.site}}.chargebee.com/api/v2/events?limit=1'

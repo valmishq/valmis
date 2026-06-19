@@ -1,0 +1,42 @@
+id: google-analytics
+name: Google Analytics (GA4)
+brandName: Google Analytics
+type: oauth2
+icon: /logos/google-analytics.svg
+description: >
+  Connect to Google Analytics (GA4) via Google OAuth2 to run reports with the Data API and list
+  accounts/properties with the Admin API. The GA4 property to report on is supplied per request.
+documentationUrl: https://developers.google.com/analytics/devguides/reporting/data/v1
+properties:
+  - name: clientId
+    displayName: Client ID
+    type: string
+    required: true
+    description: OAuth2 Client ID from Google Cloud Console.
+  - name: clientSecret
+    displayName: Client Secret
+    type: secret
+    required: true
+    description: OAuth2 Client Secret from Google Cloud Console.
+
+oauth2:
+  authorizationUrl: 'https://accounts.google.com/o/oauth2/v2/auth'
+  accessTokenUrl: 'https://oauth2.googleapis.com/token'
+  clientIdProperty: clientId
+  clientSecretProperty: clientSecret
+  authStyle: inBody
+  scope: 'openid email https://www.googleapis.com/auth/analytics.readonly'
+  # Google requires these to issue a refresh_token on first authorization.
+  extraAuthParams:
+    access_type: offline
+    prompt: consent
+
+requestMapping:
+  headers:
+    Authorization: 'Bearer {{properties.accessToken}}'
+
+# userinfo proves the OAuth grant; analytics.readonly + openid email returns the account email.
+testRequest:
+  method: GET
+  url: 'https://www.googleapis.com/oauth2/v3/userinfo'
+  accountIdentifierKey: email

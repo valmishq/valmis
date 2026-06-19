@@ -1,0 +1,49 @@
+id: microsoft-teams
+name: Microsoft Teams (OAuth2)
+brandName: Microsoft Teams
+type: oauth2
+icon: /logos/microsoft-teams.svg
+description: >
+  Connect to Microsoft Teams via Azure AD OAuth2 (Microsoft Graph) to read teams and channels
+  and post channel messages and chats.
+documentationUrl: https://learn.microsoft.com/en-us/graph/api/resources/teams-api-overview
+properties:
+  - name: clientId
+    displayName: Client ID (Application ID)
+    type: string
+    required: true
+    description: >
+      Application (client) ID from your Azure AD app registration (Azure Portal → App
+      registrations → your app → Overview).
+  - name: clientSecret
+    displayName: Client Secret
+    type: secret
+    required: true
+    description: >
+      Client secret value from Azure AD (App registrations → your app → Certificates & secrets).
+
+oauth2:
+  authorizationUrl: 'https://login.microsoftonline.com/common/oauth2/v2.0/authorize'
+  accessTokenUrl: 'https://login.microsoftonline.com/common/oauth2/v2.0/token'
+  clientIdProperty: clientId
+  clientSecretProperty: clientSecret
+  # Microsoft accepts client_secret in the POST body (inBody).
+  authStyle: inBody
+  usePkce: true
+  # User.Read backs the /me test; offline_access yields a refresh_token.
+  scope: >-
+    openid email profile offline_access
+    https://graph.microsoft.com/User.Read
+    https://graph.microsoft.com/Team.ReadBasic.All
+    https://graph.microsoft.com/Channel.ReadBasic.All
+    https://graph.microsoft.com/ChannelMessage.Send
+    https://graph.microsoft.com/Chat.ReadWrite
+
+requestMapping:
+  headers:
+    Authorization: 'Bearer {{properties.accessToken}}'
+
+testRequest:
+  method: GET
+  url: 'https://graph.microsoft.com/v1.0/me'
+  accountIdentifierKey: userPrincipalName

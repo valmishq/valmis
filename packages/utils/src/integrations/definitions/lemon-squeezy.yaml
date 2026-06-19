@@ -1,0 +1,29 @@
+id: lemon-squeezy
+name: Lemon Squeezy
+brandName: Lemon Squeezy
+type: bearerToken
+icon: /logos/lemon-squeezy.svg
+description: >
+  Connect to Lemon Squeezy to manage stores, products, orders, subscriptions, customers and
+  license keys. The API key is sent as a Bearer token and the JSON:API Accept header is
+  required on every request.
+documentationUrl: https://docs.lemonsqueezy.com/api
+properties:
+  - name: apiKey
+    displayName: API Key
+    type: secret
+    required: true
+    description: >
+      Create an API key under Settings → API in your Lemon Squeezy dashboard. Keys are valid
+      for one year.
+
+# The non-default Accept header is REQUIRED on every request, including GETs.
+requestMapping:
+  headers:
+    Authorization: 'Bearer {{properties.apiKey}}'
+    Accept: 'application/vnd.api+json'
+
+testRequest:
+  method: GET
+  url: 'https://api.lemonsqueezy.com/v1/users/me'
+  accountIdentifierKey: data.attributes.email

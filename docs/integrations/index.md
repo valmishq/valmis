@@ -21,38 +21,55 @@ Some integrations can also **start a [workflow](/guide/workflows/)** when someth
 
 ## Communication & bots
 
-| Service                                              | Auth method          |
-| ---------------------------------------------------- | -------------------- |
-| [Discord Bot](/integrations/discord-bot)             | Bot token            |
-| [Gmail](/integrations/google)                        | OAuth2 (Google)      |
-| [Microsoft Outlook](/integrations/microsoft-outlook) | OAuth2 (Azure AD)    |
-| [Pushover](/integrations/pushover)                   | API token + user key |
-| [Slack](/integrations/slack)                         | OAuth2               |
-| [Telegram Bot](/integrations/telegram-bot)           | Bot token            |
-| [Twilio](/integrations/twilio)                       | Account SID + Auth Token |
+| Service                                                   | Auth method              |
+| --------------------------------------------------------- | ------------------------ |
+| [Discord Bot](/integrations/discord-bot)                  | Bot token                |
+| [Gmail](/integrations/google)                             | OAuth2 (Google)          |
+| [Microsoft Outlook](/integrations/microsoft-outlook)      | OAuth2 (Azure AD)        |
+| [Microsoft Teams](/integrations/microsoft-teams)          | OAuth2 (Azure AD)        |
+| [Pushover](/integrations/pushover)                        | API token + user key     |
+| [Slack](/integrations/slack)                              | OAuth2                   |
+| [Telegram Bot](/integrations/telegram-bot)                | Bot token                |
+| [Twilio](/integrations/twilio)                            | Account SID + Auth Token |
+| [WhatsApp Business Cloud](/integrations/whatsapp-business) | Access token             |
 
 ## Customer support & CRM
 
-| Service                                        | Auth method                |
-| ---------------------------------------------- | -------------------------- |
-| [ActiveCampaign](/integrations/activecampaign) | API key + account base URL |
-| [Freshdesk](/integrations/freshdesk)           | API key (Basic Auth)       |
-| [Front](/integrations/front)                   | API token                  |
-| [Intercom](/integrations/intercom)             | Access token               |
-| [Pipedrive](/integrations/pipedrive)           | API token                  |
-| [Zendesk](/integrations/zendesk)               | Email + API token          |
+| Service                                        | Auth method                 |
+| ---------------------------------------------- | --------------------------- |
+| [ActiveCampaign](/integrations/activecampaign) | API key + account base URL  |
+| [Apollo.io](/integrations/apollo)              | API key                     |
+| [Freshdesk](/integrations/freshdesk)           | API key (Basic Auth)        |
+| [Front](/integrations/front)                   | API token                   |
+| [Gorgias](/integrations/gorgias)               | Email + API key (Basic Auth)|
+| [Help Scout](/integrations/helpscout)          | OAuth2 (client credentials) |
+| [Hunter.io](/integrations/hunter)              | API key                     |
+| [Intercom](/integrations/intercom)             | Access token                |
+| [Pipedrive](/integrations/pipedrive)           | API token                   |
+| [Salesforce](/integrations/salesforce)         | OAuth2                      |
+| [Zendesk](/integrations/zendesk)               | Email + API token           |
 
 ## Email & marketing
 
-| Service                              | Auth method                   |
-| ------------------------------------ | ----------------------------- |
-| [Brevo](/integrations/brevo)         | API key                       |
-| [Klaviyo](/integrations/klaviyo)     | Private API key               |
-| [Mailchimp](/integrations/mailchimp) | API key + datacenter          |
-| [Mailgun](/integrations/mailgun)     | API key (Basic Auth) + region |
-| [Postmark](/integrations/postmark)   | Server API token              |
-| [Resend](/integrations/resend)       | API key                       |
-| [SendGrid](/integrations/sendgrid)   | API key                       |
+| Service                                  | Auth method                   |
+| ---------------------------------------- | ----------------------------- |
+| [Brevo](/integrations/brevo)             | API key                       |
+| [Customer.io](/integrations/customer-io) | App API key + region          |
+| [Klaviyo](/integrations/klaviyo)         | Private API key               |
+| [Mailchimp](/integrations/mailchimp)     | API key + datacenter          |
+| [Mailgun](/integrations/mailgun)         | API key (Basic Auth) + region |
+| [OneSignal](/integrations/onesignal)     | API key                       |
+| [Postmark](/integrations/postmark)       | Server API token              |
+| [Resend](/integrations/resend)           | API key                       |
+| [SendGrid](/integrations/sendgrid)       | API key                       |
+
+## Analytics
+
+| Service                                            | Auth method                    |
+| -------------------------------------------------- | ------------------------------ |
+| [Amplitude](/integrations/amplitude)               | API key + secret (Basic Auth)  |
+| [Google Analytics (GA4)](/integrations/google-analytics) | OAuth2 (Google)          |
+| [PostHog](/integrations/posthog)                   | Personal API key + region      |
 
 ## Productivity & docs
 
@@ -78,6 +95,7 @@ Some integrations can also **start a [workflow](/guide/workflows/)** when someth
 | [Microsoft OneDrive](/integrations/microsoft-onedrive) | OAuth2 (Azure AD)               |
 | [monday.com](/integrations/monday)                     | API token                       |
 | [Notion](/integrations/notion)                         | Integration token or OAuth2     |
+| [Productboard](/integrations/productboard)             | Access token                    |
 | [Smartsheet](/integrations/smartsheet)                 | API access token                |
 | [Tally](/integrations/tally)                           | API key                         |
 | [Todoist](/integrations/todoist)                       | API token                       |
@@ -89,7 +107,11 @@ Some integrations can also **start a [workflow](/guide/workflows/)** when someth
 | Service                                  | Auth method                       |
 | ---------------------------------------- | --------------------------------- |
 | [Contentful](/integrations/contentful)   | CMA token + space                 |
+| [Directus](/integrations/directus)       | Static token                      |
 | [Ghost](/integrations/ghost)             | Content API key                   |
+| [Sanity](/integrations/sanity)           | API token + project               |
+| [Storyblok](/integrations/storyblok)     | Personal access token + region    |
+| [Strapi](/integrations/strapi)           | API token                         |
 | [Typeform](/integrations/typeform)       | Personal access token             |
 | [Webflow](/integrations/webflow)         | API token                         |
 | [WordPress](/integrations/wordpress)     | Username + application password   |
@@ -103,25 +125,48 @@ Some integrations can also **start a [workflow](/guide/workflows/)** when someth
 
 ## Business & commerce
 
-| Service                          | Auth method             |
-| -------------------------------- | ----------------------- |
-| [HubSpot](/integrations/hubspot) | Service key or OAuth2   |
-| [Shopify](/integrations/shopify) | Custom app access token |
-| [Square](/integrations/square)   | Access token            |
-| [Stripe](/integrations/stripe)   | Secret key              |
+| Service                                | Auth method             |
+| -------------------------------------- | ----------------------- |
+| [BigCommerce](/integrations/bigcommerce) | Store API token       |
+| [HubSpot](/integrations/hubspot)       | Service key or OAuth2   |
+| [Shopify](/integrations/shopify)       | Custom app access token |
+| [Square](/integrations/square)         | Access token            |
+| [Stripe](/integrations/stripe)         | Secret key              |
+| [WooCommerce](/integrations/woocommerce) | Consumer key + secret (Basic Auth) |
+
+## Finance, billing & payments
+
+| Service                                    | Auth method                  |
+| ------------------------------------------ | ---------------------------- |
+| [Chargebee](/integrations/chargebee)       | API key (Basic Auth) + site  |
+| [GoCardless](/integrations/gocardless)     | Access token                 |
+| [Lemon Squeezy](/integrations/lemon-squeezy) | API key                    |
+| [Mollie](/integrations/mollie)             | API key                      |
+| [Paddle](/integrations/paddle)             | API key                      |
+| [QuickBooks Online](/integrations/quickbooks) | OAuth2                    |
+| [Razorpay](/integrations/razorpay)         | Key ID + secret (Basic Auth) |
+| [Xero](/integrations/xero)                 | OAuth2                       |
 
 ## Developer & data
 
 | Service                                      | Auth method                    |
 | -------------------------------------------- | ------------------------------ |
+| [Algolia](/integrations/algolia)             | App ID + API key               |
 | [Alpha Vantage](/integrations/alpha-vantage) | API key                        |
 | [Cloudflare](/integrations/cloudflare)       | API token                      |
 | [GitHub](/integrations/github)               | Personal access token          |
 | [Google Maps](/integrations/google-maps)     | API key                        |
+| [Meilisearch](/integrations/meilisearch)     | API key + host                 |
 | [Pinecone](/integrations/pinecone)           | API key                        |
 | [SEMrush](/integrations/semrush)             | API key                        |
 | [SerpApi](/integrations/serpapi)             | API key                        |
 | [Supabase](/integrations/supabase)           | Project URL + service role key |
+
+## AI & voice
+
+| Service                                | Auth method |
+| -------------------------------------- | ----------- |
+| [ElevenLabs](/integrations/elevenlabs) | API key     |
 
 ## Social & web
 

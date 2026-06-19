@@ -1,0 +1,40 @@
+id: strapi
+name: Strapi
+brandName: Strapi
+type: bearerToken
+icon: /logos/strapi.svg
+description: >
+  Connect to a self-hosted Strapi CMS (v4/v5) REST API to read and write content entries. The
+  API token is sent as a Bearer token. Set a collection your token can read for the connection
+  test (API tokens have no universal "who am I" endpoint).
+documentationUrl: https://docs.strapi.io/cms/features/api-tokens
+properties:
+  - name: baseUrl
+    displayName: Base URL
+    type: string
+    required: true
+    description: >
+      The root URL of your Strapi instance, e.g. https://cms.example.com (no trailing slash).
+  - name: apiToken
+    displayName: API Token
+    type: secret
+    required: true
+    description: >
+      A Strapi API token (Settings → API Tokens). Use a Read-only or Full-access token with
+      access to the collection used below.
+  - name: testCollection
+    displayName: Test Collection
+    type: string
+    required: true
+    default: users
+    description: >
+      The plural API id of a content collection the token can read, used only for the
+      connection test, e.g. "articles" or "users".
+
+requestMapping:
+  headers:
+    Authorization: 'Bearer {{properties.apiToken}}'
+
+testRequest:
+  method: GET
+  url: '{{properties.baseUrl}}/api/{{properties.testCollection}}?pagination[pageSize]=1'

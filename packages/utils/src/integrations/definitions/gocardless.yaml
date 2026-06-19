@@ -1,0 +1,37 @@
+id: gocardless
+name: GoCardless
+brandName: GoCardless
+type: apiKey
+icon: /logos/gocardless.svg
+description: >
+  Connect to GoCardless to manage bank-debit mandates, customers, payments and payouts. The
+  access token is sent as a Bearer token alongside a mandatory GoCardless-Version header.
+documentationUrl: https://developer.gocardless.com/api-reference/
+properties:
+  - name: accessToken
+    displayName: Access Token
+    type: secret
+    required: true
+    description: >
+      A GoCardless access token (Developers → Create → Access token). Sandbox and live tokens
+      are separate and only work against their matching base URL.
+  - name: baseUrl
+    displayName: API Base URL
+    type: string
+    required: true
+    default: https://api.gocardless.com
+    description: >
+      Live: https://api.gocardless.com. Sandbox: https://api-sandbox.gocardless.com.
+
+# GoCardless requires the dated GoCardless-Version header on every request (static literal).
+requestMapping:
+  headers:
+    Authorization: 'Bearer {{properties.accessToken}}'
+    GoCardless-Version: '2015-07-06'
+    Accept: 'application/json'
+
+# Every account has at least one creditor (the merchant); proves the token and yields an id.
+testRequest:
+  method: GET
+  url: '{{properties.baseUrl}}/creditors?limit=1'
+  accountIdentifierKey: creditors.0.id

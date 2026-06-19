@@ -156,6 +156,10 @@
 		// Sync the breadcrumb title to the loaded thread title
 		activeBreadcrumbThreadTitle.set(data.thread.title ?? null);
 
+		// Start the new thread's stream from a clean connection state.
+		pendingReconcile = false;
+		staleSinceReconnect = false;
+
 		// Re-open SSE for the new thread
 		openStream();
 		scrollToBottom();
@@ -263,7 +267,38 @@
 	let eventSource: EventSource | null = null;
 
 	/**
-	 * Open the SSE connection.
+	 * Connection state for the live agent stream, surfaced to the user as a small
+	 * "Reconnecting…" hint. The stream can silently drop (mobile network switch,
+	 * laptop sleep, a proxy killing an idle socket) without EventSource noticing,
+	 * so we don't rely on its built-in reconnect alone — see the watchdog below.
+	 */
+	let connectionState = $state<'connecting' | 'open' | 'reconnecting'>('connecting');
+
+	/**
+	 * Wall-clock (ms) of the last frame received — any agent event OR the server's
+	 * `ping` heartbeat. The watchdog uses it to distinguish a live-but-quiet turn
+	 * from a dead connection. Plain (non-reactive): only read inside the interval.
+	 */
+	let lastEventAt = 0;
+
+	/** A reconnect is in progress; the next successful open should re-sync state. */
+	let pendingReconcile = false;
+
+	/**
+	 * We reconnected while a bubble was rendering: defer the full transcript re-sync
+	 * to the turn's end (the 'done' handler) so we don't wipe the in-progress bubble.
+	 */
+	let staleSinceReconnect = false;
+
+	let watchdogTimer: ReturnType<typeof setInterval> | null = null;
+
+	/** No frame (not even a ~15s heartbeat) for this long ⇒ force a reconnect. */
+	const STALL_MS = 45_000;
+	/** How often the watchdog checks for a stalled connection. */
+	const WATCHDOG_INTERVAL_MS = 5_000;
+
+	/**
+	 * Open (or re-open) the SSE connection.
 	 * EventSource cannot send custom headers, so the JWT is passed as a ?token= query param.
 	 * The backend requireAuth middleware accepts it on GET requests.
 	 *
@@ -273,11 +308,25 @@
 		if (!browser) return;
 		closeStream();
 
+		connectionState = pendingReconcile ? 'reconnecting' : 'connecting';
+		lastEventAt = Date.now();
+
 		const tokenParam = data.accessToken ? `?token=${encodeURIComponent(data.accessToken)}` : '';
 		const url = `/api/v1/runtime/${data.agent.id}/threads/${data.thread.id}/stream${tokenParam}`;
 		eventSource = new EventSource(url);
 
+		eventSource.onopen = () => {
+			connectionState = 'open';
+			lastEventAt = Date.now();
+			// If this open follows a drop, catch up on anything missed while away.
+			if (pendingReconcile) {
+				pendingReconcile = false;
+				void reconcileAfterReconnect();
+			}
+		};
+
 		eventSource.onmessage = (e: MessageEvent) => {
+			lastEventAt = Date.now();
 			if (!e.data || e.data === '') return;
 			try {
 				const event = JSON.parse(e.data) as AgentStreamEvent;
@@ -287,19 +336,86 @@
 			}
 		};
 
+		// Observable heartbeat from the backend — keeps lastEventAt fresh so the
+		// watchdog doesn't mistake a quiet (but alive) turn for a dead connection.
+		eventSource.addEventListener('ping', () => {
+			lastEventAt = Date.now();
+		});
+
 		eventSource.onerror = () => {
-			// Reconnection is handled automatically by EventSource.
-			// Only show error if we were mid-stream.
-			if (isStreaming) {
-				isStreaming = false;
-			}
+			// The socket dropped. EventSource will try to reconnect on its own, but we
+			// don't trust that alone — mark reconnecting and request a catch-up on the
+			// next open. Crucially, do NOT clear isStreaming here: the turn may still be
+			// running on the backend, and giving up would strand the UI mid-turn.
+			connectionState = 'reconnecting';
+			pendingReconcile = true;
 		};
+
+		startWatchdog();
 	}
 
 	function closeStream() {
+		stopWatchdog();
 		if (eventSource) {
 			eventSource.close();
 			eventSource = null;
+		}
+	}
+
+	function startWatchdog() {
+		stopWatchdog();
+		watchdogTimer = setInterval(() => {
+			if (!eventSource) return;
+			// No frame (data or heartbeat) for too long ⇒ the connection is likely
+			// half-open (the server side may already be gone, but EventSource never
+			// noticed). Force a fresh reconnect and request a catch-up.
+			if (Date.now() - lastEventAt > STALL_MS) {
+				pendingReconcile = true;
+				openStream();
+			}
+		}, WATCHDOG_INTERVAL_MS);
+	}
+
+	function stopWatchdog() {
+		if (watchdogTimer) {
+			clearInterval(watchdogTimer);
+			watchdogTimer = null;
+		}
+	}
+
+	/**
+	 * After the stream re-opens following a drop, reconcile UI state with the
+	 * backend. If a bubble is mid-render we defer the full re-sync to the turn's end
+	 * (so we don't wipe the in-progress message); otherwise we re-fetch the persisted
+	 * transcript so anything produced during the gap appears. A turn that finished
+	 * while we were away is also unblocked by the backend, which emits a 'done' to
+	 * every (re)connecting client whose thread is no longer 'running'.
+	 */
+	async function reconcileAfterReconnect() {
+		if (streamingMessageId !== null) {
+			staleSinceReconnect = true;
+			return;
+		}
+		await reconcileMessages();
+	}
+
+	/** Re-fetch the persisted transcript and rebuild the derived tool maps. */
+	async function reconcileMessages() {
+		try {
+			const res = await api(`/runtime/${data.agent.id}/threads/${data.thread.id}/messages`);
+			if (!res.ok) return;
+			const body = await res.json();
+			const serverMessages = (body.data ?? []) as AgentMessage[];
+			messages = serverMessages;
+			toolResults = buildToolResultsFromMessages(serverMessages);
+			toolResultImages = buildToolResultImagesFromMessages(serverMessages);
+			toolCallArgs = buildToolCallArgsFromMessages(serverMessages);
+			streamingMessageId = null;
+			optimisticAssistantId = null;
+			clearOptimisticTimer();
+			scrollToBottom();
+		} catch {
+			// Non-fatal: the live stream and the next reconnect will resync.
 		}
 	}
 
@@ -477,6 +593,12 @@
 					const placeholderId = optimisticAssistantId;
 					optimisticAssistantId = null;
 					messages = messages.filter((m) => m.id !== placeholderId);
+				}
+				// If we reconnected mid-turn, the in-progress bubble may be incomplete —
+				// now that the turn has ended, pull the persisted transcript to be sure.
+				if (staleSinceReconnect) {
+					staleSinceReconnect = false;
+					void reconcileMessages();
 				}
 				break;
 			}
@@ -898,6 +1020,16 @@
 
 		<!-- Token/cost bar + input -->
 		<div class="mx-auto w-full max-w-4xl md:px-8">
+			<!-- Live-stream connection hint — shown while the SSE link is recovering -->
+			{#if connectionState === 'reconnecting'}
+				<div
+					class="flex items-center justify-center gap-2 px-4 pb-1 text-[11px] text-muted-foreground"
+					role="status"
+				>
+					<span class="size-1.5 animate-pulse rounded-full bg-amber-500"></span>
+					Reconnecting to the agent…
+				</div>
+			{/if}
 			<!-- Subtle usage bar shown above the input; togglable via the eye icon -->
 			<ChatUsageBar
 				latestInputTokens={contextTokens}

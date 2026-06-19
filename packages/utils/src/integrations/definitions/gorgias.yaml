@@ -1,0 +1,33 @@
+id: gorgias
+name: Gorgias
+brandName: Gorgias
+type: basicAuth
+icon: /logos/gorgias.svg
+description: >
+  Connect to Gorgias, the e-commerce helpdesk, to manage tickets, customers and messages.
+  Authenticates via HTTP Basic Auth with your account email as the username and an API key as
+  the password.
+documentationUrl: https://developers.gorgias.com/reference/authentication
+properties:
+  - name: username
+    displayName: Account Email
+    type: string
+    required: true
+    description: The email address of your Gorgias account, used as the Basic Auth username.
+  - name: password
+    displayName: API Key
+    type: secret
+    required: true
+    description: >
+      A Gorgias API key, generated under Settings → REST API in your Gorgias account.
+  - name: subdomain
+    displayName: Subdomain
+    type: string
+    required: true
+    description: Your Gorgias subdomain — the "xxx" in https://xxx.gorgias.com.
+
+# basicAuth auto-injects Authorization: Basic base64(email:apiKey) — no requestMapping.
+testRequest:
+  method: GET
+  url: 'https://{{properties.subdomain}}.gorgias.com/api/account'
+  accountIdentifierKey: id

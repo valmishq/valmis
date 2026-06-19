@@ -1,0 +1,36 @@
+id: onesignal
+name: OneSignal
+brandName: OneSignal
+type: custom
+icon: /logos/onesignal.svg
+description: >
+  Connect to OneSignal to send push, email and SMS notifications and manage apps. The API key
+  is sent using the "Key" authorization scheme (the current scheme that replaced the legacy
+  Basic scheme in late 2024). For the connection test use an Organization API key.
+documentationUrl: https://documentation.onesignal.com/docs/en/keys-and-ids
+properties:
+  - name: apiKey
+    displayName: API Key
+    type: secret
+    required: true
+    description: >
+      A OneSignal API key. An Organization API key can list all apps (used by the test); an
+      App API key works for app-scoped calls. Find keys under Settings → Keys & IDs.
+  - name: appId
+    displayName: App ID
+    type: string
+    required: false
+    description: >
+      The App ID of the OneSignal app to operate on (Settings → Keys & IDs). Required for
+      app-scoped calls like sending notifications; not needed for the org-level test.
+
+# Current OneSignal scheme is "Key <api key>" — NOT Bearer and NOT Basic.
+requestMapping:
+  headers:
+    Authorization: 'Key {{properties.apiKey}}'
+
+# /apps lists all apps in the organization (requires an Organization API key).
+testRequest:
+  method: GET
+  url: 'https://api.onesignal.com/apps'
+  accountIdentifierKey: '0.id'

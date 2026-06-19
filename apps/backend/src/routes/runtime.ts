@@ -708,14 +708,29 @@ export function createRuntimeRouter(
 			res.setHeader('X-Accel-Buffering', 'no'); // disable nginx buffering
 			res.flushHeaders();
 
-			// Heartbeat every 15s to keep the connection alive through proxies
+			// Suggest a 3s reconnect backoff to the browser's EventSource.
+			res.write('retry: 3000\n\n');
+
+			// Observable heartbeat every 15s. A named `ping` event (not a bare `:`
+			// comment) is visible to the browser's EventSource, so the client-side
+			// watchdog can tell a live-but-quiet turn from a dead connection and force
+			// a reconnect. It also keeps idle proxies from closing the socket.
 			const heartbeat = setInterval(() => {
-				res.write(': heartbeat\n\n');
+				res.write('event: ping\ndata: {}\n\n');
 			}, 15_000);
 
 			const unsubscribe = agentStreamBus.subscribe(threadId, (event) => {
 				res.write(`data: ${JSON.stringify(event)}\n\n`);
 			});
+
+			// If the turn already finished before this connection was established —
+			// e.g. the client reconnected after completion, or is opening a thread
+			// that isn't running — emit a `done` immediately so the UI never hangs
+			// waiting for an event that already fired while it was disconnected.
+			// A live ('running') turn keeps streaming through the subscription above.
+			if (thread.status !== 'running') {
+				res.write(`data: ${JSON.stringify({ type: 'done' })}\n\n`);
+			}
 
 			req.on('close', () => {
 				clearInterval(heartbeat);

@@ -20,7 +20,7 @@ properties:
     type: string
     required: true
     description: Space-separated list of Google API scopes
-    default: 'openid email https://www.googleapis.com/auth/drive.readonly'
+    default: 'openid email https://www.googleapis.com/auth/drive.readonly https://www.googleapis.com/auth/spreadsheets.readonly https://www.googleapis.com/auth/documents.readonly https://www.googleapis.com/auth/calendar https://www.googleapis.com/auth/calendar.events'
 
 oauth2:
   authorizationUrl: 'https://accounts.google.com/o/oauth2/v2/auth'

@@ -1,0 +1,37 @@
+id: woocommerce
+name: WooCommerce
+brandName: WooCommerce
+type: basicAuth
+icon: /logos/woocommerce.svg
+description: >
+  Connect to a WooCommerce store's REST API (v3) to manage products, orders, customers and
+  coupons. Over HTTPS it authenticates with HTTP Basic Auth using the consumer key as the
+  username and the consumer secret as the password.
+documentationUrl: https://woocommerce.github.io/woocommerce-rest-api-docs/
+properties:
+  - name: username
+    displayName: Consumer Key
+    type: secret
+    required: true
+    description: >
+      A WooCommerce REST API consumer key (starts with ck_). Create one under WooCommerce →
+      Settings → Advanced → REST API.
+  - name: password
+    displayName: Consumer Secret
+    type: secret
+    required: true
+    description: >
+      The matching consumer secret (starts with cs_), shown when you create the API key.
+  - name: siteUrl
+    displayName: Store URL
+    type: string
+    required: true
+    description: >
+      The full base URL of your store, e.g. https://shop.example.com (no trailing slash). Must
+      be served over HTTPS for Basic Auth to work.
+
+# basicAuth auto-injects Authorization: Basic base64(consumerKey:consumerSecret) — no requestMapping.
+testRequest:
+  method: GET
+  url: '{{properties.siteUrl}}/wp-json/wc/v3/system_status'
+  accountIdentifierKey: environment.home_url

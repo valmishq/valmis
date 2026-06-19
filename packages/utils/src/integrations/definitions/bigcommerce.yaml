@@ -1,0 +1,36 @@
+id: bigcommerce
+name: BigCommerce
+brandName: BigCommerce
+type: apiKey
+icon: /logos/bigcommerce.svg
+description: >
+  Connect to a BigCommerce store's V3 REST API to manage products, orders, customers and
+  catalog. Authenticates with an API account access token sent in the X-Auth-Token header; the
+  store hash is part of the URL path.
+documentationUrl: https://developer.bigcommerce.com/docs/start/authentication
+properties:
+  - name: accessToken
+    displayName: Access Token
+    type: secret
+    required: true
+    description: >
+      The access token of a store API account. Create one under Settings → API → Store-level
+      API accounts in the BigCommerce control panel.
+  - name: storeHash
+    displayName: Store Hash
+    type: string
+    required: true
+    description: >
+      Your store hash — the "xxxxxx" in https://api.bigcommerce.com/stores/xxxxxx/. Shown in the
+      API account's API path.
+
+requestMapping:
+  headers:
+    X-Auth-Token: '{{properties.accessToken}}'
+    Accept: 'application/json'
+
+# /v2/store is the cheapest authenticated read and returns the store profile.
+testRequest:
+  method: GET
+  url: 'https://api.bigcommerce.com/stores/{{properties.storeHash}}/v2/store'
+  accountIdentifierKey: name

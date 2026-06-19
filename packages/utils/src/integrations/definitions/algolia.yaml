@@ -1,0 +1,35 @@
+id: algolia
+name: Algolia
+brandName: Algolia
+type: apiKey
+icon: /logos/algolia.svg
+description: >
+  Connect to Algolia to manage indices, records and search settings via the Search/Admin API.
+  Authenticates with two headers — the Application ID and an API key — and the Application ID is
+  also part of the host.
+documentationUrl: https://www.algolia.com/doc/rest-api/search/
+properties:
+  - name: applicationId
+    displayName: Application ID
+    type: string
+    required: true
+    description: >
+      Your Algolia Application ID (Dashboard → Settings → API Keys). Used in both the host and a
+      header.
+  - name: apiKey
+    displayName: Admin API Key
+    type: secret
+    required: true
+    description: >
+      An Admin API key, or any key with the listIndexes ACL. Find it under Dashboard → Settings →
+      API Keys.
+
+requestMapping:
+  headers:
+    X-Algolia-Application-Id: '{{properties.applicationId}}'
+    X-Algolia-API-Key: '{{properties.apiKey}}'
+
+# /1/indexes lists indices and proves both the Application ID and the key.
+testRequest:
+  method: GET
+  url: 'https://{{properties.applicationId}}.algolia.net/1/indexes'

@@ -1,0 +1,38 @@
+id: storyblok
+name: Storyblok (Management API)
+brandName: Storyblok
+type: apiKey
+icon: /logos/storyblok.svg
+description: >
+  Connect to the Storyblok Management API to create and edit stories, components and assets.
+  The personal access token is sent raw in the Authorization header (no "Bearer" prefix). Pick
+  the base URL that matches your space's region.
+documentationUrl: https://www.storyblok.com/docs/api/management/getting-started/authentication
+properties:
+  - name: personalAccessToken
+    displayName: Personal Access Token
+    type: secret
+    required: true
+    description: >
+      A Storyblok personal access token (My Account → Account settings → Personal access
+      tokens). Sent raw, with no "Bearer" prefix.
+  - name: baseUrl
+    displayName: API Base URL
+    type: string
+    required: true
+    default: https://mapi.storyblok.com/v1
+    description: >
+      Region host for the Management API. EU: https://mapi.storyblok.com/v1, US:
+      https://api-us.storyblok.com/v1, AP: https://api-ap.storyblok.com/v1, CA:
+      https://api-ca.storyblok.com/v1.
+
+# Storyblok's Management API expects the raw token with NO "Bearer" prefix.
+requestMapping:
+  headers:
+    Authorization: '{{properties.personalAccessToken}}'
+
+# /spaces lists every space the token can access — a clean whoami needing no space id.
+testRequest:
+  method: GET
+  url: '{{properties.baseUrl}}/spaces/'
+  accountIdentifierKey: spaces.0.id

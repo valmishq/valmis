@@ -1,0 +1,27 @@
+id: mollie
+name: Mollie
+brandName: Mollie
+type: bearerToken
+icon: /logos/mollie.svg
+description: >
+  Connect to Mollie to create and manage payments, refunds, customers and subscriptions. The
+  API key is sent as a Bearer token; the test_ or live_ prefix selects the mode.
+documentationUrl: https://docs.mollie.com/reference/authentication
+properties:
+  - name: apiKey
+    displayName: API Key
+    type: secret
+    required: true
+    description: >
+      A Mollie API key (starts with test_ or live_). Find it under Developers → API keys in the
+      Mollie Dashboard.
+
+requestMapping:
+  headers:
+    Authorization: 'Bearer {{properties.apiKey}}'
+
+# /profiles/me works with a plain API key (unlike /organizations/me, which needs OAuth).
+testRequest:
+  method: GET
+  url: 'https://api.mollie.com/v2/profiles/me'
+  accountIdentifierKey: id

@@ -1,0 +1,34 @@
+id: customer-io
+name: Customer.io (App API)
+brandName: Customer.io
+type: bearerToken
+icon: /logos/customer-io.svg
+description: >
+  Connect to the Customer.io App API to look up people, manage campaigns and segments and send
+  transactional/broadcast messages. The App API key is sent as a Bearer token; pick the host
+  that matches your workspace region.
+documentationUrl: https://docs.customer.io/integrations/api/app/
+properties:
+  - name: appApiKey
+    displayName: App API Key
+    type: secret
+    required: true
+    description: >
+      A Customer.io App API key (Settings → Account Settings → API Credentials → App API Keys).
+  - name: baseUrl
+    displayName: API Base URL
+    type: string
+    required: true
+    default: https://api.customer.io
+    description: >
+      US region: https://api.customer.io. EU region: https://api-eu.customer.io.
+
+requestMapping:
+  headers:
+    Authorization: 'Bearer {{properties.appApiKey}}'
+
+# /v1/api/segments is a cheap, auth-gated list that proves the key.
+testRequest:
+  method: GET
+  url: '{{properties.baseUrl}}/v1/api/segments'
+  accountIdentifierKey: segments.0.id

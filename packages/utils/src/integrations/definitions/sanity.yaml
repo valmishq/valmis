@@ -1,0 +1,46 @@
+id: sanity
+name: Sanity
+brandName: Sanity
+type: bearerToken
+icon: /logos/sanity.svg
+description: >
+  Connect to the Sanity Content Lake HTTP API to query and mutate documents with GROQ. The
+  robot token is sent as a Bearer token; project id, dataset and API version are part of the URL.
+documentationUrl: https://www.sanity.io/docs/http-auth
+properties:
+  - name: token
+    displayName: API Token
+    type: secret
+    required: true
+    description: >
+      A Sanity API token (manage.sanity.io → your project → API → Tokens). Give it Viewer for
+      read-only or Editor/Deploy Studio for writes.
+  - name: projectId
+    displayName: Project ID
+    type: string
+    required: true
+    description: >
+      Your Sanity project id (e.g. abc12xyz), found in manage.sanity.io → project settings.
+  - name: dataset
+    displayName: Dataset
+    type: string
+    required: true
+    default: production
+    description: The dataset name to query, e.g. "production".
+  - name: apiVersion
+    displayName: API Version
+    type: string
+    required: true
+    default: v2025-02-19
+    description: >
+      A dated API version string with a leading "v", e.g. v2025-02-19. Pin it to a date for
+      stable behaviour.
+
+requestMapping:
+  headers:
+    Authorization: 'Bearer {{properties.token}}'
+
+# A count(*) GROQ query proves token + project + dataset are all valid.
+testRequest:
+  method: GET
+  url: 'https://{{properties.projectId}}.api.sanity.io/{{properties.apiVersion}}/data/query/{{properties.dataset}}?query=count(*)'

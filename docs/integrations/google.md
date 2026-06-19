@@ -1,6 +1,6 @@
-# Google (Gmail, Calendar, Docs, Sheets, Drive, Forms, Workspace)
+# Google (Gmail, Calendar, Docs, Sheets, Drive, Forms, Workspace, Analytics)
 
-Valmis has seven Google OAuth2 integrations. They all authenticate the same way — an OAuth client you create once in Google Cloud Console — but each requests only the scopes it needs:
+Valmis has eight Google OAuth2 integrations. They all authenticate the same way — an OAuth client you create once in Google Cloud Console — but each requests only the scopes it needs:
 
 | Integration          | What agents can do                                                                                             | Scopes requested                                                                                                            |
 | -------------------- | -------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
@@ -11,6 +11,7 @@ Valmis has seven Google OAuth2 integrations. They all authenticate the same way 
 | **Google Drive**     | Browse and manage Drive files — **scopes editable**; powers the [knowledge base](/guide/knowledge-base) import | Your own list (default: `drive` — full read/write; use `drive.readonly` for read-only)                                      |
 | **Google Forms**     | Read form responses — powers the [Google Forms app trigger](/integrations/triggers/google-forms)               | `forms.responses.readonly`                                                                                                  |
 | **Google Workspace** | Any Google API — **you choose the scopes**                                                                     | Your own list (default: `drive.readonly`)                                                                                   |
+| **Google Analytics** | Query GA4 — run reports (Data API) and list accounts/properties (Admin API); has its own page: [Google Analytics](/integrations/google-analytics) | `analytics.readonly`                                                            |
 
 All of them also request `openid email` (your identity) and offline access (`access_type=offline`, `prompt=consent`) so the credential keeps working without re-authorizing.
 
@@ -42,6 +43,7 @@ You can create a **single Google Cloud project and OAuth client** and reuse its 
    - **Google Sheets API** (for Sheets)
    - **Google Drive API** (for Google Drive — including knowledge base imports)
    - **Google Forms API** (for the Google Forms app trigger)
+   - **Google Analytics Data API** and **Google Analytics Admin API** (for Google Analytics / GA4)
    - For the Workspace integration: whatever APIs your scopes belong to (e.g. **Google Drive API** for Drive scopes)
 
 Calls to an API that isn't enabled fail even when the scope was granted — enabling the API and granting the scope are two separate things.
@@ -75,8 +77,8 @@ While the consent screen is in _Testing_ status, Google expires refresh tokens a
 
 ## Step 5 — Create the credential in Valmis
 
-1. **Credentials → Add credential** → pick the Google integration you want (Gmail, Google Calendar, Google Docs, Google Sheets, Google Drive, or Google Workspace).
-2. Paste the **Client ID** and **Client Secret**. The same pair can be reused across all six integrations.
+1. **Credentials → Add credential** → pick the Google integration you want (Gmail, Google Calendar, Google Docs, Google Sheets, Google Drive, Google Workspace, or Google Analytics).
+2. Paste the **Client ID** and **Client Secret**. The same pair can be reused across all eight integrations.
 3. Drive and Workspace integrations only: set the space-separated scope list. Grant the narrowest scopes that cover the task (e.g. `https://www.googleapis.com/auth/drive.readonly` instead of full `drive` if agents only read files), and make sure each one was added to the consent screen in Step 3.
 4. Save, then click **Authorize** and grant access with the Google account you added as a test user.
 

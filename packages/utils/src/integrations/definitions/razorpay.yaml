@@ -1,0 +1,28 @@
+id: razorpay
+name: Razorpay
+brandName: Razorpay
+type: basicAuth
+icon: /logos/razorpay.svg
+description: >
+  Connect to Razorpay to manage payments, orders, refunds and settlements. Authenticates via
+  HTTP Basic Auth with the Key ID as the username and the Key Secret as the password.
+documentationUrl: https://razorpay.com/docs/api/authentication/
+properties:
+  - name: username
+    displayName: Key ID
+    type: string
+    required: true
+    description: >
+      Your Razorpay Key ID (starts with rzp_live_ or rzp_test_). Generate it under Settings →
+      API Keys in the Razorpay Dashboard.
+  - name: password
+    displayName: Key Secret
+    type: secret
+    required: true
+    description: >
+      Your Razorpay Key Secret, shown once when you generate the API key.
+
+# basicAuth auto-injects Authorization: Basic base64(keyId:keySecret) — no requestMapping needed.
+testRequest:
+  method: GET
+  url: 'https://api.razorpay.com/v1/payments?count=1'

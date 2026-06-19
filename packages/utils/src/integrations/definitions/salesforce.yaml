@@ -1,0 +1,44 @@
+id: salesforce
+name: Salesforce (OAuth2)
+brandName: Salesforce
+type: oauth2
+icon: /logos/salesforce.svg
+description: >
+  Connect to Salesforce via OAuth2 (Web Server flow) to read and write leads, contacts,
+  opportunities and custom objects. After authorizing, build API call URLs from the per-org
+  instance_url returned with the token (the connection test uses the fixed identity endpoint).
+documentationUrl: https://help.salesforce.com/s/articleView?id=xcloud.remoteaccess_oauth_web_server_flow.htm&type=5
+properties:
+  - name: clientId
+    displayName: Consumer Key
+    type: string
+    required: true
+    description: >
+      The Consumer Key of your Connected App (Setup → App Manager → your app → Manage Consumer
+      Details).
+  - name: clientSecret
+    displayName: Consumer Secret
+    type: secret
+    required: true
+    description: >
+      The Consumer Secret of your Connected App (same Manage Consumer Details page).
+
+oauth2:
+  authorizationUrl: 'https://login.salesforce.com/services/oauth2/authorize'
+  accessTokenUrl: 'https://login.salesforce.com/services/oauth2/token'
+  clientIdProperty: clientId
+  clientSecretProperty: clientSecret
+  # Salesforce accepts client credentials in the token request body.
+  authStyle: inBody
+  usePkce: true
+  scope: 'api refresh_token offline_access openid email'
+
+requestMapping:
+  headers:
+    Authorization: 'Bearer {{properties.accessToken}}'
+
+# The identity userinfo endpoint accepts the bearer token regardless of org instance.
+testRequest:
+  method: GET
+  url: 'https://login.salesforce.com/services/oauth2/userinfo'
+  accountIdentifierKey: email

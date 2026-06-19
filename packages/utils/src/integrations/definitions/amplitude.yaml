@@ -1,0 +1,38 @@
+id: amplitude
+name: Amplitude
+brandName: Amplitude
+type: basicAuth
+icon: /logos/amplitude.svg
+description: >
+  Connect to Amplitude's Dashboard / Export REST API to pull events, charts and cohorts.
+  Authenticates via HTTP Basic Auth with the project's API key as the username and the secret
+  key as the password.
+documentationUrl: https://amplitude.com/docs/apis/analytics/dashboard-rest
+properties:
+  - name: username
+    displayName: API Key
+    type: secret
+    required: true
+    description: >
+      Your Amplitude project API key (Settings → Projects → your project → General). Sent as the
+      Basic Auth username.
+  - name: password
+    displayName: Secret Key
+    type: secret
+    required: true
+    description: >
+      Your Amplitude project secret key (same Settings page). Sent as the Basic Auth password.
+  - name: host
+    displayName: API Host
+    type: string
+    required: true
+    default: https://amplitude.com
+    description: >
+      Standard: https://amplitude.com. EU data residency:
+      https://analytics.eu.amplitude.com.
+
+# basicAuth auto-injects Authorization: Basic base64(apiKey:secretKey) — no requestMapping.
+# /api/2/annotations is a light, auth-gated Dashboard endpoint.
+testRequest:
+  method: GET
+  url: '{{properties.host}}/api/2/annotations'

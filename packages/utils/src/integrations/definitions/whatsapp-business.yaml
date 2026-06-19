@@ -1,0 +1,48 @@
+id: whatsapp-business
+name: WhatsApp Business Cloud
+brandName: WhatsApp
+type: bearerToken
+icon: /logos/whatsapp-business.svg
+description: >
+  Connect to the WhatsApp Business Cloud API (Meta Graph) to send messages and templates and
+  read your business phone numbers. A long-lived system-user access token is sent as a Bearer
+  token; calls are scoped by your phone number id and WhatsApp Business Account id.
+documentationUrl: https://developers.facebook.com/docs/whatsapp/cloud-api
+properties:
+  - name: accessToken
+    displayName: Access Token
+    type: secret
+    required: true
+    description: >
+      A System User access token (or permanent token) from your Meta Business app with the
+      whatsapp_business_messaging and whatsapp_business_management permissions.
+  - name: phoneNumberId
+    displayName: Phone Number ID
+    type: string
+    required: true
+    description: >
+      The Phone Number ID (a node id, not the phone number) used to send messages, from
+      WhatsApp Manager → API Setup.
+  - name: wabaId
+    displayName: WhatsApp Business Account ID
+    type: string
+    required: true
+    description: >
+      Your WhatsApp Business Account (WABA) ID, used for templates and listing phone numbers.
+  - name: apiVersion
+    displayName: Graph API Version
+    type: string
+    required: true
+    default: v23.0
+    description: >
+      The Meta Graph API version, e.g. v23.0. Bump it as Meta releases new versions.
+
+requestMapping:
+  headers:
+    Authorization: 'Bearer {{properties.accessToken}}'
+
+# GETting the phone number node proves the token without sending a message.
+testRequest:
+  method: GET
+  url: 'https://graph.facebook.com/{{properties.apiVersion}}/{{properties.phoneNumberId}}'
+  accountIdentifierKey: display_phone_number

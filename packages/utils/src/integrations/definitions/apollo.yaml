@@ -1,0 +1,27 @@
+id: apollo
+name: Apollo.io
+brandName: Apollo.io
+type: apiKey
+icon: /logos/apollo.svg
+description: >
+  Connect to Apollo.io to search people and companies, enrich contacts and manage sequences.
+  The API key is sent in the X-Api-Key header (passing it via query string or body was
+  deprecated in 2024).
+documentationUrl: https://docs.apollo.io/reference/authentication
+properties:
+  - name: apiKey
+    displayName: API Key
+    type: secret
+    required: true
+    description: >
+      Your Apollo API key. Create one under Settings → Integrations → API in your Apollo
+      account.
+
+requestMapping:
+  headers:
+    X-Api-Key: '{{properties.apiKey}}'
+
+# Apollo's free health check verifies the key without consuming credits.
+testRequest:
+  method: GET
+  url: 'https://api.apollo.io/v1/auth/health'

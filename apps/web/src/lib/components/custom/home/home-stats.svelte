@@ -1,8 +1,8 @@
 <script lang="ts">
 	import BotIcon from '@lucide/svelte/icons/bot';
-	import ZapIcon from '@lucide/svelte/icons/zap';
-	import KeyIcon from '@lucide/svelte/icons/key';
-	import FileTextIcon from '@lucide/svelte/icons/file-text';
+	import WorkflowIcon from '@lucide/svelte/icons/workflow';
+	import ShieldIcon from '@lucide/svelte/icons/shield';
+	import BookOpenIcon from '@lucide/svelte/icons/book-open';
 
 	/** Workspace count tiles. Each links to its management section. */
 	let {
@@ -19,9 +19,9 @@
 
 	const stats = $derived([
 		{ label: 'Agents', value: agentCount, href: '/app/agents', icon: BotIcon },
-		{ label: 'Workflows', value: workflowCount, href: '/app/workflows', icon: ZapIcon },
-		{ label: 'Credentials', value: credentialCount, href: '/app/credentials', icon: KeyIcon },
-		{ label: 'Knowledge files', value: knowledgeCount, href: '/app/knowledge', icon: FileTextIcon }
+		{ label: 'Workflows', value: workflowCount, href: '/app/workflows', icon: WorkflowIcon },
+		{ label: 'Credentials', value: credentialCount, href: '/app/credentials', icon: ShieldIcon },
+		{ label: 'Knowledge files', value: knowledgeCount, href: '/app/knowledge', icon: BookOpenIcon }
 	]);
 </script>
 

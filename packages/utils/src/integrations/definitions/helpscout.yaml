@@ -1,0 +1,42 @@
+id: helpscout
+name: Help Scout (Mailbox)
+brandName: Help Scout
+type: oauth2
+icon: /logos/helpscout.svg
+description: >
+  Connect to the Help Scout Mailbox API (v2) to manage conversations, customers and mailboxes.
+  Uses the OAuth2 client-credentials grant (app-owned access — no browser redirect), so the
+  access token is minted directly from your app's Client ID and Client Secret.
+documentationUrl: https://developer.helpscout.com/mailbox-api/overview/authentication/
+properties:
+  - name: clientId
+    displayName: App ID (Client ID)
+    type: string
+    required: true
+    description: >
+      The App ID from your Help Scout app (Your Profile → My Apps → your app).
+  - name: clientSecret
+    displayName: App Secret (Client Secret)
+    type: secret
+    required: true
+    description: >
+      The App Secret from your Help Scout app (Your Profile → My Apps → your app).
+
+oauth2:
+  # authorizationUrl is required by the schema but unused for the client-credentials grant.
+  authorizationUrl: 'https://secure.helpscout.net/authentication/authorizeClientApplication'
+  accessTokenUrl: 'https://api.helpscout.net/v2/oauth2/token'
+  clientIdProperty: clientId
+  clientSecretProperty: clientSecret
+  grantType: clientCredentials
+  # Help Scout expects client_id/client_secret in the token request body.
+  authStyle: inBody
+
+requestMapping:
+  headers:
+    Authorization: 'Bearer {{properties.accessToken}}'
+
+testRequest:
+  method: GET
+  url: 'https://api.helpscout.net/v2/mailboxes'
+  accountIdentifierKey: _embedded.mailboxes.0.id

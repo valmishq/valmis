@@ -1,0 +1,33 @@
+id: meilisearch
+name: Meilisearch
+brandName: Meilisearch
+type: bearerToken
+icon: /logos/meilisearch.svg
+description: >
+  Connect to a Meilisearch instance (Cloud or self-hosted) to manage indexes, documents and
+  search settings. The API key (or master key) is sent as a Bearer token.
+documentationUrl: https://www.meilisearch.com/docs/reference/api/authorization
+properties:
+  - name: host
+    displayName: Host URL
+    type: string
+    required: true
+    description: >
+      The instance URL, e.g. http://localhost:7700 (self-hosted) or your Meilisearch Cloud
+      project URL like https://ms-xxxxxxxx.region.meilisearch.io (no trailing slash).
+  - name: apiKey
+    displayName: API Key
+    type: secret
+    required: true
+    description: >
+      A master key or an API key with the keys.get / indexes.get actions. Find or create keys in
+      Meilisearch Cloud or via the /keys endpoint.
+
+requestMapping:
+  headers:
+    Authorization: 'Bearer {{properties.apiKey}}'
+
+# /keys requires a valid master/keys.get key (unlike /health, which ignores auth).
+testRequest:
+  method: GET
+  url: '{{properties.host}}/keys'
