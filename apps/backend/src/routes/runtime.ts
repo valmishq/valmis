@@ -614,6 +614,40 @@ export function createRuntimeRouter(
 	});
 
 	/**
+	 * POST /v1/runtime/:agentId/threads/:threadId/cancel
+	 * Stop the current (or stuck) turn and return the thread to 'idle'.
+	 *
+	 * Kills the live runtime process/container if one exists; otherwise (the run
+	 * already exited, or was orphaned by a crash that left the row stuck at
+	 * 'running') it just reconciles the thread state so the user can send again.
+	 */
+	router.post('/:agentId/threads/:threadId/cancel', auth, async (req: Request, res: Response) => {
+		const { agentId, threadId } = req.params as { agentId: string; threadId: string };
+		const ownerId = req.user?.sub;
+		if (!ownerId) {
+			res.status(401).json({ success: false, error: 'Unauthorized' });
+			return;
+		}
+
+		try {
+			// Verify ownership and agent-thread relationship before stopping anything.
+			const thread = await sessionService.getThreadById(threadId, ownerId);
+			if (!thread || thread.agentId !== agentId) {
+				res.status(404).json({ success: false, error: 'Thread not found' });
+				return;
+			}
+
+			await runtimeService.cancelTurn(threadId);
+			const updated = await sessionService.getThreadById(threadId, ownerId);
+			const body: AgentThreadResponse = { success: true, data: updated! };
+			res.json(body);
+		} catch (err) {
+			logger.error({ err, agentId, threadId }, '[runtime] failed to cancel turn');
+			res.status(500).json({ success: false, error: 'Failed to stop the agent' });
+		}
+	});
+
+	/**
 	 * GET /v1/runtime/:agentId/threads/:threadId/messages
 	 * Get the full message history for a thread.
 	 */

@@ -19,7 +19,13 @@
 	import { ScrollArea } from '$lib/components/ui/scroll-area/index.js';
 	import { setAlert } from '$lib/components/custom/alert/alert-state.svelte.js';
 	import type { PageData } from './$types';
-	import type { AgentMessage, AgentStreamEvent, AgentThread, ContentBlock } from '@repo/types';
+	import type {
+		AgentMessage,
+		AgentStreamEvent,
+		AgentThread,
+		AgentThreadStatus,
+		ContentBlock
+	} from '@repo/types';
 
 	let { data }: { data: PageData } = $props();
 
@@ -28,6 +34,14 @@
 	let messages = $state<AgentMessage[]>(data.messages);
 	let threads = $state(data.threads);
 	let isStreaming = $state(false);
+	/**
+	 * Mirror of the persisted thread status from the backend (seeded on load,
+	 * updated by SSE events and on stop). Combined with `isStreaming` it gates the
+	 * Send/Stop button so a turn left stuck at 'running' (e.g. the runtime died
+	 * before its exit handler ran) is still recoverable: the Stop button shows on
+	 * reload even though no SSE is flowing.
+	 */
+	let threadStatus = $state<AgentThreadStatus>(data.thread.status);
 	let isCreatingThread = $state(false);
 	/** Mobile sidebar overlay open state */
 	let sidebarOpen = $state(false);
@@ -131,6 +145,7 @@
 		toolResultImages = buildToolResultImagesFromMessages(data.messages);
 		toolCallArgs = buildToolCallArgsFromMessages(data.messages);
 		isStreaming = false;
+		threadStatus = data.thread.status;
 		streamingMessageId = null;
 		optimisticAssistantId = null;
 		clearOptimisticTimer();
@@ -209,10 +224,25 @@
 	let pendingHitl = $state<{ prompt: string; options?: string[] } | null>(null);
 
 	/**
-	 * Chat input is disabled when the agent is streaming UNLESS a HITL request
-	 * is pending — in that case the human must be able to respond.
+	 * The agent is working this thread's turn — true while the live stream is
+	 * active OR the persisted status is still 'running' (covers reload mid-turn
+	 * and turns left stuck at 'running' after a runtime crash).
 	 */
-	let inputDisabled = $derived(isStreaming && pendingHitl === null);
+	let busy = $derived(isStreaming || threadStatus === 'running');
+
+	/**
+	 * Show the Stop button (instead of Send) whenever the agent is working and we
+	 * are NOT waiting on a HITL reply — during HITL the input is for the human's
+	 * response, so Send is correct there.
+	 */
+	let showStop = $derived(busy && pendingHitl === null);
+
+	/**
+	 * Chat input send path is disabled while busy UNLESS a HITL request is pending —
+	 * in that case the human must be able to respond. This also blocks Enter-to-send
+	 * while a turn is in flight or stuck (the Stop button is shown instead).
+	 */
+	let inputDisabled = $derived(busy && pendingHitl === null);
 
 	/** Scroll anchor — kept at bottom of message list. */
 	let scrollAnchor = $state<HTMLDivElement | undefined>(undefined);
@@ -301,6 +331,7 @@
 					messages = [...messages, placeholder];
 				}
 				isStreaming = true;
+				threadStatus = 'running';
 				scrollToBottom();
 				break;
 			}
@@ -433,6 +464,9 @@
 
 			case 'done': {
 				isStreaming = false;
+				// Clear any stale 'running' so the button reverts to Send (the row is
+				// 'completed'/'error' in the DB; 'idle' here just means "not running").
+				if (threadStatus === 'running') threadStatus = 'idle';
 				streamingMessageId = null;
 				// Clear any lingering HITL state (e.g. if the tool timed out)
 				pendingHitl = null;
@@ -449,6 +483,7 @@
 
 			case 'error': {
 				isStreaming = false;
+				threadStatus = 'error';
 				streamingMessageId = null;
 				pendingHitl = null;
 				clearOptimisticTimer();
@@ -484,9 +519,9 @@
 	// ── Messaging ─────────────────────────────────────────────────────────────
 
 	async function handleSend(content: string) {
-		// Allow sending when a HITL is pending even though isStreaming=true.
-		// In all other streaming states the input is locked.
-		if (isStreaming && pendingHitl === null) return;
+		// Allow sending when a HITL is pending even though the turn is in flight.
+		// In all other busy states (streaming, or stuck at 'running') the input is locked.
+		if (busy && pendingHitl === null) return;
 
 		// Clear the HITL prompt immediately so the UI doesn't show a stale card
 		// while the response is in flight.
@@ -580,6 +615,54 @@
 			isStreaming = false;
 		}
 		// isStreaming is set back to false by the 'done' or 'message_end' SSE event
+	}
+
+	/**
+	 * Stop the current (or stuck) turn. Calls the backend cancel endpoint, which
+	 * kills the live runtime if one exists (otherwise just reconciles an orphaned
+	 * 'running' row) and returns the thread at 'idle' so the user can send again.
+	 * The backend also emits a 'done' SSE, so the SSE handler cleans up redundantly.
+	 */
+	async function handleStop() {
+		try {
+			const res = await api(`/runtime/${data.agent.id}/threads/${data.thread.id}/cancel`, {
+				method: 'POST'
+			});
+			if (!res.ok) {
+				const body = await res.json();
+				setAlert({
+					type: 'error',
+					title: 'Failed to stop',
+					message: body.error ?? 'Could not stop the agent.',
+					duration: 5000,
+					show: true
+				});
+				return;
+			}
+			const body = await res.json();
+			const updated = body.data as AgentThread;
+			threadStatus = updated.status;
+			// Keep the sidebar running-dot in sync with the now-idle thread.
+			threads = threads.map((t) => (t.id === updated.id ? { ...t, status: updated.status } : t));
+			isStreaming = false;
+			streamingMessageId = null;
+			pendingHitl = null;
+			clearOptimisticTimer();
+			// Drop a never-upgraded optimistic placeholder so we don't leave an empty bubble.
+			if (optimisticAssistantId) {
+				const placeholderId = optimisticAssistantId;
+				optimisticAssistantId = null;
+				messages = messages.filter((m) => m.id !== placeholderId);
+			}
+		} catch {
+			setAlert({
+				type: 'error',
+				title: 'Failed to stop',
+				message: 'An unexpected error occurred.',
+				duration: 5000,
+				show: true
+			});
+		}
 	}
 
 	/** Create a new thread and navigate to it. */
@@ -823,6 +906,8 @@
 			/>
 			<ChatInput
 				onSend={handleSend}
+				onStop={handleStop}
+				busy={showStop}
 				disabled={inputDisabled}
 				placeholder={pendingHitl ? 'Type your response…' : `Message ${data.agent.name}…`}
 			/>

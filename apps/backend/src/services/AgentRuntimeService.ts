@@ -163,8 +163,19 @@ export class AgentRuntimeService {
 	/** How long a pending config stays fetchable before it is swept. */
 	private readonly pendingConfigTtlMs = 5 * 60 * 1000;
 
-	/** Live runtime handles, for the concurrency cap and shutdown() */
-	private readonly liveHandles = new Set<RuntimeHandle>();
+	/**
+	 * Live runtime handles keyed by threadId, for the concurrency cap, shutdown(),
+	 * and cancelTurn() lookup. Only one run per thread is ever live — the
+	 * MessagePipeline concurrency guard rejects a second turn while one is running.
+	 */
+	private readonly liveRuns = new Map<string, RuntimeHandle>();
+
+	/**
+	 * Threads whose live run was cancelled by the user. Read+cleared in the run's
+	 * onClose so a user-initiated stop resolves the thread to 'idle' (not 'error')
+	 * and suppresses the error SSE toast.
+	 */
+	private readonly cancelledThreads = new Set<string>();
 
 	constructor(
 		private readonly driver: ExecutionDriver,
@@ -196,9 +207,44 @@ export class AgentRuntimeService {
 
 	/** Kill all live runs. Call on backend shutdown (SIGTERM/SIGINT). */
 	async shutdown(): Promise<void> {
-		logger.info({ liveRuns: this.liveHandles.size }, '[runtime] shutting down live agent runs');
+		logger.info({ liveRuns: this.liveRuns.size }, '[runtime] shutting down live agent runs');
 		await this.driver.shutdown();
-		this.liveHandles.clear();
+		this.liveRuns.clear();
+	}
+
+	/**
+	 * Stop an in-flight (or stuck) turn for a thread and return it to 'idle'.
+	 *
+	 * Two cases:
+	 *   - A live runtime handle exists → mark the thread cancelled, reset its
+	 *     status, then kill the process/container. The handle's onClose finalizes
+	 *     the status (kept 'idle' because it was cancelled) and emits 'done'.
+	 *   - No live handle (the run already exited, or it was orphaned by a backend
+	 *     crash before onClose could run, leaving the row stuck at 'running') →
+	 *     reconcile directly: reset the status, flush any browser session, emit
+	 *     'done' so SSE subscribers clean up.
+	 *
+	 * The status is set to 'idle' synchronously so the cancel response is
+	 * authoritative even though a killed process's onClose lands asynchronously.
+	 * Idempotent and safe to call regardless of the thread's current state.
+	 * Ownership is verified by the route before this is called.
+	 */
+	async cancelTurn(threadId: string): Promise<void> {
+		const handle = this.liveRuns.get(threadId);
+		if (handle) this.cancelledThreads.add(threadId);
+		try {
+			await this.sessionService.updateThreadStatus(threadId, 'idle');
+		} catch (err) {
+			logger.error({ err, threadId }, '[runtime] failed to reset thread status on cancel');
+		}
+		if (handle) {
+			logger.info({ threadId, runtimeId: handle.id }, '[runtime] cancelling live turn');
+			await handle.kill();
+		} else {
+			logger.info({ threadId }, '[runtime] cancelling turn with no live handle — cleaning up');
+			await this.browserService.saveOnTurnEnd(threadId);
+			agentStreamBus.emit(threadId, { type: 'done' });
+		}
 	}
 
 	/**
@@ -253,9 +299,9 @@ export class AgentRuntimeService {
 		workflowConfig?: WorkflowSpawnConfig,
 	): Promise<boolean> {
 		// Concurrency cap — reject before touching thread state or spawning.
-		if (this.liveHandles.size >= this.maxConcurrent) {
+		if (this.liveRuns.size >= this.maxConcurrent) {
 			logger.warn(
-				{ agentId, threadId, liveRuns: this.liveHandles.size, max: this.maxConcurrent },
+				{ agentId, threadId, liveRuns: this.liveRuns.size, max: this.maxConcurrent },
 				'[runtime] concurrency cap reached — rejecting spawn',
 			);
 			await this.sessionService.updateThreadStatus(threadId, 'error');
@@ -394,7 +440,7 @@ export class AgentRuntimeService {
 			agentStreamBus.emit(threadId, { type: 'done' });
 			return false;
 		}
-		this.liveHandles.add(handle);
+		this.liveRuns.set(threadId, handle);
 
 		logger.debug({ agentId, threadId, runtimeId: handle.id }, '[runtime] runtime started');
 
@@ -431,9 +477,15 @@ export class AgentRuntimeService {
 
 		handle.onClose(async (code) => {
 			clearTimeout(timeoutTimer);
-			this.liveHandles.delete(handle);
-			const status = code === 0 ? 'completed' : 'error';
-			logger.info({ agentId, threadId, code, status }, '[runtime] agent runtime exited');
+			this.liveRuns.delete(threadId);
+			// A user-initiated stop resolves the thread to 'idle' (not 'error') and
+			// suppresses the error toast below — the exit was intentional.
+			const cancelled = this.cancelledThreads.delete(threadId);
+			const status = cancelled ? 'idle' : code === 0 ? 'completed' : 'error';
+			logger.info(
+				{ agentId, threadId, code, status, cancelled },
+				'[runtime] agent runtime exited',
+			);
 
 			// Persist any browser session this turn opened (flush history + storageState),
 			// but keep it OPEN across turns of this thread so a follow-up ("now take a
@@ -448,36 +500,24 @@ export class AgentRuntimeService {
 				logger.error({ err, threadId }, '[runtime] failed to update thread status on exit');
 			}
 
-			if (code !== 0) {
+			if (!cancelled && code !== 0) {
+				// Abnormal exit (not a user stop). Surface the error to the browser and
+				// reconcile any orphaned workflow run.
 				// Try stderr first (raw Node errors), then fall back to stdout (pino JSON logs).
 				const errorMessage = timedOut
 					? `Agent run timed out after ${Math.round(this.runTimeoutMs / 60000)} minutes.`
 					: extractUserErrorMessage(stderrTail || stdoutTail);
 				agentStreamBus.emit(threadId, { type: 'error', message: errorMessage });
-
-				// Reconcile the workflow run. It is normally marked terminal by the
-				// runtime (POST /workflow/run-complete); if the runtime died, timed
-				// out, or crashed before that call landed — e.g. it could not reach the
-				// backend — the row would otherwise stay 'running' forever. Only flip a
-				// still-running row so we never clobber a run the runtime already
-				// completed (the status read guards the read-modify-write race).
-				if (workflowRunId) {
-					try {
-						const run = await this.workflowRunService.getRunByIdInternal(workflowRunId);
-						if (run && run.status === 'running') {
-							await this.workflowRunService.completeRun(workflowRunId, 'error', errorMessage);
-							logger.warn(
-								{ runId: workflowRunId, threadId, code },
-								'[runtime] reconciled orphaned workflow run to error on abnormal exit',
-							);
-						}
-					} catch (err) {
-						logger.error(
-							{ err, runId: workflowRunId, threadId },
-							'[runtime] failed to reconcile workflow run on exit',
-						);
-					}
-				}
+				await this.reconcileOrphanedWorkflowRun(workflowRunId, threadId, code, errorMessage);
+			} else if (cancelled) {
+				// The user stopped the turn — no error toast, but a stopped workflow
+				// run is not a success, so reconcile a still-running one to 'error'.
+				await this.reconcileOrphanedWorkflowRun(
+					workflowRunId,
+					threadId,
+					code,
+					'Run stopped by user.',
+				);
 			}
 			// Always emit 'done' so the SSE subscriber can clean up
 			agentStreamBus.emit(threadId, { type: 'done' });
@@ -488,6 +528,38 @@ export class AgentRuntimeService {
 		});
 
 		return true;
+	}
+
+	/**
+	 * Reconcile a workflow run that is still 'running' down to 'error'. The runtime
+	 * normally marks its own run terminal (POST /workflow/run-complete); this is the
+	 * safety net for when it died, timed out, or was stopped by the user before that
+	 * call landed — otherwise the row would sit at 'running' forever. The status read
+	 * guards the read-modify-write race so we never clobber a run the runtime already
+	 * completed. No-op when there is no run id (chat turns).
+	 */
+	private async reconcileOrphanedWorkflowRun(
+		workflowRunId: string | undefined,
+		threadId: string,
+		code: number | null,
+		errorMessage: string,
+	): Promise<void> {
+		if (!workflowRunId) return;
+		try {
+			const run = await this.workflowRunService.getRunByIdInternal(workflowRunId);
+			if (run && run.status === 'running') {
+				await this.workflowRunService.completeRun(workflowRunId, 'error', errorMessage);
+				logger.warn(
+					{ runId: workflowRunId, threadId, code },
+					'[runtime] reconciled orphaned workflow run to error',
+				);
+			}
+		} catch (err) {
+			logger.error(
+				{ err, runId: workflowRunId, threadId },
+				'[runtime] failed to reconcile workflow run on exit',
+			);
+		}
 	}
 
 	/**
