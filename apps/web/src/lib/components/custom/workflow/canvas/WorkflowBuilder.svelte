@@ -1,12 +1,14 @@
 <script lang="ts">
 	import { browser } from '$app/environment';
+	import type { Snippet } from 'svelte';
 	import { SvelteFlowProvider, type Node, type Edge } from '@xyflow/svelte';
-	import * as Card from '$lib/components/ui/card/index.js';
-	import { Input } from '$lib/components/ui/input/index.js';
-	import { Label } from '$lib/components/ui/label/index.js';
+	import * as Tooltip from '$lib/components/ui/tooltip/index.js';
+	import { Button } from '$lib/components/ui/button/index.js';
 	import { themeStore } from '$lib/stores/theme.store.js';
 	import WorkflowCanvas from './WorkflowCanvas.svelte';
 	import WorkflowNodeConfigSheet from './WorkflowNodeConfigSheet.svelte';
+	import WorkflowValidationAlert from './WorkflowValidationAlert.svelte';
+	import InfoIcon from '@lucide/svelte/icons/info';
 	import {
 		initialDomainGraph,
 		domainToFlow,
@@ -47,6 +49,10 @@
 		validationErrors: string[];
 		/** Triggered by ⌘S / Ctrl+S while the canvas is focused — the page submits the form. */
 		onRequestSave?: () => void;
+		/** Save/Cancel buttons, rendered floating in the canvas's top-right corner. */
+		actions?: Snippet;
+		/** Toggled true by the page on a save attempt with errors; shows the validation alert. */
+		showValidationErrors: boolean;
 	}
 
 	let {
@@ -58,7 +64,9 @@
 		appTriggerProviders,
 		payload = $bindable(''),
 		validationErrors = $bindable([]),
-		onRequestSave
+		onRequestSave,
+		actions,
+		showValidationErrors = $bindable(false)
 	}: Props = $props();
 
 	// ── Identity ────────────────────────────────────────────────────────────────
@@ -323,8 +331,13 @@
 		return [...new Set(errs)];
 	});
 
+	// `validationErrors` is computed live (the page reads it to gate submit), but the
+	// floating alert only appears after a save attempt sets `showValidationErrors`.
+	// Once every problem is resolved we reset the flag, so it never reappears on a
+	// fresh edit without another save click.
 	$effect(() => {
 		validationErrors = computedErrors;
+		if (computedErrors.length === 0) showValidationErrors = false;
 	});
 
 	// ── Keyboard: ⌘S / Ctrl+S saves the workflow while the canvas is focused ──────
@@ -361,38 +374,29 @@
 </script>
 
 <div class="space-y-4">
-	<!-- Identity -->
-	<Card.Root>
-		<Card.Content class="grid gap-4 pt-6 sm:grid-cols-2">
-			<div class="space-y-1.5">
-				<Label for="workflow-name">Name</Label>
-				<Input
-					id="workflow-name"
-					type="text"
-					bind:value={workflowName}
-					required
-					placeholder="e.g. Daily Report Generator"
-				/>
-			</div>
-			<div class="space-y-1.5">
-				<Label for="workflow-description">
-					Description
-					<span class="ml-1 font-normal text-muted-foreground">(optional)</span>
-				</Label>
-				<Input
-					id="workflow-description"
-					type="text"
-					bind:value={workflowDescription}
-					placeholder="What does this workflow do?"
-				/>
-			</div>
-		</Card.Content>
-	</Card.Root>
+	<!-- Identity: borderless click-to-edit title + description on one compact line.
+	     No labels — the inputs read as text and reveal a subtle surface on hover/focus. -->
+	<div class="flex items-baseline gap-2 px-1">
+		<input
+			bind:value={workflowName}
+			required
+			aria-label="Workflow name"
+			placeholder="Untitled workflow"
+			class="w-64 max-w-[40%] flex-none rounded-md bg-transparent px-2 py-1 font-heading text-xl font-semibold tracking-tight outline-none transition-colors placeholder:text-muted-foreground/50 hover:bg-muted/60 focus:bg-muted/80"
+		/>
+		<span class="select-none text-muted-foreground/40" aria-hidden="true">/</span>
+		<input
+			bind:value={workflowDescription}
+			aria-label="Workflow description"
+			placeholder="Add a description"
+			class="min-w-0 flex-1 rounded-md bg-transparent px-2 py-1 text-sm text-muted-foreground outline-none transition-colors placeholder:text-muted-foreground/50 hover:bg-muted/60 focus:bg-muted/80 focus:text-foreground"
+		/>
+	</div>
 
 	<!-- Canvas -->
 	<div
 		bind:this={canvasEl}
-		class="h-[calc(100vh-20rem)] min-h-[460px] w-full overflow-hidden rounded-lg border border-border bg-muted/20"
+		class="relative h-[calc(100dvh-10rem)] min-h-[460px] w-full overflow-hidden rounded-lg border border-border bg-muted/20"
 	>
 		{#if browser}
 			<SvelteFlowProvider>
@@ -403,13 +407,51 @@
 				<p class="text-sm text-muted-foreground">Loading canvas…</p>
 			</div>
 		{/if}
+
+		<!-- Floating Save/Cancel bar + help. The buttons live in the page's <form>, so the
+		     submit button still submits — the positioning here is purely CSS. -->
+		<div
+			class="absolute top-3 right-3 z-30 flex items-center gap-2 rounded-lg border border-border bg-card/95 p-1.5 shadow-md backdrop-blur"
+		>
+			<Tooltip.Provider delayDuration={200}>
+				<Tooltip.Root>
+					<Tooltip.Trigger>
+						{#snippet child({ props })}
+							<Button
+								{...props}
+								type="button"
+								variant="ghost"
+								size="icon"
+								class="size-8 text-muted-foreground"
+								aria-label="How to build a workflow"
+							>
+								<InfoIcon class="size-4" />
+							</Button>
+						{/snippet}
+					</Tooltip.Trigger>
+					<Tooltip.Content class="max-w-xs">
+						<p class="text-xs leading-relaxed">
+							Drag <span class="font-medium">Add node</span> onto the canvas (or click it) to add a
+							step. Connect nodes by dragging from a node's right handle to the next node's left
+							handle. Click any node to configure it. Select an edge or node and press Delete to
+							remove it. Press <span class="font-medium">⌘S</span> (Ctrl+S on Windows) to save.
+						</p>
+					</Tooltip.Content>
+				</Tooltip.Root>
+			</Tooltip.Provider>
+			{@render actions?.()}
+		</div>
+
+		<!-- Floating validation warning — bottom-right, only after a save attempt with problems. -->
+		{#if showValidationErrors && validationErrors.length > 0}
+			<div class="absolute right-3 bottom-3 z-30">
+				<WorkflowValidationAlert
+					errors={validationErrors}
+					onDismiss={() => (showValidationErrors = false)}
+				/>
+			</div>
+		{/if}
 	</div>
-	<p class="text-xs text-muted-foreground">
-		Drag <span class="font-medium">Add node</span> onto the canvas (or click it) to add a step.
-		Connect nodes by dragging from a node's right handle to the next node's left handle. Click any
-		node to configure it. Select an edge or node and press Delete to remove it. Press
-		<span class="font-medium">⌘S</span> (Ctrl+S on Windows) to save.
-	</p>
 </div>
 
 <!-- Node editor drawer -->

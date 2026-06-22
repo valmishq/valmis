@@ -4,10 +4,8 @@
 	import { page } from '$app/stores';
 	import { setAlert } from '$lib/components/custom/alert/alert-state.svelte.js';
 	import { Button } from '$lib/components/ui/button/index.js';
-	import PageHeader from '$lib/components/page-header.svelte';
 	import WorkflowBuilder from '$lib/components/custom/workflow/canvas/WorkflowBuilder.svelte';
 	import type { PageData } from './$types';
-	import ArrowLeftIcon from '@lucide/svelte/icons/arrow-left';
 
 	let { data }: { data: PageData } = $props();
 
@@ -18,6 +16,9 @@
 	// Bound from the builder: serialized workflow JSON + live validation problems.
 	let payload = $state('');
 	let validationErrors = $state<string[]>([]);
+	// Only flipped true on a save attempt that fails validation — keeps the floating
+	// alert hidden until the user actually tries to save.
+	let showValidationErrors = $state(false);
 	let isSaving = $state(false);
 
 	// The save <form>; ⌘S / Ctrl+S in the canvas submits it through use:enhance.
@@ -53,23 +54,6 @@
 	{/if}
 </svelte:head>
 
-<PageHeader
-	title={isEditMode && workflow ? workflow.name : 'New Workflow'}
-	description="Design a multi-step automation by connecting nodes on the canvas."
->
-	{#snippet actions()}
-		<Button
-			variant="outline"
-			size="sm"
-			onclick={() => goto(`/app/workflows?agentId=${agent.id}`)}
-			class="gap-2"
-		>
-			<ArrowLeftIcon class="size-4" />
-			Back to workflows
-		</Button>
-	{/snippet}
-</PageHeader>
-
 <!-- Server-side form action handles create and edit -->
 <form
 	bind:this={formEl}
@@ -78,13 +62,8 @@
 	use:enhance={({ cancel }) => {
 		if (validationErrors.length > 0) {
 			cancel();
-			setAlert({
-				type: 'error',
-				title: `Fix ${validationErrors.length} issue${validationErrors.length > 1 ? 's' : ''} before saving`,
-				message: validationErrors.join('\n'),
-				duration: 7000,
-				show: true
-			});
+			// Validation problems surface ONLY in the floating alert, never as a toast.
+			showValidationErrors = true;
 			return;
 		}
 		isSaving = true;
@@ -129,37 +108,29 @@
 		appTriggerProviders={data.appTriggerProviders}
 		bind:payload
 		bind:validationErrors
+		bind:showValidationErrors
 		onRequestSave={requestSave}
+		{actions}
 	/>
-
-	{#if validationErrors.length > 0}
-		<div class="space-y-1 rounded-md bg-destructive/10 p-4 text-sm text-destructive" role="alert">
-			<p class="font-medium">
-				Please fix {validationErrors.length} issue{validationErrors.length > 1 ? 's' : ''}:
-			</p>
-			<ul class="list-inside list-disc space-y-0.5">
-				{#each validationErrors as message, i (i)}
-					<li>{message}</li>
-				{/each}
-			</ul>
-		</div>
-	{/if}
-
-	<div class="flex justify-end gap-3">
-		<Button
-			type="button"
-			variant="outline"
-			onclick={() => goto(`/app/workflows?agentId=${agent.id}`)}
-			disabled={isSaving}
-		>
-			Cancel
-		</Button>
-		<Button type="submit" disabled={isSaving}>
-			{#if isSaving}
-				{isEditMode ? 'Saving…' : 'Creating…'}
-			{:else}
-				{isEditMode ? 'Save changes' : 'Create workflow'}
-			{/if}
-		</Button>
-	</div>
 </form>
+
+<!-- Rendered inside the canvas's floating top-right bar by WorkflowBuilder. The submit
+     button still submits the form above because it stays a DOM descendant of <form>. -->
+{#snippet actions()}
+	<Button
+		type="button"
+		variant="outline"
+		size="sm"
+		onclick={() => goto(`/app/workflows?agentId=${agent.id}`)}
+		disabled={isSaving}
+	>
+		Cancel
+	</Button>
+	<Button type="submit" size="sm" disabled={isSaving}>
+		{#if isSaving}
+			{isEditMode ? 'Saving…' : 'Creating…'}
+		{:else}
+			{isEditMode ? 'Save changes' : 'Create workflow'}
+		{/if}
+	</Button>
+{/snippet}
