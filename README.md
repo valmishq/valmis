@@ -4,8 +4,6 @@ Valmis is a cloud-based application for building AI agents for work, with the ab
 
 Valmis is designed to automate workflows using AI. You can interact with your agent using the chat interface, or ask it to create multi-step workflows and trigger it with cron, webhook, or app events (new email, form submission etc).
 
----
-
 ## Why we built it
 
 OpenClaw is a great tool to create personal assistants, but it is not for work. The biggest concern is security, as agents stores credentials in its memory as plain text and sometimes send credentials directly to LLM providers.
@@ -24,11 +22,9 @@ Finally, you don't always want to manually ask your agents to work. You can auto
 
 Then it comes to why the project is called Valmis. Valmis is an Estonian word that means "completed", "done", or "ripe"(Same in Finnish). This is because the project was inspired and designed in Estonia, Europe's digital nation. It also has the domain name valm.is that uses the Icelandic TLD, so the project is pretty Nordic. (Please do not open issues discussing whether Estonia is Nordic :) )
 
----
-
 ## What you can do with Valmis
 
-### Build your fleet of agents
+### Build a fleet of agents
 
 You can create a fleet of agents that act independently or in collaboration. Each agent can be assigned with different credentials, different skills, and different knowledge bases. You can also assign different LLM providers for each agent, making sure less critical missions are done by less expensive models.
 
@@ -50,7 +46,7 @@ Valmis system uses `pgvector` to store and fetch memories. Each memory item is e
 
 ### Connect to your tools safely with proxies
 
-You can connect to more than 100 business and productivity apps using API key or Oauth2 authentication. The credentials are encrypted with AES-256-GCM and are stored in your database. AI agents never get access to the credentials themselves, but instead call these APIs through the host machine using a proxy.
+You can connect to more than 100 business and productivity apps using API key or Oauth2 authentication. The credentials are encrypted with AES-256-GCM and are stored in your database. AI agents never get access to the credentials themselves, but instead call these APIs through the host machine using a proxy. Theoretically, you can configure to make your agent runtime have no access to the internet, and it will still work.
 
 Here is a preview of some of the apps we already supported.
 
@@ -97,29 +93,6 @@ Here is a preview of some of the apps we already supported.
   </tr>
 </table>
 
-### Browser automation made simple
-
-When enabled, agents can operate a headless browser, navigate, fill forms, clicks, read pages, and take screenshots. Browsers are also managed by the host machine so agents interact with them using proxy. Agents have access to their own browsing history and session cookies, which you can manually reset or manage.
-
-### Other important features
-
-- **Human in the loop:** Whenever there is a critical decision to make, the agent pauses and ask the human with a set of options.
-- **Use any LLM provider:** You can connect to any LLM provider and use their chat or embedding models flexibly. We already support nearly 200 models from 20 providers (OpenAI,
-  Anthropic, Google, Mistral, Cohere, and more), you can also use OpenRouter for more choices.
-- **Knowledge base:** Connect your enterprise knowledge base using Google Drive, Dropbox, Notion, or simply upload files. Knowledge base files are also processed as memories for agents to ensure quicker knowledge recall.
-- **Skills system:** You can install third party skills from Github, or create your own self-evolving skills that learns from you as you interact with it.
-
----
-
-## Integrations
-
-Connecting a service to an agent takes one encrypted credential. Valmis ships with more than 100
-integration definitions out of the box, spanning communication, productivity, CRM, e-commerce,
-payments, marketing, support, analytics, developer tools, and more — and adding your own is just a
-YAML file and a logo, with no code changes.
-
-Here are 30 of the most popular ones:
-
 ...and many more, including QuickBooks, Xero, Stripe, WooCommerce, BigCommerce, Intercom, Zendesk,
 Freshdesk, Pipedrive, ActiveCampaign, Klaviyo, SendGrid, Twilio, Calendly, Cal.com, GitHub, Jira,
 Confluence, ClickUp, monday.com, Todoist, Contentful, Webflow, WordPress, Ghost, Miro, Canva,
@@ -128,7 +101,19 @@ anything not on the list. Every integration is one YAML file in
 [packages/utils/src/integrations/definitions/](packages/utils/src/integrations/definitions/), so the
 catalog is easy to extend.
 
----
+### Browser automation made simple
+
+When enabled, agents can operate a headless browser, navigate, fill forms, clicks, read pages, and take screenshots. Browsers are also managed by the host machine so agents interact with them using proxy. Agents have access to their own browsing history and session cookies, which you can manually reset or manage.
+
+![Manage browser sessions](/statics/screenshots/browser-1.png)
+
+### Other important features
+
+- **Human in the loop:** Whenever there is a critical decision to make, the agent pauses and ask the human with a set of options.
+- **Use any LLM provider:** You can connect to any LLM provider and use their chat or embedding models flexibly. We already support nearly 200 models from 20 providers (OpenAI,
+  Anthropic, Google, Mistral, Cohere, and more), you can also use OpenRouter for more choices.
+- **Knowledge base:** Connect your enterprise knowledge base using Google Drive, Dropbox, Notion, or simply upload files. Knowledge base files are also processed as memories for agents to ensure quicker knowledge recall.
+- **Skills system:** You can install third party skills from Github, or create your own self-evolving skills that learns from you as you interact with it.
 
 ## Getting started
 
@@ -149,8 +134,6 @@ docker compose up -d
 ```
 
 Then open http://localhost:3000 and create your first admin user at `/setup`.
-
----
 
 ## License
 
