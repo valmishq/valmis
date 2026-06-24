@@ -55,10 +55,10 @@
 		{ title: 'Chat', url: '/app/chat', icon: MessageSquareIcon },
 		{ title: 'Agents', url: '/app/agents', icon: BotIcon },
 		{ title: 'Workflows', url: '/app/workflows', icon: WorkflowIcon },
+		{ title: 'Credentials', url: '/app/credentials', icon: ShieldIcon },
 		{ title: 'Skills', url: '/app/skills', icon: SparklesIcon },
 		{ title: 'Knowledge', url: '/app/knowledge', icon: BookOpenIcon },
-		{ title: 'LLM Providers', url: '/app/llm-providers', icon: CpuIcon },
-		{ title: 'Credentials', url: '/app/credentials', icon: ShieldIcon }
+		{ title: 'LLM Providers', url: '/app/llm-providers', icon: CpuIcon }
 	];
 
 	/** Account dropdown items */

@@ -72,16 +72,26 @@
 	// to the param — selecting an agent updates the URL (without a server refetch).
 	const ALL_AGENTS = 'all';
 
-	let agentFilter = $derived.by(() => {
+	/** Resolve the filter from the `?agentId=` param — used to seed the initial value. */
+	function agentFilterFromUrl(): string {
 		const id = page.url.searchParams.get('agentId');
 		return id && data.agents.some((a) => a.id === id) ? id : ALL_AGENTS;
-	});
+	}
 
-	/** Reflect the chosen agent into the URL query param. */
+	// Local reactive state, seeded from the URL. IMPORTANT: SvelteKit's `replaceState`
+	// updates the address bar but NOT the reactive `page.url`, so the filter cannot be
+	// derived from `page.url` — selecting an agent would never re-filter the list. We hold
+	// the selection here (drives the list + dropdown immediately) and mirror it into the
+	// URL on change so the page stays shareable.
+	let agentFilter = $state(agentFilterFromUrl());
+
+	/** Update the filter and reflect the choice into the shareable `?agentId=` param. */
 	function onAgentFilterChange(value: string) {
+		agentFilter = value;
 		const target = value === ALL_AGENTS ? '/app/workflows' : `/app/workflows?agentId=${value}`;
-		if (page.url.pathname + page.url.search === target) return;
-		replaceState(target, {});
+		if (page.url.pathname + page.url.search !== target) {
+			replaceState(target, {});
+		}
 	}
 
 	let filteredWorkflows = $derived(

@@ -279,7 +279,8 @@
 		<Panel position="top-left">
 			<NodePalette onAdd={addNodeAtDefault} />
 		</Panel>
-		<Panel position="top-right">
+		<!-- Bottom-left, offset right of the zoom Controls so the two don't overlap. -->
+		<Panel position="bottom-left" style="margin-left: 3.5rem;">
 			<Button
 				type="button"
 				variant="outline"
