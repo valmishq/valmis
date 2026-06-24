@@ -53,7 +53,7 @@ Here is a preview of some of the apps we already supported.
 <table align="center">
   <tr>
     <td align="center" width="60"><img src="apps/web/static/logos/slack.svg" height="20" alt="Slack"><br>Slack</td>
-    <td align="center" width="60"><img src="apps/web/static/logos/github.svg" height="20" alt="GitHub"><br>GitHub</td>
+    <td align="center" width="60"><img src="apps/web/static/logos/figma.svg" height="20" alt="Figma"><br>Figma</td>
     <td align="center" width="60"><img src="apps/web/static/logos/gmail.svg" height="20" alt="Gmail"><br>Gmail</td>
     <td align="center" width="60"><img src="apps/web/static/logos/notion.svg" height="20" alt="Notion"><br>Notion</td>
     <td align="center" width="60"><img src="apps/web/static/logos/google-drive.svg" height="20" alt="Google Drive"><br>Google Drive</td>
@@ -65,7 +65,7 @@ Here is a preview of some of the apps we already supported.
     <td align="center" width="60"><img src="apps/web/static/logos/shopify.svg" height="20" alt="Shopify"><br>Shopify</td>
     <td align="center" width="60"><img src="apps/web/static/logos/discord.svg" height="20" alt="Discord"><br>Discord</td>
     <td align="center" width="60"><img src="apps/web/static/logos/jira.svg" height="20" alt="Jira"><br>Jira</td>
-    <td align="center" width="60"><img src="apps/web/static/logos/hubspot.svg" height="20" alt="HubSpot"><br>HubSpot</td>
+    <td align="center" width="60"><img src="apps/web/static/logos/google-analytics.svg" height="20" alt="Google Analytics"><br>Google Analytics</td>
   </tr>
   <tr>
     <td align="center" width="60"><img src="apps/web/static/logos/salesforce.svg" height="20" alt="Salesforce"><br>Salesforce</td>
@@ -79,17 +79,17 @@ Here is a preview of some of the apps we already supported.
     <td align="center" width="60"><img src="apps/web/static/logos/airtable.svg" height="20" alt="Airtable"><br>Airtable</td>
     <td align="center" width="60"><img src="apps/web/static/logos/telegram.svg" height="20" alt="Telegram"><br>Telegram</td>
     <td align="center" width="60"><img src="apps/web/static/logos/twilio.svg" height="20" alt="Twilio"><br>Twilio</td>
-    <td align="center" width="60"><img src="apps/web/static/logos/zendesk.svg" height="20" alt="Zendesk"><br>Zendesk</td>
-    <td align="center" width="60"><img src="apps/web/static/logos/mailchimp.svg" height="20" alt="Mailchimp"><br>Mailchimp</td>
+    <td align="center" width="60"><img src="apps/web/static/logos/calendly.svg" height="20" alt="Calendly"><br>Calendly</td>
+    <td align="center" width="60"><img src="apps/web/static/logos/monday.svg" height="20" alt="monday.com"><br>monday.com</td>
     <td align="center" width="60"><img src="apps/web/static/logos/whatsapp-business.svg" height="20" alt="WhatsApp Business"><br>WhatsApp</td>
   </tr>
   <tr>
     <td align="center" width="60"><img src="apps/web/static/logos/linear.svg" height="20" alt="Linear"><br>Linear</td>
-    <td align="center" width="60"><img src="apps/web/static/logos/figma.svg" height="20" alt="Figma"><br>Figma</td>
+    <td align="center" width="60"><img src="apps/web/static/logos/canva.svg" height="20" alt="Canva"><br>Canva</td>
     <td align="center" width="60"><img src="apps/web/static/logos/cloudflare.svg" height="20" alt="Cloudflare"><br>Cloudflare</td>
     <td align="center" width="60"><img src="apps/web/static/logos/supabase.svg" height="20" alt="Supabase"><br>Supabase</td>
     <td align="center" width="60"><img src="apps/web/static/logos/reddit.svg" height="20" alt="Reddit"><br>Reddit</td>
-    <td align="center" width="60"><img src="apps/web/static/logos/google-analytics.svg" height="20" alt="Google Analytics"><br>Google Analytics</td>
+    <td align="center" width="60"><img src="apps/web/static/logos/hubspot.svg" height="20" alt="HubSpot"><br>HubSpot</td>
   </tr>
 </table>
 
