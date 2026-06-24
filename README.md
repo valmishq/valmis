@@ -8,7 +8,7 @@ Valmis is designed to automate workflows using AI. You can interact with your ag
 
 OpenClaw is a great tool to create personal assistants, but it is not for work. The biggest concern is security, as agents stores credentials in its memory as plain text and sometimes send credentials directly to LLM providers.
 
-Valmis addresses this issue by designing a _proxy system_: dockerized agent runtime can only request the host machine to make API requests by providing the relevant credential ID. The host then makes the actual request and return the JSON data back to the agent runtime. Even the LLM API calls themselves are made using proxy. With this design, you can even turn off the internet access of the agent container while making it work.
+Valmis addresses this issue by designing a **proxy system**: dockerized agent runtime can only request the host machine to make API requests by providing the relevant credential ID. The host then makes the actual request and return the JSON data back to the agent runtime. Even the LLM API calls themselves are made using proxy. With this design, you can even turn off the internet access of the agent container while making it work.
 
 Each agent has its own file system and is completely isolated from the host machine or from other agents.
 
@@ -20,7 +20,7 @@ Finally, you don't always want to manually ask your agents to work. You can auto
 
 ![alt text](statics/screenshots/workflow-1.png)
 
-Then it comes to why the project is called Valmis. Valmis is an Estonian word that means "completed", "done", or "ripe"(Same in Finnish). This is because the project was inspired and designed in Estonia, Europe's digital nation. It also has the domain name valm.is that uses the Icelandic TLD, so the project is pretty Nordic. (Please do not open issues discussing whether Estonia is Nordic :) )
+Then it comes to why the project is called Valmis. Valmis is an Estonian word that means "completed" or "done"(Same in Finnish). This is because the project was inspired and designed in Estonia, Europe's digital nation. It also has the domain name valm.is that uses the Icelandic TLD, so the project is pretty Nordic. (Please do not open issues discussing whether Estonia is Nordic :) )
 
 ## What you can do with Valmis
 
