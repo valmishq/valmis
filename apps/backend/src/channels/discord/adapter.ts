@@ -3,6 +3,7 @@ import type {
 	ChannelStreamSubscriber,
 	ChannelSubscriberOptions,
 	InboundMessage,
+	InboundContent,
 	OutboundMessage,
 	AdapterInboundContext,
 } from '@repo/types';
@@ -18,7 +19,16 @@ import { chunkText } from '../text-chunk.js';
 import type { ChannelService } from '../../services/ChannelService.js';
 import type { AgentService } from '../../services/AgentService.js';
 import type { AgentSessionService } from '../../services/AgentSessionService.js';
+import {
+	ChatFileService,
+	MAX_CHAT_FILE_BYTES,
+	type ChatUploadInput,
+} from '../../services/ChatFileService.js';
+import { fetchCapped } from '../download.js';
 import { logger } from '../../config/logger.js';
+
+/** Attachment shape on a Discord message-create event. */
+type DiscordAttachment = NonNullable<DiscordMessageCreateEvent['attachments']>[number];
 
 /** Discord message character limit */
 const DISCORD_MAX_MESSAGE_LENGTH = 2000;
@@ -74,6 +84,7 @@ export class DiscordAdapter implements ChannelAdapter {
 		private readonly channelService: ChannelService,
 		private readonly agentService: AgentService,
 		private readonly sessionService: AgentSessionService,
+		private readonly chatFileService: ChatFileService,
 		/** Bot application ID — required for editOriginalInteractionResponse on slash commands */
 		private readonly applicationId?: string,
 	) {
@@ -104,6 +115,7 @@ export class DiscordAdapter implements ChannelAdapter {
 		const userId = msg.author.id;
 		const displayName = msg.author.global_name ?? msg.author.username;
 		const text = msg.content.trim();
+		const hasAttachment = !!(msg.attachments && msg.attachments.length > 0);
 
 		// Route /commands through the universal handler
 		if (text.startsWith('/')) {
@@ -125,9 +137,9 @@ export class DiscordAdapter implements ChannelAdapter {
 			if (handled) return null;
 		}
 
-		if (!text) return null;
+		if (!text && !hasAttachment) return null;
 
-		return this.buildInboundMessage(userId, text, msg.channel_id);
+		return this.buildInboundMessage(userId, text, msg.channel_id, msg.attachments);
 	}
 
 	/**
@@ -273,6 +285,7 @@ export class DiscordAdapter implements ChannelAdapter {
 		userId: string,
 		text: string,
 		dmChannelId: string,
+		attachments?: DiscordAttachment[],
 	): Promise<InboundMessage | null> {
 		// Cache the DM channel for this user
 		this.dmChannelCache.set(userId, dmChannelId);
@@ -301,15 +314,80 @@ export class DiscordAdapter implements ChannelAdapter {
 			).catch(() => {});
 		}
 
+		const content: InboundContent[] = [];
+		if (text.trim()) content.push({ type: 'text', text });
+
+		// Download + ingest any attachments, then reference them by fileId so the agent
+		// receives them exactly like a web upload.
+		if (attachments && attachments.length > 0) {
+			const { uploads, downloadFailures } = await this.downloadAttachments(attachments);
+			if (uploads.length > 0) {
+				const { created, skipped } = await this.chatFileService.ingestFiles(
+					link.agentId,
+					link.userId,
+					threadId,
+					uploads,
+				);
+				for (const file of created) content.push({ type: 'file', fileId: file.id });
+				for (const s of skipped) {
+					content.push({ type: 'text', text: `[Couldn't process "${s.name}": ${s.reason}]` });
+				}
+			}
+			for (const f of downloadFailures) {
+				content.push({ type: 'text', text: `[Couldn't fetch "${f.name}" from Discord: ${f.reason}]` });
+			}
+		}
+
+		if (content.length === 0) return null;
+
 		return {
 			channel: 'discord',
 			externalId: userId,
 			userId: link.userId,
 			agentId: link.agentId,
 			threadId,
-			content: [{ type: 'text', text }],
+			content,
 			notifyToolUsage: link.notifyToolUsage,
 		};
+	}
+
+	/**
+	 * Download Discord attachments (public CDN urls — no auth) into ChatUploadInput[].
+	 * Network failures are collected, not thrown.
+	 */
+	private async downloadAttachments(
+		attachments: DiscordAttachment[],
+	): Promise<{ uploads: ChatUploadInput[]; downloadFailures: { name: string; reason: string }[] }> {
+		const uploads: ChatUploadInput[] = [];
+		const downloadFailures: { name: string; reason: string }[] = [];
+		const overLimit = `exceeds the ${Math.floor(MAX_CHAT_FILE_BYTES / (1024 * 1024))}MB limit`;
+
+		for (const att of attachments) {
+			// Reject on the size Discord already declared, before fetching a single byte.
+			if (att.size > MAX_CHAT_FILE_BYTES) {
+				downloadFailures.push({ name: att.filename, reason: overLimit });
+				continue;
+			}
+			try {
+				// fetchCapped enforces the cap WHILE streaming, so an understated/absent
+				// Content-Length can never force an unbounded allocation.
+				const bytes = await fetchCapped(att.url, MAX_CHAT_FILE_BYTES, {
+					signal: AbortSignal.timeout(60_000),
+				});
+				uploads.push({
+					name: att.filename,
+					mimeType: att.content_type,
+					sizeBytes: bytes.length,
+					data: bytes,
+				});
+			} catch (err) {
+				logger.warn({ err, url: att.url }, '[discord] attachment download failed');
+				const reason = err instanceof Error && err.message.includes('limit') ? overLimit : 'download failed';
+				downloadFailures.push({ name: att.filename, reason });
+			}
+		}
+
+		return { uploads, downloadFailures };
 	}
 
 	/**
@@ -389,10 +467,21 @@ export class DiscordAdapter implements ChannelAdapter {
 					await botApi.sendMessage(channelId, { content: prompt });
 				}
 			},
+
+			// Discord renders image attachments inline automatically; other files
+			// arrive as downloadable attachments. One upload per file.
+			async sendFile(file, bytes) {
+				const channelId = await getDmChannelId();
+				if (!channelId) return;
+				await botApi.sendMessage(channelId, {
+					files: [{ name: file.name, data: bytes }],
+				});
+			},
 		};
 
 		return createBatchedSubscriber(delivery, {
 			notifyToolUsage: options?.notifyToolUsage ?? false,
+			loadBytes: (file) => Promise.resolve(this.chatFileService.readBytes(file)),
 		});
 	}
 

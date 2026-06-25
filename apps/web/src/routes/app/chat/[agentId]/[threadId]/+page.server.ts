@@ -6,6 +6,7 @@ import type {
 	Agent,
 	AgentThread,
 	AgentMessage,
+	ChatFile,
 	CredentialMetadata,
 	CredentialDefinition
 } from '@repo/types';
@@ -26,13 +27,15 @@ export const load: PageServerLoad = async (event) => {
 		throw error(401, 'Unauthorized');
 	}
 
-	const [agentRes, threadsRes, messagesRes, credentialsRes, definitionsRes] = await Promise.all([
-		api(`/agents/${agentId}`, event),
-		api(`/runtime/${agentId}/threads`, event),
-		api(`/runtime/${agentId}/threads/${threadId}/messages`, event),
-		api('/credentials', event),
-		api('/credentials/definitions', event)
-	]);
+	const [agentRes, threadsRes, messagesRes, filesRes, credentialsRes, definitionsRes] =
+		await Promise.all([
+			api(`/agents/${agentId}`, event),
+			api(`/runtime/${agentId}/threads`, event),
+			api(`/runtime/${agentId}/threads/${threadId}/messages`, event),
+			api(`/runtime/${agentId}/threads/${threadId}/files`, event),
+			api('/credentials', event),
+			api('/credentials/definitions', event)
+		]);
 
 	if (!agentRes.ok) {
 		throw error(404, 'Agent not found');
@@ -57,6 +60,13 @@ export const load: PageServerLoad = async (event) => {
 	if (messagesRes.ok) {
 		const messagesBody = await messagesRes.json();
 		messages = (messagesBody.data ?? []) as AgentMessage[];
+	}
+
+	// Files attached to this thread (user uploads + agent-shared files).
+	let threadFiles: ChatFile[] = [];
+	if (filesRes.ok) {
+		const filesBody = await filesRes.json();
+		threadFiles = (filesBody.data ?? []) as ChatFile[];
 	}
 
 	// Build credentialId → { icon, integrationName } map.
@@ -96,6 +106,8 @@ export const load: PageServerLoad = async (event) => {
 	// Use exact match first, then fall back to bare model name (e.g. "gpt-4o"
 	// → catalog entry "openai/gpt-4o") for agents configured without the prefix.
 	let modelContextLength: number | null = null;
+	// Whether the agent's model accepts image input — gates image attachment in the UI.
+	let visionCapable = false;
 	if (agent.modelConfigId) {
 		const llmRes = await api(`/llm-providers/${agent.modelConfigId}`, event);
 		if (llmRes.ok) {
@@ -105,6 +117,7 @@ export const load: PageServerLoad = async (event) => {
 				LLM_MODELS.find((m) => m.id === modelId) ??
 				LLM_MODELS.find((m) => m.id.endsWith('/' + modelId));
 			modelContextLength = catalogEntry?.contextLength ?? null;
+			visionCapable = (catalogEntry?.architecture?.inputModalities ?? []).includes('image');
 		}
 	}
 
@@ -143,6 +156,10 @@ export const load: PageServerLoad = async (event) => {
 		thread,
 		threads,
 		messages,
+		/** Files attached to this thread — rendered under their messages. */
+		threadFiles,
+		/** Whether the agent's model accepts image input (gates image upload in the UI). */
+		visionCapable,
 		modelContextLength,
 		/**
 		 * Current context window occupancy in tokens — sourced from thread.contextTokens

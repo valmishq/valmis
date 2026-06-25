@@ -3,10 +3,11 @@ import type {
 	ChannelStreamSubscriber,
 	ChannelSubscriberOptions,
 	InboundMessage,
+	InboundContent,
 	OutboundMessage,
 	AdapterInboundContext,
 } from '@repo/types';
-import { TelegramBotApi } from './bot-api.js';
+import { TelegramBotApi, type TgMessage, type TgUpdate } from './bot-api.js';
 import { toTelegramHtml, splitForTelegram } from './formatter.js';
 import { handleChannelCommand } from '../commands.js';
 import { resolveActiveThread } from '../thread-routing.js';
@@ -14,6 +15,11 @@ import { createBatchedSubscriber, type BatchedDelivery } from '../batched-subscr
 import type { ChannelService } from '../../services/ChannelService.js';
 import type { AgentService } from '../../services/AgentService.js';
 import type { AgentSessionService } from '../../services/AgentSessionService.js';
+import {
+	ChatFileService,
+	MAX_CHAT_FILE_BYTES,
+	type ChatUploadInput,
+} from '../../services/ChatFileService.js';
 import { logger } from '../../config/logger.js';
 
 /** How often to re-send the typing indicator while the agent is working (ms) */
@@ -45,6 +51,7 @@ export class TelegramAdapter implements ChannelAdapter {
 		private readonly channelService: ChannelService,
 		private readonly agentService: AgentService,
 		private readonly sessionService: AgentSessionService,
+		private readonly chatFileService: ChatFileService,
 	) {
 		this.botApi = new TelegramBotApi(botToken);
 	}
@@ -58,20 +65,7 @@ export class TelegramAdapter implements ChannelAdapter {
 	 * with no valid message content).
 	 */
 	async handleInbound(context: AdapterInboundContext): Promise<InboundMessage | null> {
-		const update = context.rawBody as {
-			message?: {
-				message_id: number;
-				from?: { id: number; username?: string; first_name?: string };
-				chat: { id: number };
-				text?: string;
-			};
-			callback_query?: {
-				id: string;
-				from: { id: number; username?: string };
-				message?: { chat: { id: number } };
-				data?: string;
-			};
-		};
+		const update = context.rawBody as TgUpdate;
 
 		// Handle inline keyboard callback queries (HITL option buttons)
 		if (update.callback_query) {
@@ -90,7 +84,9 @@ export class TelegramAdapter implements ChannelAdapter {
 
 		const { message } = update;
 		const chatId = message.chat.id;
-		const text = message.text ?? '';
+		// Photo/document messages carry their text in `caption`, not `text`.
+		const text = message.text ?? message.caption ?? '';
+		const hasAttachment = !!(message.photo?.length || message.document);
 		const displayName = message.from?.username
 			? `@${message.from.username}`
 			: (message.from?.first_name ?? String(chatId));
@@ -115,13 +111,21 @@ export class TelegramAdapter implements ChannelAdapter {
 			if (handled) return null;
 		}
 
-		if (!text.trim()) return null;
+		if (!text.trim() && !hasAttachment) return null;
 
-		return this.buildInboundMessage(chatId, text);
+		return this.buildInboundMessage(chatId, text, message);
 	}
 
-	/** Build an InboundMessage for a text payload, resolving thread context. */
-	private async buildInboundMessage(chatId: number, text: string): Promise<InboundMessage | null> {
+	/**
+	 * Build an InboundMessage, resolving thread context. When the source message
+	 * carries a photo/document, it is downloaded and ingested as a chat file so the
+	 * agent receives it exactly like a web upload (via { type: 'file', fileId }).
+	 */
+	private async buildInboundMessage(
+		chatId: number,
+		text: string,
+		message?: TgMessage,
+	): Promise<InboundMessage | null> {
 		const externalId = String(chatId);
 
 		// Look up the channel link
@@ -149,15 +153,103 @@ export class TelegramAdapter implements ChannelAdapter {
 				.catch(() => {});
 		}
 
+		const content: InboundContent[] = [];
+		if (text.trim()) content.push({ type: 'text', text });
+
+		// Download + ingest any attachment, then reference it by fileId.
+		if (message) {
+			const { uploads, downloadFailures } = await this.downloadAttachments(message);
+			if (uploads.length > 0) {
+				const { created, skipped } = await this.chatFileService.ingestFiles(
+					link.agentId,
+					link.userId,
+					threadId,
+					uploads,
+				);
+				for (const file of created) content.push({ type: 'file', fileId: file.id });
+				for (const s of skipped) {
+					content.push({ type: 'text', text: `[Couldn't process "${s.name}": ${s.reason}]` });
+				}
+			}
+			for (const f of downloadFailures) {
+				content.push({ type: 'text', text: `[Couldn't fetch "${f.name}" from Telegram: ${f.reason}]` });
+			}
+		}
+
+		if (content.length === 0) return null;
+
 		return {
 			channel: 'telegram',
 			externalId,
 			userId: link.userId,
 			agentId: link.agentId,
 			threadId,
-			content: [{ type: 'text', text }],
+			content,
 			notifyToolUsage: link.notifyToolUsage,
 		};
+	}
+
+	/**
+	 * Download a Telegram message's photo (largest size) and/or document into
+	 * ChatUploadInput[]. Network failures are collected, not thrown, so the rest of
+	 * the message still processes.
+	 */
+	private async downloadAttachments(
+		message: TgMessage,
+	): Promise<{ uploads: ChatUploadInput[]; downloadFailures: { name: string; reason: string }[] }> {
+		const uploads: ChatUploadInput[] = [];
+		const downloadFailures: { name: string; reason: string }[] = [];
+		const overLimit = `exceeds the ${Math.floor(MAX_CHAT_FILE_BYTES / (1024 * 1024))}MB limit`;
+
+		const fetchOne = async (
+			fileId: string,
+			name: string,
+			mimeType?: string,
+			knownSize?: number,
+		): Promise<void> => {
+			try {
+				// Reject on the size Telegram already told us about, before any download.
+				if (knownSize !== undefined && knownSize > MAX_CHAT_FILE_BYTES) {
+					downloadFailures.push({ name, reason: overLimit });
+					return;
+				}
+				const { file_path, file_size } = await this.botApi.getFile(fileId);
+				if (!file_path) throw new Error('no file_path');
+				if (file_size !== undefined && file_size > MAX_CHAT_FILE_BYTES) {
+					downloadFailures.push({ name, reason: overLimit });
+					return;
+				}
+				// downloadFile still enforces the cap while streaming (defends against an
+				// absent/understated declared size).
+				const bytes = await this.botApi.downloadFile(file_path, MAX_CHAT_FILE_BYTES);
+				uploads.push({ name, mimeType, sizeBytes: bytes.length, data: bytes });
+			} catch (err) {
+				logger.warn({ err, fileId }, '[telegram] attachment download failed');
+				const reason = err instanceof Error && err.message.includes('limit') ? overLimit : 'download failed';
+				downloadFailures.push({ name, reason });
+			}
+		};
+
+		if (message.photo?.length) {
+			// Telegram sends an array of sizes ascending — the last is the largest.
+			const largest = message.photo[message.photo.length - 1];
+			await fetchOne(
+				largest.file_id,
+				`photo_${message.message_id}.jpg`,
+				'image/jpeg',
+				largest.file_size,
+			);
+		}
+		if (message.document) {
+			await fetchOne(
+				message.document.file_id,
+				message.document.file_name ?? `document_${message.message_id}`,
+				message.document.mime_type,
+				message.document.file_size,
+			);
+		}
+
+		return { uploads, downloadFailures };
 	}
 
 	/**
@@ -218,10 +310,20 @@ export class TelegramAdapter implements ChannelAdapter {
 					await botApi.sendMessage(chatId, prompt);
 				}
 			},
+
+			// Images render inline via sendPhoto; everything else as a downloadable document.
+			async sendFile(file, bytes) {
+				if (file.kind === 'image') {
+					await botApi.sendPhoto(chatId, bytes, file.name);
+				} else {
+					await botApi.sendDocument(chatId, bytes, file.name, undefined, file.mimeType);
+				}
+			},
 		};
 
 		return createBatchedSubscriber(delivery, {
 			notifyToolUsage: options?.notifyToolUsage ?? false,
+			loadBytes: (file) => Promise.resolve(this.chatFileService.readBytes(file)),
 		});
 	}
 

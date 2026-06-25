@@ -10,6 +10,7 @@
 	import ChatMessage from '$lib/components/custom/chat/ChatMessage.svelte';
 	import ChatInput from '$lib/components/custom/chat/ChatInput.svelte';
 	import ChatUsageBar from '$lib/components/custom/chat/ChatUsageBar.svelte';
+	import FilePreviewSidebar from '$lib/components/custom/chat/FilePreviewSidebar.svelte';
 	import AgentAvatar from '$lib/components/custom/chat/AgentAvatar.svelte';
 	import HitlPrompt from '$lib/components/custom/chat/HitlPrompt.svelte';
 	import EditThreadTitleDialog from '$lib/components/custom/chat/EditThreadTitleDialog.svelte';
@@ -24,6 +25,7 @@
 		AgentStreamEvent,
 		AgentThread,
 		AgentThreadStatus,
+		ChatFile,
 		ContentBlock
 	} from '@repo/types';
 
@@ -33,6 +35,11 @@
 
 	let messages = $state<AgentMessage[]>(data.messages);
 	let threads = $state(data.threads);
+	// Files attached to this thread (user uploads + agent-shared), grouped by message below.
+	let threadFiles = $state<ChatFile[]>(data.threadFiles);
+	// File preview sidebar state.
+	let previewFile = $state<ChatFile | null>(null);
+	let previewOpen = $state(false);
 	let isStreaming = $state(false);
 	/**
 	 * Mirror of the persisted thread status from the backend (seeded on load,
@@ -129,6 +136,36 @@
 		return map;
 	}
 
+	// ── Attachments ───────────────────────────────────────────────────────────
+
+	/** Group thread files by the message they belong to (unlinked files excluded). */
+	let attachmentsByMessageId = $derived.by(() => {
+		const map: Record<string, ChatFile[]> = {};
+		for (const file of threadFiles) {
+			if (!file.messageId) continue;
+			(map[file.messageId] ??= []).push(file);
+		}
+		return map;
+	});
+
+	/** Re-fetch the thread's file list (after a send links uploads to a message). */
+	async function refreshFiles() {
+		try {
+			const res = await api(`/runtime/${data.agent.id}/threads/${data.thread.id}/files`);
+			if (!res.ok) return;
+			const body = await res.json();
+			if (body.success) threadFiles = body.data as ChatFile[];
+		} catch {
+			// Non-fatal — the files will appear on the next reload.
+		}
+	}
+
+	/** Open a file in the preview sidebar. */
+	function openFile(file: ChatFile) {
+		previewFile = file;
+		previewOpen = true;
+	}
+
 	/**
 	 * Re-sync all per-thread state when the active thread changes.
 	 * SvelteKit re-uses this component across sibling thread routes, so `data`
@@ -141,6 +178,7 @@
 
 		messages = data.messages;
 		threads = data.threads;
+		threadFiles = data.threadFiles;
 		toolResults = buildToolResultsFromMessages(data.messages);
 		toolResultImages = buildToolResultImagesFromMessages(data.messages);
 		toolCallArgs = buildToolCallArgsFromMessages(data.messages);
@@ -539,6 +577,23 @@
 				break;
 			}
 
+			case 'file_shared': {
+				// Agent shared a file — render it under the agent's bubble. Live, the
+				// streaming assistant message uses an SSE id that differs from the DB
+				// messageId the backend linked the file to, so re-point it at the most
+				// recent assistant message in the UI. On reload both sides use DB ids.
+				const lastAssistant = [...messages].reverse().find((m) => m.role === 'assistant');
+				const sharedFile = lastAssistant
+					? { ...event.file, messageId: lastAssistant.id }
+					: event.file;
+				// De-dupe in case of a reconnect replay.
+				if (!threadFiles.some((f) => f.id === sharedFile.id)) {
+					threadFiles = [...threadFiles, sharedFile];
+				}
+				scrollToBottom();
+				break;
+			}
+
 			case 'message_end': {
 				messages = messages.map((msg) => {
 					if (msg.id !== event.messageId) return msg;
@@ -640,7 +695,7 @@
 
 	// ── Messaging ─────────────────────────────────────────────────────────────
 
-	async function handleSend(content: string) {
+	async function handleSend(content: string, fileIds: string[] = []) {
 		// Allow sending when a HITL is pending even though the turn is in flight.
 		// In all other busy states (streaming, or stuck at 'running') the input is locked.
 		if (busy && pendingHitl === null) return;
@@ -696,7 +751,7 @@
 				method: 'POST',
 				// Include the browser's local datetime with timezone offset so the agent system
 				// prompt reflects the user's local time, not UTC.
-				body: JSON.stringify({ content, userDatetime: new Date().toString() })
+				body: JSON.stringify({ content, userDatetime: new Date().toString(), fileIds })
 			});
 
 			if (!res.ok) {
@@ -722,6 +777,9 @@
 			const body = await res.json();
 			const realMsg = body.data as AgentMessage;
 			messages = messages.map((m) => (m.id === optimisticMsg.id ? realMsg : m));
+			// Refresh the file list so uploaded attachments (now linked to the real
+			// message id) render under the message.
+			if (fileIds.length > 0) void refreshFiles();
 		} catch {
 			clearOptimisticTimer();
 			messages = messages.filter((m) => m.id !== optimisticMsg.id && m.id !== placeholderId);
@@ -1000,6 +1058,10 @@
 							{toolResultImages}
 							{toolCallArgs}
 							credentialMetaMap={data.credentialMetaMap}
+							attachments={attachmentsByMessageId[message.id] ?? []}
+							agentId={data.agent.id}
+							threadId={data.thread.id}
+							onOpenFile={openFile}
 						/>
 					{/each}
 
@@ -1042,6 +1104,9 @@
 				busy={showStop}
 				disabled={inputDisabled}
 				placeholder={pendingHitl ? 'Type your response…' : `Message ${data.agent.name}…`}
+				agentId={data.agent.id}
+				threadId={data.thread.id}
+				visionCapable={data.visionCapable}
 			/>
 		</div>
 	</div>
@@ -1061,6 +1126,14 @@
 	agentId={data.agent.id}
 	agentName={data.agent.name}
 	threadId={browserThreadTarget?.id}
+/>
+
+<!-- File preview / download sidebar -->
+<FilePreviewSidebar
+	bind:open={previewOpen}
+	file={previewFile}
+	agentId={data.agent.id}
+	threadId={data.thread.id}
 />
 
 <!-- Delete thread confirmation dialog -->

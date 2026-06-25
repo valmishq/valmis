@@ -1,14 +1,20 @@
 import type { ContentBlock, InboundContent } from '@repo/types';
 
 /**
- * ContentProcessor — converts InboundContent[] from any channel into
- * ContentBlock[] that the agent runtime understands.
+ * ContentProcessor — converts InboundContent[] from any channel into the
+ * ContentBlock[] PERSISTED as the visible user message.
  *
- * Phase 1: text passthrough only.
- * Phase 3: add voice→STT, document→workspace file save, image passthrough.
+ * Important: file attachments do NOT contribute content blocks here. The
+ * persisted user message must contain only what the user actually said —
+ * extracted document text, image blocks, and workspace-path notes are
+ * system-generated and must never show in the user's own chat bubble. Those are
+ * injected for the AGENT only, at history-load time, by the internal messages
+ * route (see runtime.ts) via ChatFileService.buildPromptBlocks. The attachment
+ * itself is rendered from the chat_files row linked to this message.
  *
- * All content types that are not yet handled fall back to a descriptive
- * text block so the agent is at least aware something was received.
+ * Other media types (voice/image/document/video from external channels carrying a
+ * downloaded local path) still fall back to a descriptive text block so the agent
+ * is at least aware something was received.
  */
 export class ContentProcessor {
 	/**
@@ -17,9 +23,8 @@ export class ContentProcessor {
 	 * the pipeline is called and must never reach the agent.
 	 *
 	 * @param content - The raw inbound content from the channel adapter
-	 * @param _agentId - Reserved for Phase 3 (workspace path resolution)
 	 */
-	async normalize(content: InboundContent[], _agentId?: string): Promise<ContentBlock[]> {
+	async normalize(content: InboundContent[]): Promise<ContentBlock[]> {
 		const blocks: ContentBlock[] = [];
 
 		for (const item of content) {
@@ -27,6 +32,12 @@ export class ContentProcessor {
 				case 'text':
 					// Direct passthrough — the most common case
 					blocks.push({ type: 'text', text: item.text });
+					break;
+
+				case 'file':
+					// A web upload (chat_files row). Intentionally contributes NO content
+					// to the persisted message — it is rendered as an attachment and
+					// injected for the agent at history-load time. See class comment.
 					break;
 
 				case 'voice':
@@ -39,8 +50,7 @@ export class ContentProcessor {
 					break;
 
 				case 'image':
-					// Phase 3: convert to base64 image block
-					// For now, inform the agent
+					// External-channel image carrying a downloaded local path — not yet wired.
 					blocks.push({
 						type: 'text',
 						text: item.caption
@@ -50,7 +60,7 @@ export class ContentProcessor {
 					break;
 
 				case 'document':
-					// Phase 3: save to agent workspace, pass file reference
+					// External-channel document carrying a downloaded local path — not yet wired.
 					blocks.push({
 						type: 'text',
 						text: `[Document received: "${item.filename}" (${item.mimeType}). Document processing not yet enabled.]`,

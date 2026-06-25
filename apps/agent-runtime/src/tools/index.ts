@@ -2,6 +2,7 @@ import type { AgentTool } from '@earendil-works/pi-agent-core';
 import { createCallApiTool } from './call-api.js';
 import { createReadFileTool } from './read-file.js';
 import { createWriteFileTool } from './write-file.js';
+import { createShareFileTool } from './share-file.js';
 import { createListFilesTool } from './list-files.js';
 import { createRunTerminalTool } from './run-terminal.js';
 import { createAskHumanTool } from './ask-human.js';
@@ -45,6 +46,7 @@ export function createAgentTools(ctx: Parameters<typeof createCallApiTool>[0]): 
 		createCallApiTool(ctx),
 		createReadFileTool(ctx),
 		createWriteFileTool(ctx),
+		createShareFileTool(ctx),
 		createListFilesTool(ctx),
 		createRunTerminalTool(ctx),
 		createAskHumanTool(ctx),

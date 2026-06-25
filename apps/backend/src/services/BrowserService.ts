@@ -139,6 +139,8 @@ export class BrowserService {
 
 	private sharedBrowser: Browser | null = null;
 	private browserContainerId: string | null = null;
+	/** Dedupes concurrent on-demand pulls — see ensureImage. */
+	private imagePullInFlight: Promise<void> | null = null;
 	/** Live sessions keyed by threadId. */
 	private readonly sessions = new Map<string, BrowserSession>();
 
@@ -173,6 +175,8 @@ export class BrowserService {
 		this.navigationTimeoutMs = parseInt(process.env.BROWSER_NAVIGATION_TIMEOUT_MS ?? '30000', 10);
 		// Backend-only state dir — NEVER under AGENT_WORKSPACES_PATH (cookies must
 		// not be readable by the agent's file tools). Default: repo-root sibling.
+		// In docker-compose this points at the consolidated app-data volume
+		// (/opt/app-data/browser-state).
 		this.stateBasePath =
 			process.env.AGENT_BROWSER_STATE_PATH ?? resolve(process.cwd(), '../../.agent-browser-state');
 		this.workspacesBasePath =
@@ -582,6 +586,12 @@ export class BrowserService {
 			this.browserContainerId = null;
 		}
 
+		// Self-heal a pruned image. The browser image is unreferenced whenever no
+		// container is running (e.g. after an idle timeout), so an orchestrator's
+		// scheduled `docker image prune` can remove it between sessions and the next
+		// createContainer would 404. Re-pull only when actually missing.
+		await this.ensureImage();
+
 		const env: string[] = [];
 		if (this.token) env.push(`TOKEN=${this.token}`);
 
@@ -642,6 +652,32 @@ export class BrowserService {
 				);
 			}
 		}
+	}
+
+	/**
+	 * Guarantee the browser image is present locally before (re)creating the
+	 * container, re-pulling on demand if it was pruned. The fast path is a single
+	 * local image inspect (no network); the pull cost is paid only after an
+	 * orchestrator's scheduled image prune. Concurrent callers share one pull.
+	 */
+	private async ensureImage(): Promise<void> {
+		try {
+			await this.docker.getImage(this.image).inspect();
+			return; // present locally — fast path, no registry round-trip
+		} catch {
+			// Missing locally (pruned) — fall through to an on-demand pull.
+		}
+
+		if (!this.imagePullInFlight) {
+			logger.warn(
+				{ image: this.image },
+				'[browser] image missing locally (pruned?) — pulling on demand before launching container',
+			);
+			this.imagePullInFlight = this.pullImage().finally(() => {
+				this.imagePullInFlight = null;
+			});
+		}
+		await this.imagePullInFlight;
 	}
 
 	/**

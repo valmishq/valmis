@@ -100,6 +100,14 @@ export interface DiscordMessageCreateEvent {
 	guild_id?: string;
 	/** Message mentions the bot — used to detect @mentions */
 	mentions?: DiscordUser[];
+	/** File attachments — each carries a public CDN url to download from. */
+	attachments?: Array<{
+		id: string;
+		filename: string;
+		url: string;
+		content_type?: string;
+		size: number;
+	}>;
 	/** Channel type: 1 = DM, 0 = guild text */
 	type: number;
 }
@@ -111,6 +119,8 @@ export interface SendMessageOptions {
 	embeds?: DiscordEmbed[];
 	/** Message components (action rows with buttons) */
 	components?: DiscordMessageComponent[];
+	/** File attachments — uploaded via multipart. Images render inline automatically. */
+	files?: Array<{ name: string; data: Buffer }>;
 }
 
 /** Simple embed structure */
@@ -183,11 +193,34 @@ export class DiscordBotApi {
 	 * Message text is sent as standard Markdown — Discord renders it natively.
 	 */
 	async sendMessage(channelId: string, options: SendMessageOptions): Promise<DiscordMessage> {
-		return this.call<DiscordMessage>('POST', `/channels/${channelId}/messages`, {
+		const payload = {
 			...(options.content !== undefined ? { content: options.content } : {}),
 			...(options.embeds ? { embeds: options.embeds } : {}),
 			...(options.components ? { components: options.components } : {}),
-		});
+		};
+
+		// With attachments, Discord requires multipart/form-data: a payload_json part
+		// plus files[n]. Without, use the normal JSON path. Don't set Content-Type on
+		// the multipart request — fetch adds the boundary.
+		if (options.files && options.files.length > 0) {
+			const form = new FormData();
+			form.append('payload_json', JSON.stringify(payload));
+			options.files.forEach((f, i) => {
+				form.append(`files[${i}]`, new Blob([new Uint8Array(f.data)]), f.name);
+			});
+			const res = await fetch(`${DISCORD_API_BASE}/channels/${channelId}/messages`, {
+				method: 'POST',
+				headers: { Authorization: `Bot ${this.botToken}` },
+				body: form,
+			});
+			if (!res.ok) {
+				const text = await res.text();
+				throw new Error(`Discord API error [POST messages w/ files]: ${res.status} ${text}`);
+			}
+			return res.json() as Promise<DiscordMessage>;
+		}
+
+		return this.call<DiscordMessage>('POST', `/channels/${channelId}/messages`, payload);
 	}
 
 	/**

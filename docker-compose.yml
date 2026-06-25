@@ -47,6 +47,14 @@ services:
       AGENT_RUNTIME_ENTRY: /repo/apps/agent-runtime/dist/index.js
       # Per-agent workspace storage as seen by the backend (same volume as above)
       AGENT_WORKSPACES_PATH: /opt/agent-workspaces
+      # Single backend-owned host volume for app data that is NOT per-agent workspace:
+      #   - browser-state/  Playwright storageState (cookies/logins) per agent
+      #   - chat-files/     raw bytes of chat uploads + agent-shared files
+      # Backend-only — NEVER mounted into a runtime, so the agent cannot read browser
+      # cookies or another user's uploads directly. Files the agent needs are copied
+      # into its workspace at spawn time instead.
+      APP_DATA_PATH: /opt/app-data
+      CHAT_FILES_PATH: /opt/app-data/chat-files
       # Headless browser tool (gated by BROWSER_FEATURE_ENABLED in .env; default OFF).
       # When enabled, the backend pulls BROWSER_IMAGE and launches the browser
       # container on the dedicated valmis_browser network below — agents never
@@ -54,13 +62,13 @@ services:
       # agent's session cookies to another.
       BROWSER_MODE: container
       BROWSER_NETWORK: valmis_browser
-      AGENT_BROWSER_STATE_PATH: /opt/agent-browser-state
+      AGENT_BROWSER_STATE_PATH: /opt/app-data/browser-state
     volumes:
       # Persist per-agent workspaces across container restarts
       - agent_workspaces:/opt/agent-workspaces
-      # Persist browser session state (cookies/logins) across restarts. Backend-only —
-      # NEVER mounted into a runtime, so the agent cannot read its own session cookies.
-      - agent_browser_state:/opt/agent-browser-state
+      # Backend-owned host data (browser state + chat files). Backend-only — NEVER
+      # mounted into a runtime, so the agent cannot read session cookies or uploads.
+      - app_data:/opt/app-data
     networks:
       - default
       # The app must be reachable from BOTH runtime networks so locked-down
@@ -122,9 +130,10 @@ volumes:
     # Stable name so the DockerDriver can reference it for subpath mounts
     # regardless of the compose project prefix
     name: valmis_agent_workspaces
-  # Browser session state (Playwright storageState per agent). Backend-only.
-  agent_browser_state:
-    name: valmis_agent_browser_state
+  # Consolidated backend-owned host data: browser session state (Playwright
+  # storageState per agent) + chat files (uploads + agent-shared files). Backend-only.
+  app_data:
+    name: valmis_app_data
 
 networks:
   default:

@@ -6,6 +6,7 @@
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Label } from '$lib/components/ui/label/index.js';
 	import * as Card from '$lib/components/ui/card/index.js';
+	import AuthShell from '$lib/components/custom/auth/AuthShell.svelte';
 	import type { LoginResponse } from '@repo/types';
 
 	let email = $state('');
@@ -48,7 +49,7 @@
 	<meta name="keywords" content="sign in, login, Valmis, integration hub" />
 </svelte:head>
 
-<div class="flex min-h-screen items-center justify-center bg-muted/40 p-4">
+<AuthShell>
 	<Card.Root class="w-full max-w-sm">
 		<Card.Header class="pb-4">
 			<Card.Title class="text-xl">Sign in</Card.Title>
@@ -96,4 +97,4 @@
 			</form>
 		</Card.Content>
 	</Card.Root>
-</div>
+</AuthShell>

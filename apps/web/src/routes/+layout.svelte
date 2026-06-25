@@ -1,6 +1,5 @@
 <script lang="ts">
 	import './layout.css';
-	import favicon from '$lib/assets/favicon.svg';
 	import { authStore } from '$lib/stores/auth.store.js';
 	import { themeStore } from '$lib/stores/theme.store.js';
 	import type { LayoutData } from './$types';
@@ -21,5 +20,5 @@
 </script>
 
 <Alerts {...getAlert()}></Alerts>
-<svelte:head><link rel="icon" href={favicon} /></svelte:head>
+<svelte:head><link rel="icon" href="/valmis/favicon.svg" /></svelte:head>
 {@render children()}

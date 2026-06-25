@@ -4,6 +4,7 @@ import { AgentRuntimeService } from '../services/AgentRuntimeService.js';
 import { AgentProxyService } from '../services/AgentProxyService.js';
 import { AgentLlmProxyService } from '../services/AgentLlmProxyService.js';
 import { AgentService } from '../services/AgentService.js';
+import { ChatFileService } from '../services/ChatFileService.js';
 import { agentStreamBus } from '../services/AgentStreamBus.js';
 import { ContentProcessor } from './processor.js';
 import { logger } from '../config/logger.js';
@@ -39,6 +40,7 @@ export class MessagePipeline {
 		private readonly llmProxyService: AgentLlmProxyService,
 		private readonly agentService: AgentService,
 		private readonly contentProcessor: ContentProcessor,
+		private readonly chatFileService: ChatFileService,
 	) {}
 
 	/**
@@ -53,10 +55,18 @@ export class MessagePipeline {
 		const { userId, agentId, threadId, channel, externalId, userDatetime } = inbound;
 
 		try {
-			// 1. Normalize content (voice→text stub, location→text, etc.)
-			const contentBlocks = await this.contentProcessor.normalize(inbound.content, agentId);
+			// 1. Normalize content into the VISIBLE user message (user-typed text only;
+			//    file attachments are rendered separately and injected for the agent at
+			//    history-load time — see ContentProcessor + the internal messages route).
+			const contentBlocks = await this.contentProcessor.normalize(inbound.content);
 
-			if (contentBlocks.length === 0) {
+			// Chat file attachments to link to the persisted user message (web uploads).
+			const fileIds = inbound.content
+				.filter((c): c is Extract<typeof c, { type: 'file' }> => c.type === 'file')
+				.map((c) => c.fileId);
+
+			// A message must carry text and/or at least one attachment.
+			if (contentBlocks.length === 0 && fileIds.length === 0) {
 				return { ok: false, status: 400, error: 'No processable content in message' };
 			}
 
@@ -74,6 +84,7 @@ export class MessagePipeline {
 					role: 'user',
 					content: contentBlocks,
 				});
+				await this.chatFileService.attachToMessage(fileIds, userMessage.id, threadId, userId);
 
 				this.proxyService.resolveHitlRequest(threadId, textContent);
 
@@ -102,12 +113,13 @@ export class MessagePipeline {
 				};
 			}
 
-			// 4. Persist user message
+			// 4. Persist user message + link any uploaded files to it for display
 			const userMessage = await this.sessionService.appendMessage({
 				threadId,
 				role: 'user',
 				content: contentBlocks,
 			});
+			await this.chatFileService.attachToMessage(fileIds, userMessage.id, threadId, userId);
 
 			// 5. Fire-and-forget background tasks keyed off the user-message count:
 			//    1st message → summarize the previous thread, 2nd message → auto-title.
