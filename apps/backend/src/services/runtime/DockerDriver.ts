@@ -65,6 +65,10 @@ export class DockerDriver implements ExecutionDriver {
 	/** Live containers, tracked for shutdown() */
 	private readonly liveContainers = new Set<Docker.Container>();
 
+	/** Dedupes concurrent on-demand pulls — a burst of simultaneous spawns after a
+	 *  prune triggers at most one re-pull (see ensureImage). */
+	private imagePullInFlight: Promise<void> | null = null;
+
 	constructor() {
 		// dockerode's modem honours DOCKER_HOST / DOCKER_TLS_VERIFY / DOCKER_CERT_PATH
 		// automatically; with none set it falls back to /var/run/docker.sock.
@@ -128,36 +132,12 @@ export class DockerDriver implements ExecutionDriver {
 		}
 
 		// Refresh the runtime image from the registry ONCE per backend startup —
-		// never during a user turn (a per-spawn pull would add seconds to every
-		// message). A stale local tag (e.g. :latest) is otherwise never updated,
-		// so published runtime image updates would silently not deploy. When the
-		// local image is already current the pull is a fast no-op (digest check,
-		// no layer downloads). If the registry is unreachable but a local image
-		// exists, continue with it; fail the boot only when there is no image at
-		// all (from-source deployments get the local build command in the error).
-		try {
-			const pullStream = await this.docker.pull(this.image);
-			await new Promise<void>((resolvePull, rejectPull) => {
-				this.docker.modem.followProgress(pullStream, (err) =>
-					err ? rejectPull(err) : resolvePull(),
-				);
-			});
-			logger.info({ image: this.image }, '[runtime:docker] runtime image up to date');
-		} catch (pullErr) {
-			try {
-				await this.docker.getImage(this.image).inspect();
-				logger.warn(
-					{ image: this.image, pullErr },
-					'[runtime:docker] registry pull failed — continuing with the local runtime image',
-				);
-			} catch {
-				throw new Error(
-					`[runtime:docker] agent runtime image "${this.image}" not found locally and could not be pulled ` +
-						`(${pullErr instanceof Error ? pullErr.message : String(pullErr)}). ` +
-						'For from-source deployments, build it with: docker compose -f docker-compose.build.yml build agent-runtime',
-				);
-			}
-		}
+		// never blocking a user turn under normal operation (a per-spawn pull would
+		// add seconds to every message). A stale local tag (e.g. :latest) is
+		// otherwise never updated, so published runtime image updates would silently
+		// not deploy. When the local image is already current the pull is a fast
+		// no-op (digest check, no layer downloads).
+		await this.pullImage();
 
 		await this.ensureNetwork(this.networkOpen, false);
 		await this.ensureNetwork(this.networkInternal, true);
@@ -184,6 +164,66 @@ export class DockerDriver implements ExecutionDriver {
 			},
 			'[runtime:docker] driver initialised',
 		);
+	}
+
+	/**
+	 * Pull the runtime image from the registry. When the local image is already
+	 * current this is a fast no-op (digest check, no layer downloads). If the
+	 * registry is unreachable but a local image exists, continue with it; fail only
+	 * when there is no image at all (from-source deployments get the build command).
+	 */
+	private async pullImage(): Promise<void> {
+		try {
+			const pullStream = await this.docker.pull(this.image);
+			await new Promise<void>((resolvePull, rejectPull) => {
+				this.docker.modem.followProgress(pullStream, (err) =>
+					err ? rejectPull(err) : resolvePull(),
+				);
+			});
+			logger.info({ image: this.image }, '[runtime:docker] runtime image up to date');
+		} catch (pullErr) {
+			try {
+				await this.docker.getImage(this.image).inspect();
+				logger.warn(
+					{ image: this.image, pullErr },
+					'[runtime:docker] registry pull failed — continuing with the local runtime image',
+				);
+			} catch {
+				throw new Error(
+					`[runtime:docker] agent runtime image "${this.image}" not found locally and could not be pulled ` +
+						`(${pullErr instanceof Error ? pullErr.message : String(pullErr)}). ` +
+						'For from-source deployments, build it with: docker compose -f docker-compose.build.yml build agent-runtime',
+				);
+			}
+		}
+	}
+
+	/**
+	 * Guarantee the runtime image is present locally before a spawn, re-pulling on
+	 * demand if it was pruned. The fast path is a single local image inspect (no
+	 * network), so a per-turn call adds no latency in steady state; the pull cost is
+	 * paid only on the first turn after an orchestrator's scheduled image prune.
+	 * Concurrent callers share one in-flight pull.
+	 */
+	private async ensureImage(): Promise<void> {
+		try {
+			await this.docker.getImage(this.image).inspect();
+			return; // present locally — fast path, no registry round-trip
+		} catch {
+			// Missing locally (pruned, or first spawn after a from-source build was
+			// removed) — fall through to an on-demand pull.
+		}
+
+		if (!this.imagePullInFlight) {
+			logger.warn(
+				{ image: this.image },
+				'[runtime:docker] runtime image missing locally (pruned?) — pulling on demand before spawn',
+			);
+			this.imagePullInFlight = this.pullImage().finally(() => {
+				this.imagePullInFlight = null;
+			});
+		}
+		await this.imagePullInFlight;
 	}
 
 	prepareWorkspace(workspacePath: string): void {
@@ -220,6 +260,14 @@ export class DockerDriver implements ExecutionDriver {
 	}
 
 	async spawn(req: RuntimeSpawnRequest): Promise<RuntimeHandle> {
+		// Self-heal a pruned image. Orchestrators (Coolify, etc.) run scheduled
+		// `docker image prune` that removes "unused" images — and the runtime image
+		// is unreferenced between turns (containers are ephemeral, AutoRemove). The
+		// startup pull alone is therefore not enough: a prune hours later would 404
+		// the next createContainer. ensureImage() re-pulls only when the image is
+		// actually gone, so the steady-state path stays a single fast local inspect.
+		await this.ensureImage();
+
 		// The runtime joins one of two networks; the backend's reachable address may
 		// differ per network (see resolveProxyHost), so pick the matching one.
 		const proxyHost = req.allowInternetAccess ? this.proxyHostOpen : this.proxyHostInternal;
