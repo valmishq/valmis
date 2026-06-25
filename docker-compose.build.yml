@@ -26,3 +26,11 @@ services:
     build:
       context: .
       dockerfile: apps/agent-runtime/Dockerfile
+
+  # Headless browser server image — launched per the browser feature by the
+  # backend (BROWSER_IMAGE), never started by compose itself. Apache-2.0.
+  browser:
+    image: ${BROWSER_IMAGE:-ghcr.io/valmishq/valmis-browser:latest}
+    build:
+      context: .
+      dockerfile: docker/browser/Dockerfile

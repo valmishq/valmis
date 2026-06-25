@@ -62,6 +62,9 @@ services:
       # agent's session cookies to another.
       BROWSER_MODE: container
       BROWSER_NETWORK: valmis_browser
+      # Connect via the Playwright protocol — matches the default valmis-browser
+      # image. Set to `cdp` only if pointing BROWSER_IMAGE at a CDP image (browserless).
+      BROWSER_CONNECT_MODE: ${BROWSER_CONNECT_MODE:-ws}
       AGENT_BROWSER_STATE_PATH: /opt/app-data/browser-state
     volumes:
       # Persist per-agent workspaces across container restarts

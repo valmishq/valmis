@@ -100,11 +100,14 @@ Browsing is **off by default**. To turn it on, set `BROWSER_FEATURE_ENABLED=true
 | --------------------------------- | ------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
 | `BROWSER_FEATURE_ENABLED`         | `false`                               | Master switch. When off, no browser image is pulled, no browser runs, and no agent sees the browser tools or menu.                 |
 | `BROWSER_MODE`                    | `auto`                                | `auto` runs the browser in a container in Docker deployments and in-process for bare-metal/dev. Force with `container` or `local`. |
-| `BROWSER_IMAGE`                   | `ghcr.io/browserless/chromium:latest` | The browser container image (container mode).                                                                                      |
+| `BROWSER_IMAGE`                   | `ghcr.io/valmishq/valmis-browser:latest` | The browser container image (container mode). Defaults to an in-house Apache-2.0 Playwright-server image; pin it to the same tag as `APP_IMAGE`.       |
+| `BROWSER_CONNECT_MODE`            | `ws`                                  | `ws` (Playwright protocol, for the default image) or `cdp` (for browserless / raw-Chromium CDP images).                            |
 | `BROWSER_NETWORK`                 | `valmis_browser`                      | Dedicated Docker network for the browser. Agents are never on it, so they can't reach the browser directly.                        |
 | `BROWSER_MAX_CONCURRENT_SESSIONS` | `10`                                  | Maximum simultaneous browser sessions across all agents.                                                                           |
 | `BROWSER_SESSION_IDLE_TIMEOUT_MS` | `300000` (5 min)                      | Idle time before an unused session is closed.                                                                                      |
 | `BROWSER_SESSION_MAX_LIFETIME_MS` | `1800000` (30 min)                    | Hard cap on a session's total lifetime, regardless of activity.                                                                    |
 | `AGENT_BROWSER_STATE_PATH`        | server-managed dir                    | Where saved logins/history are stored. This is server-only and never mounted into agent sandboxes.                                 |
+
+The default browser image (`valmis-browser`) is built and maintained in this repo from the official Apache-2.0 Playwright image — a fully open-source, permissively-licensed stack. To use [browserless](https://www.browserless.io) instead, set `BROWSER_IMAGE=ghcr.io/browserless/chromium:latest` and `BROWSER_CONNECT_MODE=cdp`.
 
 For bare-metal (no Docker) deployments, the browser runs in-process; install the browser binary once with `pnpm --filter @repo/backend exec playwright install chromium`, or point `BROWSER_LOCAL_CHANNEL=chrome` at an installed Chrome. See the full [Configuration Reference](/guide/configuration#web-browser) for every option.

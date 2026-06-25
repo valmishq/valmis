@@ -1,28 +1,36 @@
-# Builds and publishes the two deployment images to the GitHub Container Registry (GHCR):
+# Builds and publishes the deployment images to the GitHub Container Registry (GHCR):
 #
 #   ghcr.io/valmishq/valmis           — app image (frontend + backend), root Dockerfile
 #   ghcr.io/valmishq/agent-runtime    — agent sandbox image, apps/agent-runtime/Dockerfile
+#   ghcr.io/valmishq/valmis-browser   — Apache-2.0 Playwright browser server, docker/browser/Dockerfile
 #
-# Both images are published with IDENTICAL tags from the same commit — they must
-# stay version-locked: the runtime's ProxyClient and the backend's
-# /v1/runtime/internal/* protocol evolve together, and DockerDriver auto-pulls
-# AGENT_RUNTIME_IMAGE at backend startup.
+# valmis + agent-runtime are published with IDENTICAL tags from the same commit on
+# EVERY push — they must stay version-locked: the runtime's ProxyClient and the
+# backend's /v1/runtime/internal/* protocol evolve together, and DockerDriver
+# auto-pulls AGENT_RUNTIME_IMAGE at backend startup.
+#
+# valmis-browser is version-locked to the backend's Playwright (not the app commit)
+# and changes rarely, so it is built in a SEPARATE job that runs only when
+# `docker/browser/**` changed, on a release tag, or on a manual run — avoiding a
+# wasteful identical rebuild on every main push. Release tags always (re)stamp it so
+# deployments can pin BROWSER_IMAGE to the same tag as APP_IMAGE.
 #
 # Triggers:
 #   - Push to main                        → publishes the short commit hash tag
 #   - Git tags matching v* (e.g. v1.2.0)  → publishes 1.2.0, 1.2 + commit hash
 #   - Manual run (workflow_dispatch)      → publishes the short commit hash tag
 #
-# No "latest" tag is published — deployments pin an explicit tag via APP_IMAGE
-# and AGENT_RUNTIME_IMAGE in .env, keeping both images version-locked.
+# No "latest" tag is published — deployments pin an explicit tag via APP_IMAGE,
+# AGENT_RUNTIME_IMAGE, and BROWSER_IMAGE in .env.
 #
 # Authentication: GHCR uses the built-in GITHUB_TOKEN — no repository secrets are
-# required. The job requests `packages: write` permission below.
+# required. The jobs request `packages: write` permission below.
 #
 # One-time setup: GHCR packages are created PRIVATE on first publish. To allow
-# unauthenticated pulls (so `docker compose up` and the backend's startup pull work
-# without `docker login`), set both packages to Public once after the first run:
-#   github.com/orgs/valmishq → Packages → valmis / agent-runtime
+# unauthenticated pulls (so `docker compose up` and the backend's startup/on-demand
+# pulls work without `docker login`), set all packages to Public once after the
+# first run:
+#   github.com/orgs/valmishq → Packages → valmis / agent-runtime / valmis-browser
 #     → Package settings → Change visibility → Public
 
 name: Publish Docker images to GHCR
@@ -38,6 +46,25 @@ on:
   workflow_dispatch:
 
 jobs:
+  # Detects whether the browser image's source changed, so publish-browser can skip
+  # a no-op rebuild on routine main pushes.
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      browser: ${{ steps.filter.outputs.browser }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Detect browser-image changes
+        id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            browser:
+              - 'docker/browser/**'
+
+  # App + agent-runtime — always built (version-locked to each other + the commit).
   publish:
     runs-on: ubuntu-latest
     permissions:
@@ -49,8 +76,10 @@ jobs:
         include:
           - image: ghcr.io/valmishq/valmis
             dockerfile: Dockerfile
+            context: .
           - image: ghcr.io/valmishq/agent-runtime
             dockerfile: apps/agent-runtime/Dockerfile
+            context: .
 
     steps:
       - name: Checkout
@@ -82,7 +111,7 @@ jobs:
       - name: Build and push
         uses: docker/build-push-action@v6
         with:
-          context: .
+          context: ${{ matrix.context }}
           file: ${{ matrix.dockerfile }}
           platforms: linux/amd64,linux/arm64
           push: true
@@ -90,3 +119,53 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha,scope=${{ matrix.image }}
           cache-to: type=gha,mode=max,scope=${{ matrix.image }}
+
+  # Browser image — built only when its source changed, on a release tag (so the
+  # shared-tag pin always resolves), or on a manual run.
+  publish-browser:
+    needs: changes
+    if: ${{ needs.changes.outputs.browser == 'true' || startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    env:
+      IMAGE: ghcr.io/valmishq/valmis-browser
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU (arm64 emulation)
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE }}
+          tags: |
+            type=sha,prefix=
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/browser/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=${{ env.IMAGE }}
+          cache-to: type=gha,mode=max,scope=${{ env.IMAGE }}

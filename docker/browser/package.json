@@ -1,0 +1,10 @@
+{
+	"name": "valmis-browser",
+	"version": "1.0.0",
+	"private": true,
+	"type": "module",
+	"description": "Headless-browser server image for Valmis — runs a Playwright server that the backend connects to over the isolated browser network.",
+	"dependencies": {
+		"playwright-core": "1.61.0"
+	}
+}
