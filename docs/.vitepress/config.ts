@@ -9,7 +9,9 @@ export default defineConfig({
 	// so every asset/link must be prefixed with the repo name.
 	base: '/',
 	lastUpdated: true,
+	head: [['link', { rel: 'icon', type: 'image/svg+xml', href: '/favicon.svg' }]],
 	themeConfig: {
+		logo: '/icon.svg',
 		nav: [
 			{ text: 'Guide', link: '/guide/what-is-valmis' },
 			{ text: 'Integrations', link: '/integrations/' },
@@ -246,7 +248,7 @@ export default defineConfig({
 		},
 		outline: { level: [2, 3] },
 		footer: {
-			message: 'Valmis — the AI agent that talks to your apps.',
+			copyright: `© ${new Date().getFullYear()} Valmis · <a href="https://github.com/valmishq/valmis" target="_blank" rel="noopener noreferrer">GitHub</a>`,
 		},
 	},
 });

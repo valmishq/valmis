@@ -98,13 +98,9 @@
 		<Sidebar.Menu>
 			<Sidebar.MenuItem>
 				<Sidebar.MenuButton size="lg" class="pointer-events-none">
-					<div
-						class="flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground"
-					>
-						<BotIcon class="size-4" />
-					</div>
+					<img src="/valmis/icon.svg" alt="Valmis" class="size-6 shrink-0" />
 					<div class="flex flex-col gap-0.5 leading-none">
-						<span class="text-sm font-semibold">Valmis</span>
+						<span class="font-heading text-sm font-semibold">Valmis</span>
 						<span class="text-xs text-muted-foreground">Get work done</span>
 					</div>
 				</Sidebar.MenuButton>

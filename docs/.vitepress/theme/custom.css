@@ -1,0 +1,33 @@
+/**
+ * Brand palette — matches the Valmis app (apps/web/src/routes/layout.css).
+ * The app's primary is a burnt orange (oklch ~0.555 0.163 49); the values
+ * below map it onto VitePress's brand variables for light and dark themes.
+ * The hero gradient is drawn from the two oranges in the app icon
+ * (#d9772e light, #8f3a00 dark).
+ */
+
+:root {
+	--vp-c-brand-1: oklch(0.555 0.163 49); /* links / accents on light bg */
+	--vp-c-brand-2: oklch(0.62 0.17 52); /* hover */
+	--vp-c-brand-3: oklch(0.52 0.16 47); /* solid button bg (white text) */
+	--vp-c-brand-soft: oklch(0.62 0.17 52 / 0.14); /* badge / code-tag bg */
+
+	--vp-home-hero-name-color: transparent;
+	--vp-home-hero-name-background: linear-gradient(120deg, #d9772e 30%, #8f3a00);
+
+	--vp-home-hero-image-background-image: linear-gradient(
+		120deg,
+		oklch(0.62 0.17 52 / 0.3),
+		oklch(0.52 0.16 47 / 0.3)
+	);
+	--vp-home-hero-image-filter: blur(44px);
+}
+
+.dark {
+	--vp-c-brand-1: oklch(0.72 0.16 60); /* brighter orange on dark bg */
+	--vp-c-brand-2: oklch(0.78 0.17 62);
+	--vp-c-brand-3: oklch(0.55 0.16 50);
+	--vp-c-brand-soft: oklch(0.72 0.16 60 / 0.16);
+
+	--vp-home-hero-name-background: linear-gradient(120deg, #e8915a 30%, #d9772e);
+}
