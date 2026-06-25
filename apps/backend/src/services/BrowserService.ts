@@ -159,13 +159,15 @@ export class BrowserService {
 		this.configuredMode =
 			rawMode === 'container' || rawMode === 'local' ? (rawMode as 'container' | 'local') : 'auto';
 
-		this.image = process.env.BROWSER_IMAGE ?? 'ghcr.io/browserless/chromium:latest';
+		this.image = process.env.BROWSER_IMAGE ?? 'ghcr.io/valmishq/valmis-browser:latest';
 		// Dedicated browser network — kept separate from the agent runtime networks so
 		// agents can never reach the shared browser's debug port (cross-agent cookie
 		// theft guard). The backend must be attached to it (compose does this).
 		this.network = process.env.BROWSER_NETWORK ?? 'valmis_browser';
 		this.containerPort = parseInt(process.env.BROWSER_CONTAINER_PORT ?? '3000', 10);
-		this.connectMode = process.env.BROWSER_CONNECT_MODE === 'ws' ? 'ws' : 'cdp';
+		// Default 'ws' (Playwright protocol) to match the default valmis-browser image.
+		// browserless users set BROWSER_CONNECT_MODE=cdp explicitly.
+		this.connectMode = process.env.BROWSER_CONNECT_MODE === 'cdp' ? 'cdp' : 'ws';
 		this.wsEndpointOverride = process.env.BROWSER_WS_ENDPOINT || undefined;
 		this.token = process.env.BROWSER_TOKEN || undefined;
 		this.memoryLimitBytes =
