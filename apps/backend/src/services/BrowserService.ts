@@ -173,6 +173,8 @@ export class BrowserService {
 		this.navigationTimeoutMs = parseInt(process.env.BROWSER_NAVIGATION_TIMEOUT_MS ?? '30000', 10);
 		// Backend-only state dir — NEVER under AGENT_WORKSPACES_PATH (cookies must
 		// not be readable by the agent's file tools). Default: repo-root sibling.
+		// In docker-compose this points at the consolidated app-data volume
+		// (/opt/app-data/browser-state).
 		this.stateBasePath =
 			process.env.AGENT_BROWSER_STATE_PATH ?? resolve(process.cwd(), '../../.agent-browser-state');
 		this.workspacesBasePath =

@@ -7,6 +7,7 @@ import type { ChannelService } from '../../services/ChannelService.js';
 import type { AgentService } from '../../services/AgentService.js';
 import type { AgentSessionService } from '../../services/AgentSessionService.js';
 import type { MessagePipeline } from '../pipeline.js';
+import type { ChatFileService } from '../../services/ChatFileService.js';
 
 /**
  * TelegramPollerManager — manages all active Telegram polling loops.
@@ -32,6 +33,7 @@ export class TelegramPollerManager {
 		private readonly agentService: AgentService,
 		private readonly sessionService: AgentSessionService,
 		private readonly pipeline: MessagePipeline,
+		private readonly chatFileService: ChatFileService,
 	) {}
 
 	/**
@@ -126,6 +128,7 @@ export class TelegramPollerManager {
 				this.channelService,
 				this.agentService,
 				this.sessionService,
+				this.chatFileService,
 			);
 
 			const botApi = adapter.getBotApi();

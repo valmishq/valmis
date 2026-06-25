@@ -121,6 +121,13 @@ export type InboundContent =
 	| { type: 'document'; ref: string; mimeType: string; filename: string }
 	| { type: 'video'; ref: string; mimeType: string; durationMs?: number }
 	| { type: 'location'; latitude: number; longitude: number }
+	/**
+	 * A file already stored as a chat_files row (web uploads): the ref is the
+	 * chat_files id, not a local path. ContentProcessor resolves it to the stored
+	 * bytes / extracted text. Distinct from 'image'/'document' which carry a
+	 * freshly-downloaded local path from an external channel.
+	 */
+	| { type: 'file'; fileId: string }
 	/** Internal channel commands (e.g. /new, /agents) — handled before pipeline */
 	| { type: 'command'; command: string; args: string[] };
 

@@ -21,6 +21,7 @@ import type {
 	WorkflowSummary,
 	Workflow,
 	WorkflowSpec,
+	ChatFile,
 } from '@repo/types';
 
 // Per-call request timeouts. Without them, an unreachable backend (e.g. a runtime
@@ -519,6 +520,28 @@ export class ProxyClient {
 		};
 		if (!json.success || !json.data) {
 			throw new Error(`Browser action failed: ${json.error ?? 'unknown error'}`);
+		}
+		return json.data;
+	}
+
+	// ─── Files ────────────────────────────────────────────────────────────────
+
+	/**
+	 * Share a file from the agent workspace back to the user. The host copies the
+	 * file from the workspace into the chat-files store, links it to the current
+	 * message, and pushes it to the chat UI. Returns the persisted ChatFile.
+	 */
+	async shareFile(path: string): Promise<ChatFile> {
+		const res = await fetch(`${this.baseUrl}/v1/runtime/internal/files/share`, {
+			method: 'POST',
+			headers: this.authHeaders(),
+			body: JSON.stringify({ path }),
+			signal: AbortSignal.timeout(CONTROL_TIMEOUT_MS),
+		});
+
+		const json = (await res.json()) as { success: boolean; data?: ChatFile; error?: string };
+		if (!json.success || !json.data) {
+			throw new Error(`Share file failed: ${json.error ?? 'unknown error'}`);
 		}
 		return json.data;
 	}

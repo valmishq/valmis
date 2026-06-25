@@ -18,6 +18,7 @@ import { LlmProviderService } from './LlmProviderService.js';
 import { CredentialService } from './CredentialService.js';
 import { SkillMaterializerService } from './SkillMaterializerService.js';
 import { KnowledgeBaseService } from './KnowledgeBaseService.js';
+import { ChatFileService } from './ChatFileService.js';
 import { WorkflowRunService } from './WorkflowRunService.js';
 import { BrowserService } from './BrowserService.js';
 import { agentStreamBus } from './AgentStreamBus.js';
@@ -188,6 +189,7 @@ export class AgentRuntimeService {
 		private readonly knowledgeBaseService: KnowledgeBaseService,
 		private readonly workflowRunService: WorkflowRunService,
 		private readonly browserService: BrowserService,
+		private readonly chatFileService: ChatFileService,
 	) {
 		// Workspaces base: repo root sibling directory by default.
 		// process.cwd() is apps/backend/ so we go up two levels to reach the monorepo root.
@@ -196,6 +198,19 @@ export class AgentRuntimeService {
 		this.runTimeoutMs = parseInt(process.env.AGENT_RUNTIME_TIMEOUT_MS ?? '2400000', 10);
 		this.maxConcurrent = parseInt(process.env.AGENT_RUNTIME_MAX_CONCURRENT ?? '20', 10);
 		this.maxEnvConfigBytes = parseInt(process.env.AGENT_RUNTIME_MAX_ENV_CONFIG_BYTES ?? '8192', 10);
+	}
+
+	/**
+	 * Resolve the backend-side workspace path for an agent. Used by the share_file
+	 * endpoint to read a file the agent produced. Guards against path escape via a
+	 * malformed agentId.
+	 */
+	getWorkspacePath(agentId: string): string {
+		const workspacePath = join(this.workspacesBasePath, agentId);
+		if (!workspacePath.startsWith(this.workspacesBasePath)) {
+			throw new Error(`Invalid agentId — workspace path escapes base: ${agentId}`);
+		}
+		return workspacePath;
 	}
 
 	/** Validate driver configuration and reap orphaned runs. Call once at backend startup. */
@@ -350,6 +365,13 @@ export class AgentRuntimeService {
 		// Materialize assigned skills into <workspace>/skills/ (rewritten fresh
 		// every spawn) and get the compact index for the system prompt.
 		const skills = await this.skillMaterializer.materializeForAgent(agentId, workspacePath);
+
+		// Copy this thread's uploaded files into <workspace>/uploads/ so the agent
+		// can read/parse the raw bytes with its file tools. Best-effort — a copy
+		// failure is logged inside and never fails the turn. Chat threads only.
+		if (triggerType === 'chat') {
+			await this.chatFileService.materializeThreadFiles(threadId, ownerId, workspacePath);
+		}
 
 		// Build the runtime config (no secrets) for the runtime.
 		const runtimeConfig = await this.buildRuntimeConfig(

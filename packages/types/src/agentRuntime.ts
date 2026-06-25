@@ -1,5 +1,6 @@
 import type { ApiResponse } from './api.js';
 import type { SkillRuntimeEntry } from './skill.js';
+import type { ChatFile } from './chatFile.js';
 import type { Workflow, WorkflowTriggerContext } from './workflow.js';
 
 // ─── Enum mirrors (TypeScript unions matching the pgEnum values) ──────────────
@@ -507,6 +508,13 @@ export type AgentStreamEvent =
 			result: string;
 			images?: { data: string; mimeType: string }[];
 	  }
+	/**
+	 * Emitted when the agent shares a file back to the user via the share_file
+	 * tool. Carries the persisted ChatFile metadata so the chat UI can render the
+	 * attachment live (image inline / chip → preview sidebar) under the message
+	 * identified by `file.messageId`. Bytes are fetched via the file serving route.
+	 */
+	| { type: 'file_shared'; file: ChatFile }
 	| { type: 'message_end'; messageId: string; usage?: MessageTokenUsage }
 	/**
 	 * Emitted when the agent invokes the ask_human tool.
@@ -534,6 +542,13 @@ export interface CreateThreadRequestBody {
 export interface SendMessageRequestBody {
 	ownerId: string;
 	content: string; // plain text; backend wraps in ContentBlock[]
+	/**
+	 * IDs of chat_files previously uploaded to this thread (via the file upload
+	 * route) to attach to this message. The backend resolves each to a stored
+	 * file, injects its content into the prompt (image block / extracted text),
+	 * and links it to the persisted user message.
+	 */
+	fileIds?: string[];
 }
 
 /** POST /v1/runtime/:agentId/triggers — create a trigger */

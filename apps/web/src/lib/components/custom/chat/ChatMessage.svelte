@@ -5,9 +5,10 @@
 	import ToolCallIndicator from './ToolCallIndicator.svelte';
 	import MarkdownRenderer from './MarkdownRenderer.svelte';
 	import ImageBlock from './ImageBlock.svelte';
+	import ChatAttachment from './ChatAttachment.svelte';
 	import { TOOL_ICON_MAP, DEFAULT_TOOL_ICON } from './tool-icon-map.js';
 	import SparklesIcon from '@lucide/svelte/icons/sparkles';
-	import type { AgentMessage, ContentBlock } from '@repo/types';
+	import type { AgentMessage, ChatFile, ContentBlock } from '@repo/types';
 
 	/** Shape of one entry in credentialMetaMap */
 	interface CredentialMeta {
@@ -42,7 +43,14 @@
 		 * integrationName: human-readable name (e.g. "GitHub", "Slack").
 		 * Used to display the integration icon and name in call_api tool indicators.
 		 */
-		credentialMetaMap = {}
+		credentialMetaMap = {},
+		/** Chat files attached to this message (user uploads + agent-shared files). */
+		attachments = [],
+		/** Agent + thread ids — needed to fetch attachment bytes via the api client. */
+		agentId,
+		threadId,
+		/** Open a file in the preview sidebar. */
+		onOpenFile
 	}: {
 		message: AgentMessage;
 		agentName: string;
@@ -53,6 +61,10 @@
 		toolResultImages?: Record<string, { data: string; mimeType: string }[]>;
 		toolCallArgs?: Record<string, { toolName: string; argsJson: string }>;
 		credentialMetaMap?: Record<string, CredentialMeta>;
+		attachments?: ChatFile[];
+		agentId: string;
+		threadId: string;
+		onOpenFile: (file: ChatFile) => void;
 	} = $props();
 
 	let isUser = $derived(message.role === 'user');
@@ -230,12 +242,21 @@
 						</span>
 					</div>
 				{/if}
-			{:else}
+			{:else if combinedText}
 				<!-- User message bubble — wrap-break-word prevents long URLs from overflowing -->
 				<div class="rounded-2xl rounded-tr-sm bg-primary px-4 py-2.5 text-sm leading-relaxed">
 					<p class="font-serif wrap-break-word whitespace-pre-wrap text-primary-foreground">
 						{combinedText}
 					</p>
+				</div>
+			{/if}
+
+			<!-- Attachments (user uploads + agent-shared files) -->
+			{#if attachments.length > 0}
+				<div class="flex flex-wrap gap-2 {isUser ? 'justify-end' : 'justify-start'}">
+					{#each attachments as file (file.id)}
+						<ChatAttachment {file} {agentId} {threadId} onOpen={onOpenFile} />
+					{/each}
 				</div>
 			{/if}
 

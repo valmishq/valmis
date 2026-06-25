@@ -75,10 +75,23 @@ export class AgentLlmProxyService {
 			role: 'assistant',
 		});
 
-		// Build pi-ai context
+		// Build pi-ai context. Defensive sanitize: pi-ai only understands text /
+		// thinking / toolCall / image content blocks. We never persist any other
+		// block type, but strip unknown ones here so a future display-only block
+		// can never reach a provider and break the request.
+		const ALLOWED_BLOCK_TYPES = new Set(['text', 'thinking', 'toolCall', 'image']);
+		const sanitizedMessages = (request.messages as Array<{ content?: unknown }>).map((m) => {
+			if (!Array.isArray(m.content)) return m;
+			const filtered = (m.content as Array<{ type?: string }>).filter(
+				(b) => b && ALLOWED_BLOCK_TYPES.has(b.type as string),
+			);
+			// Keep the original content if filtering would empty an otherwise-valid message.
+			return filtered.length > 0 ? { ...m, content: filtered } : m;
+		});
+
 		const context = {
 			systemPrompt: request.systemPrompt,
-			messages: request.messages as Parameters<typeof stream>[1]['messages'],
+			messages: sanitizedMessages as Parameters<typeof stream>[1]['messages'],
 			tools: (request.tools as Parameters<typeof stream>[1]['tools']) ?? [],
 		};
 

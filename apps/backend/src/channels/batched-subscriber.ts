@@ -1,4 +1,4 @@
-import type { AgentStreamEvent, ChannelStreamSubscriber } from '@repo/types';
+import type { AgentStreamEvent, ChannelStreamSubscriber, ChatFile } from '@repo/types';
 import { logger } from '../config/logger.js';
 
 /**
@@ -19,11 +19,18 @@ export interface BatchedDelivery {
 	sendNotice(text: string): Promise<void>;
 	/** Send a HITL prompt, rendering options as native interactive buttons when present. */
 	sendHitl(prompt: string, options: string[]): Promise<void>;
+	/** Send a file the agent shared. The adapter chooses photo vs document by file.kind. */
+	sendFile(file: ChatFile, bytes: Buffer): Promise<void>;
 }
 
 export interface BatchedSubscriberOptions {
 	/** Emit "🔧 Using {tool}…" notices while the agent runs tools. */
 	notifyToolUsage?: boolean;
+	/**
+	 * Load the bytes for an agent-shared file (keeps this channel-agnostic module
+	 * decoupled from ChatFileService). Required for file_shared delivery.
+	 */
+	loadBytes?: (file: ChatFile) => Promise<Buffer>;
 }
 
 /**
@@ -111,6 +118,23 @@ export function createBatchedSubscriber(
 						.catch((err: unknown) =>
 							logger.warn({ err, channel: delivery.channel }, '[channel] HITL prompt failed'),
 						);
+					break;
+
+				case 'file_shared':
+					// Flush any buffered text first so it precedes the file, then send it.
+					// A failed file send must never break the turn.
+					await flush();
+					if (options.loadBytes) {
+						try {
+							const bytes = await options.loadBytes(event.file);
+							await delivery.sendFile(event.file, bytes);
+						} catch (err) {
+							logger.warn(
+								{ err, channel: delivery.channel, fileId: event.file.id },
+								'[channel] file send failed',
+							);
+						}
+					}
 					break;
 
 				case 'message_end':

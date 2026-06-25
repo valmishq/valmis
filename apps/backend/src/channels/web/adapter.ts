@@ -35,12 +35,21 @@ export class WebAdapter implements ChannelAdapter {
 		const body = context.rawBody as {
 			content?: string;
 			userDatetime?: string;
+			fileIds?: string[];
 		};
 
-		if (!body.content) return null;
+		const fileIds = Array.isArray(body.fileIds) ? body.fileIds : [];
+		const hasText = typeof body.content === 'string' && body.content.length > 0;
+
+		// A message must carry text and/or at least one attachment.
+		if (!hasText && fileIds.length === 0) return null;
 
 		const { agentId, threadId } = context.params;
 		const userId = context.params.userId; // set by the route handler
+
+		const content: InboundMessage['content'] = [];
+		if (hasText) content.push({ type: 'text', text: body.content as string });
+		for (const fileId of fileIds) content.push({ type: 'file', fileId });
 
 		return {
 			channel: 'web',
@@ -48,7 +57,7 @@ export class WebAdapter implements ChannelAdapter {
 			userId,
 			agentId,
 			threadId,
-			content: [{ type: 'text', text: body.content }],
+			content,
 			userDatetime: body.userDatetime,
 		};
 	}

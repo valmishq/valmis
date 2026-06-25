@@ -23,3 +23,4 @@ export * from './channelLinks.js';
 export * from './channelPairingCodes.js';
 export * from './knowledgeFiles.js';
 export * from './agentKnowledgeFiles.js';
+export * from './chatFiles.js';

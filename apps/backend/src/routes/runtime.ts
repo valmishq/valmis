@@ -1,8 +1,16 @@
 import { Router } from 'express';
 import express from 'express';
+import multer from 'multer';
 import type { Request, Response } from 'express';
 import { requireAuth } from '../middleware/auth.js';
 import { AgentSessionService } from '../services/AgentSessionService.js';
+import {
+	ChatFileService,
+	MAX_CHAT_FILE_BYTES,
+	MAX_CHAT_FILES_PER_REQUEST,
+	resolveServeMimeType,
+	type ChatUploadInput,
+} from '../services/ChatFileService.js';
 import { AgentRuntimeService } from '../services/AgentRuntimeService.js';
 import { AgentProxyService } from '../services/AgentProxyService.js';
 import { AgentLlmProxyService } from '../services/AgentLlmProxyService.js';
@@ -43,6 +51,9 @@ import type {
 	WorkflowTriggerContext,
 	WorkflowSpec,
 	WorkflowStep,
+	ChatFileUploadResponse,
+	ChatFilesListResponse,
+	ChatFileDeleteResponse,
 } from '@repo/types';
 
 /**
@@ -113,9 +124,17 @@ export function createRuntimeRouter(
 	webAdapter: WebAdapter,
 	skillService: SkillService,
 	browserService: BrowserService,
+	chatFileService: ChatFileService,
 ): Router {
 	const router = Router();
 	const auth = requireAuth(authService);
+
+	// In-memory multipart parsing for chat file uploads (bytes are written to the
+	// host volume by ChatFileService, not by multer). Same pattern as knowledge.ts.
+	const upload = multer({
+		storage: multer.memoryStorage(),
+		limits: { fileSize: MAX_CHAT_FILE_BYTES, files: MAX_CHAT_FILES_PER_REQUEST },
+	});
 
 	// ─────────────────────────────────────────────────────────────────────────
 	// Sandbox-internal routes — PROXY_TOKEN auth (must be declared before :agentId routes)
@@ -142,6 +161,13 @@ export function createRuntimeRouter(
 			res.status(401).json({ success: false, error: 'Invalid or expired PROXY_TOKEN' });
 		}
 	});
+
+	// Body parser for sandbox-internal routes — exempted from the global 10mb parser
+	// (see index.ts) because LLM stream requests and persisted tool/image results can
+	// carry base64 image content blocks (chat uploads, browser screenshots) far larger
+	// than 10mb. PROXY_TOKEN-gated, so not browser-reachable. Configurable via env.
+	const INTERNAL_BODY_LIMIT = process.env.RUNTIME_INTERNAL_BODY_LIMIT ?? '64mb';
+	router.use('/internal', express.json({ limit: INTERNAL_BODY_LIMIT }));
 
 	/**
 	 * GET /v1/runtime/internal/config
@@ -180,6 +206,41 @@ export function createRuntimeRouter(
 		}
 
 		const messages = await sessionService.listMessagesInternal(threadId);
+
+		// Inject file attachments into user messages FOR THE AGENT ONLY. These blocks
+		// (image content + extracted document text + workspace-path notes) are
+		// system-generated and deliberately absent from the persisted/displayed
+		// message, so they never appear in the user's chat bubble — they are added
+		// here, in-memory, only on the history the runtime loads.
+		try {
+			const files = await chatFileService.listForThread(threadId, sandboxToken.ownerId);
+			const uploads = files.filter((f) => f.source === 'user_upload' && f.messageId);
+			if (uploads.length > 0) {
+				const visionCapable = await chatFileService.agentSupportsVision(
+					sandboxToken.agentId,
+					sandboxToken.ownerId,
+				);
+				const byMessage = new Map<string, typeof uploads>();
+				for (const f of uploads) {
+					const arr = byMessage.get(f.messageId as string) ?? [];
+					arr.push(f);
+					byMessage.set(f.messageId as string, arr);
+				}
+				for (const msg of messages) {
+					const msgFiles = byMessage.get(msg.id);
+					if (!msgFiles) continue;
+					for (const f of msgFiles) {
+						msg.content.push(...chatFileService.buildPromptBlocks(f, visionCapable));
+					}
+				}
+			}
+		} catch (err) {
+			logger.warn(
+				{ err, threadId },
+				'[runtime] failed to inject file attachments into history — continuing without',
+			);
+		}
+
 		res.json({ success: true, data: messages });
 	});
 
@@ -189,13 +250,11 @@ export function createRuntimeRouter(
 	 * Only 'tool_result' role is accepted — other roles are rejected to prevent
 	 * the sandbox from injecting user or assistant messages into history.
 	 *
-	 * A higher JSON body limit (10 MB) is applied here because tool results can
-	 * include large API response bodies (e.g. a Google Sheets export). The global
-	 * 1 MB limit in index.ts is intentionally kept tight for all other routes.
+	 * Body parsing uses the large internal-router limit (see the '/internal' json
+	 * middleware above) so tool results with large bodies or image blocks fit.
 	 */
 	router.post(
 		'/internal/thread/:threadId/messages',
-		express.json({ limit: '10mb' }),
 		async (req: Request, res: Response) => {
 			const { threadId } = req.params as { threadId: string };
 			const sandboxToken = (req as Request & { sandboxToken: SandboxTokenPayload }).sandboxToken;
@@ -388,6 +447,51 @@ export function createRuntimeRouter(
 			logger.warn(
 				{ err, agentId: sandboxToken.agentId, threadId: sandboxToken.threadId },
 				'[runtime] browser action failed',
+			);
+			res.status(400).json({ success: false, error: message });
+		}
+	});
+
+	/**
+	 * POST /v1/runtime/internal/files/share
+	 * Agent shares a file from its workspace back to the user. The host reads the
+	 * file from the agent's workspace (mounted backend-side), copies it into the
+	 * chat-files host volume, links it to the most recent message, and emits a
+	 * `file_shared` SSE event so the chat renders it live. agentId/ownerId/threadId
+	 * come from the verified PROXY_TOKEN — never from the body.
+	 */
+	router.post('/internal/files/share', async (req: Request, res: Response) => {
+		const sandboxToken = (req as Request & { sandboxToken: SandboxTokenPayload }).sandboxToken;
+		const { path: relPath } = req.body as { path?: string };
+
+		if (!relPath || typeof relPath !== 'string') {
+			res.status(400).json({ success: false, error: 'path is required' });
+			return;
+		}
+
+		try {
+			const workspacePath = runtimeService.getWorkspacePath(sandboxToken.agentId);
+			// Link to the latest ASSISTANT message so the attachment renders under the
+			// agent's bubble (a later tool_result in the same turn would not render).
+			const messageId = await sessionService.getLatestMessageId(
+				sandboxToken.threadId,
+				'assistant',
+			);
+			const file = await chatFileService.registerAgentOutput({
+				agentId: sandboxToken.agentId,
+				ownerId: sandboxToken.ownerId,
+				threadId: sandboxToken.threadId,
+				messageId,
+				workspacePath,
+				relPath,
+			});
+			agentStreamBus.emit(sandboxToken.threadId, { type: 'file_shared', file });
+			res.status(201).json({ success: true, data: file });
+		} catch (err) {
+			const message = err instanceof Error ? err.message : 'Failed to share file';
+			logger.warn(
+				{ err, agentId: sandboxToken.agentId, threadId: sandboxToken.threadId },
+				'[runtime] share file failed',
 			);
 			res.status(400).json({ success: false, error: message });
 		}
@@ -675,6 +779,182 @@ export function createRuntimeRouter(
 			res.status(500).json({ success: false, error: 'Failed to get messages' });
 		}
 	});
+
+	// ─── Chat file routes ─────────────────────────────────────────────────────
+
+	/**
+	 * Verify a thread belongs to the authenticated owner and the requested agent.
+	 * Returns true when ok; otherwise writes a 404 and returns false.
+	 */
+	const verifyThread = async (
+		agentId: string,
+		threadId: string,
+		ownerId: string,
+		res: Response,
+	): Promise<boolean> => {
+		const thread = await sessionService.getThreadById(threadId, ownerId);
+		if (!thread || thread.agentId !== agentId) {
+			res.status(404).json({ success: false, error: 'Thread not found' });
+			return false;
+		}
+		return true;
+	};
+
+	/**
+	 * POST /v1/runtime/:agentId/threads/:threadId/files
+	 * Multipart upload (field name: files) of attachments for a thread. Image
+	 * uploads are rejected when the agent's model has no vision capability.
+	 * Returns the created rows; document text extraction runs in the background.
+	 */
+	router.post('/:agentId/threads/:threadId/files', auth, (req: Request, res: Response) => {
+		const { agentId, threadId } = req.params as { agentId: string; threadId: string };
+		const ownerId = req.user?.sub;
+		if (!ownerId) {
+			res.status(401).json({ success: false, error: 'Unauthorized' });
+			return;
+		}
+
+		upload.array('files', MAX_CHAT_FILES_PER_REQUEST)(req, res, async (err?: unknown) => {
+			if (err) {
+				const message =
+					err instanceof multer.MulterError && err.code === 'LIMIT_FILE_SIZE'
+						? `File exceeds the ${MAX_CHAT_FILE_BYTES / (1024 * 1024)}MB limit.`
+						: err instanceof Error
+							? err.message
+							: 'Upload failed.';
+				res.status(400).json({ success: false, error: message });
+				return;
+			}
+
+			if (!(await verifyThread(agentId, threadId, ownerId, res))) return;
+
+			const files = (req.files ?? []) as Express.Multer.File[];
+			if (files.length === 0) {
+				res.status(400).json({ success: false, error: 'No files uploaded.' });
+				return;
+			}
+
+			const uploads: ChatUploadInput[] = files.map((file) => ({
+				// Multer decodes the original name as latin1 — re-decode as UTF-8.
+				name: Buffer.from(file.originalname, 'latin1').toString('utf8'),
+				mimeType: file.mimetype,
+				sizeBytes: file.size,
+				data: file.buffer,
+			}));
+
+			try {
+				const created = await chatFileService.saveUploads(agentId, ownerId, threadId, uploads);
+				const body: ChatFileUploadResponse = { success: true, data: created };
+				res.status(201).json(body);
+			} catch (uploadErr) {
+				const message = uploadErr instanceof Error ? uploadErr.message : 'Upload failed.';
+				res.status(400).json({ success: false, error: message });
+			}
+		});
+	});
+
+	/**
+	 * GET /v1/runtime/:agentId/threads/:threadId/files
+	 * List a thread's files (uploads + agent-shared), oldest first.
+	 */
+	router.get('/:agentId/threads/:threadId/files', auth, async (req: Request, res: Response) => {
+		const { agentId, threadId } = req.params as { agentId: string; threadId: string };
+		const ownerId = req.user?.sub;
+		if (!ownerId) {
+			res.status(401).json({ success: false, error: 'Unauthorized' });
+			return;
+		}
+		if (!(await verifyThread(agentId, threadId, ownerId, res))) return;
+
+		const files = await chatFileService.listForThread(threadId, ownerId);
+		const body: ChatFilesListResponse = { success: true, data: files };
+		res.json(body);
+	});
+
+	/**
+	 * GET /v1/runtime/:agentId/threads/:threadId/files/:fileId
+	 * Stream a file's bytes. Inline by default (images render in-page, PDFs preview);
+	 * pass ?download=1 for an attachment download.
+	 */
+	router.get(
+		'/:agentId/threads/:threadId/files/:fileId',
+		auth,
+		async (req: Request, res: Response) => {
+			const { agentId, threadId, fileId } = req.params as {
+				agentId: string;
+				threadId: string;
+				fileId: string;
+			};
+			const ownerId = req.user?.sub;
+			if (!ownerId) {
+				res.status(401).json({ success: false, error: 'Unauthorized' });
+				return;
+			}
+			if (!(await verifyThread(agentId, threadId, ownerId, res))) return;
+
+			const file = await chatFileService.getForOwner(fileId, ownerId);
+			if (!file || file.threadId !== threadId) {
+				res.status(404).json({ success: false, error: 'File not found' });
+				return;
+			}
+
+			try {
+				const bytes = chatFileService.readBytes(file);
+				// Re-derive a specific Content-Type when the stored one is generic, so
+				// PDFs/images preview inline instead of triggering a download.
+				const serveMime = resolveServeMimeType(file.name, file.mimeType);
+				// Never render user/agent-controlled HTML inline (stored-XSS guard) — force
+				// a download for it regardless of the inline default. Other types preview
+				// inline unless ?download=1 was requested.
+				const forceAttachment = serveMime === 'text/html';
+				const disposition =
+					req.query.download === '1' || forceAttachment ? 'attachment' : 'inline';
+				res.setHeader('Content-Type', serveMime);
+				// Stop the browser from MIME-sniffing the bytes into an executable type.
+				res.setHeader('X-Content-Type-Options', 'nosniff');
+				res.setHeader(
+					'Content-Disposition',
+					`${disposition}; filename="${encodeURIComponent(file.name)}"`,
+				);
+				res.setHeader('Cache-Control', 'private, max-age=3600');
+				res.send(bytes);
+			} catch (err) {
+				logger.error({ err, fileId }, '[runtime] failed to serve chat file');
+				res.status(404).json({ success: false, error: 'File not found' });
+			}
+		},
+	);
+
+	/**
+	 * DELETE /v1/runtime/:agentId/threads/:threadId/files/:fileId
+	 * Delete a chat file (row + bytes + extracted-text sidecar).
+	 */
+	router.delete(
+		'/:agentId/threads/:threadId/files/:fileId',
+		auth,
+		async (req: Request, res: Response) => {
+			const { agentId, threadId, fileId } = req.params as {
+				agentId: string;
+				threadId: string;
+				fileId: string;
+			};
+			const ownerId = req.user?.sub;
+			if (!ownerId) {
+				res.status(401).json({ success: false, error: 'Unauthorized' });
+				return;
+			}
+			if (!(await verifyThread(agentId, threadId, ownerId, res))) return;
+
+			const file = await chatFileService.getForOwner(fileId, ownerId);
+			if (!file || file.threadId !== threadId) {
+				res.status(404).json({ success: false, error: 'File not found' });
+				return;
+			}
+			const deleted = await chatFileService.delete(fileId, ownerId);
+			const body: ChatFileDeleteResponse = { success: true, data: { deleted } };
+			res.json(body);
+		},
+	);
 
 	/**
 	 * GET /v1/runtime/:agentId/threads/:threadId/stream

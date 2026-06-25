@@ -44,6 +44,7 @@ import { AgentProxyService } from './services/AgentProxyService.js';
 import { AgentLlmProxyService } from './services/AgentLlmProxyService.js';
 import { AgentRuntimeService } from './services/AgentRuntimeService.js';
 import { BrowserService } from './services/BrowserService.js';
+import { ChatFileService } from './services/ChatFileService.js';
 import { ProcessDriver } from './services/runtime/ProcessDriver.js';
 import { DockerDriver } from './services/runtime/DockerDriver.js';
 import type { ExecutionDriver } from './services/runtime/ExecutionDriver.js';
@@ -138,6 +139,8 @@ const workflowRunService = new WorkflowRunService();
 // Passed into runtimeService so turn-end (onClose) can close the browser context
 // and persist its storageState; passed into the runtime router for /internal/browser.
 const browserService = new BrowserService(agentService);
+// Chat file uploads + agent-shared files (bytes on the backend-owned host volume).
+const chatFileService = new ChatFileService(agentService, llmProviderService);
 const runtimeService = new AgentRuntimeService(
 	executionDriver,
 	sessionService,
@@ -149,6 +152,7 @@ const runtimeService = new AgentRuntimeService(
 	knowledgeBaseService,
 	workflowRunService,
 	browserService,
+	chatFileService,
 );
 
 // --- Instantiate channel services ---
@@ -167,6 +171,7 @@ const messagePipeline = new MessagePipeline(
 	llmProxyService,
 	agentService,
 	contentProcessor,
+	chatFileService,
 );
 
 // TelegramPollerManager — starts long-polling loops for all active bot credentials.
@@ -178,6 +183,7 @@ const telegramPollerManager = new TelegramPollerManager(
 	agentService,
 	sessionService,
 	messagePipeline,
+	chatFileService,
 );
 
 // DiscordGatewayManager — starts Gateway WebSocket connections for all active bot credentials.
@@ -188,6 +194,7 @@ const discordGatewayManager = new DiscordGatewayManager(
 	agentService,
 	sessionService,
 	messagePipeline,
+	chatFileService,
 );
 
 // --- Instantiate workflow services ---
@@ -230,7 +237,16 @@ app.use(corsMiddleware);
 // frequency (this replaces the old /v1/webhooks/ rate-limiter exclusion).
 app.use('/v1/webhooks', createWebhooksRouter(triggerService, appTriggerManager));
 
-app.use(express.json({ limit: '10mb' }));
+// Global JSON parser (10mb) for browser-facing routes. Sandbox-internal routes
+// (/v1/runtime/internal/*) are EXEMPTED here and parse their own body with a much
+// larger limit in the runtime router — an LLM stream request can carry image
+// content blocks (base64 uploads) that exceed 10mb. They are PROXY_TOKEN-gated and
+// only called by agent runtimes, so the larger limit is not browser-reachable.
+const globalJsonParser = express.json({ limit: '10mb' });
+app.use((req, res, next) => {
+	if (req.path.startsWith('/v1/runtime/internal/')) return next();
+	return globalJsonParser(req, res, next);
+});
 app.use(express.urlencoded({ extended: true }));
 
 // Rate limiter — applied globally with public endpoint exclusions
@@ -325,6 +341,7 @@ app.use(
 		webAdapter,
 		skillService,
 		browserService,
+		chatFileService,
 	),
 );
 

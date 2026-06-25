@@ -72,7 +72,13 @@ export const CHANNEL_COMMANDS: Array<{
 	{
 		command: 'use',
 		description: 'Switch to a different agent',
-		options: [{ name: 'agent', description: 'Name of the agent to switch to', required: true }],
+		options: [
+			{
+				name: 'agent',
+				description: 'Number from /agents, or the agent name',
+				required: true,
+			},
+		],
 	},
 	{ command: 'new', description: 'Start a new conversation session' },
 	{ command: 'sessions', description: 'List recent sessions for the active agent' },
@@ -184,7 +190,7 @@ async function cmdHelp(ctx: ChannelCommandContext): Promise<void> {
 		'Available commands:\n\n' +
 			'/pair <CODE> — Link your account with a pairing code from the web app\n' +
 			'/agents — List your available agents\n' +
-			'/use <name> — Switch to a different agent\n' +
+			'/use <number or name> — Switch to a different agent\n' +
 			'/new — Start a new conversation session\n' +
 			'/sessions — List recent sessions for the active agent\n' +
 			'/session <number> — Switch to a previous session\n' +
@@ -294,7 +300,7 @@ async function cmdAgents(ctx: ChannelCommandContext): Promise<void> {
 			.map((a, i) => `${i + 1}. ${a.id === link.agentId ? '✅ ' : ''}${a.name}`)
 			.join('\n');
 
-		await ctx.sendReply(`Your agents:\n\n${list}\n\nUse /use <name> to switch.`);
+		await ctx.sendReply(`Your agents:\n\n${list}\n\nUse /use <number or name> to switch.`);
 	} catch (err) {
 		logger.error({ err }, '[channel-commands] /agents failed');
 		await ctx.sendReply('❌ Failed to list agents.');
@@ -308,23 +314,36 @@ async function cmdUse(args: string[], ctx: ChannelCommandContext): Promise<void>
 		return;
 	}
 
-	const name = args.join(' ').trim();
-	if (!name) {
-		await ctx.sendReply('Usage: /use <agent name>');
+	const query = args.join(' ').trim();
+	if (!query) {
+		await ctx.sendReply('Usage: /use <number or agent name>\n\nUse /agents to see the list.');
 		return;
 	}
 
 	try {
+		// Same ordering as /agents, so the numbers shown there stay addressable.
 		const agents = await ctx.agentService.listByOwner(link.userId);
-		const agent = agents.find(
-			(a) =>
-				a.name.toLowerCase() === name.toLowerCase() ||
-				a.name.toLowerCase().includes(name.toLowerCase()),
-		);
 
-		if (!agent) {
-			await ctx.sendReply(`❌ No agent found matching "${name}". Use /agents to see your agents.`);
-			return;
+		let agent;
+		if (/^\d+$/.test(query)) {
+			// Numeric → index into the /agents list (1-based).
+			const idx = parseInt(query, 10);
+			agent = agents[idx - 1];
+			if (!agent) {
+				await ctx.sendReply(`❌ No agent #${idx} found. Use /agents to see your agents.`);
+				return;
+			}
+		} else {
+			// Otherwise match by name (exact, then partial).
+			agent =
+				agents.find((a) => a.name.toLowerCase() === query.toLowerCase()) ??
+				agents.find((a) => a.name.toLowerCase().includes(query.toLowerCase()));
+			if (!agent) {
+				await ctx.sendReply(
+					`❌ No agent found matching "${query}". Use /agents to see your agents.`,
+				);
+				return;
+			}
 		}
 
 		// Switch agent + start a new thread

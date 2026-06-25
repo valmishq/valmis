@@ -309,6 +309,28 @@ export class AgentSessionService {
 		return rows.map(rowToMessage);
 	}
 
+	/**
+	 * Return the id of the most recently created message in a thread, optionally
+	 * filtered by role, or null if none. Used to link an agent-shared file to the
+	 * assistant message the agent was producing when it called share_file —
+	 * filtering by role avoids linking to a tool_result from an earlier tool in the
+	 * same assistant turn (which the chat UI does not render). No ownership check —
+	 * callers (the sandbox share endpoint) are already scoped by PROXY_TOKEN.
+	 */
+	async getLatestMessageId(threadId: string, role?: AgentMessageRole): Promise<string | null> {
+		const rows = await db
+			.select({ id: agentMessages.id })
+			.from(agentMessages)
+			.where(
+				role
+					? and(eq(agentMessages.threadId, threadId), eq(agentMessages.role, role))
+					: eq(agentMessages.threadId, threadId),
+			)
+			.orderBy(desc(agentMessages.createdAt))
+			.limit(1);
+		return rows[0]?.id ?? null;
+	}
+
 	// ─── Observability ────────────────────────────────────────────────────
 
 	/**

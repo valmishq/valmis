@@ -6,6 +6,8 @@
  * Error handling: throws on non-OK HTTP responses. Callers should catch.
  */
 
+import { fetchCapped } from '../download.js';
+
 /** Telegram User object (partial) */
 export interface TgUser {
 	id: number;
@@ -82,9 +84,11 @@ interface BotApiResponse<T> {
 
 export class TelegramBotApi {
 	private readonly baseUrl: string;
+	private readonly fileBaseUrl: string;
 
 	constructor(private readonly botToken: string) {
 		this.baseUrl = `https://api.telegram.org/bot${botToken}`;
+		this.fileBaseUrl = `https://api.telegram.org/file/bot${botToken}`;
 	}
 
 	/** Low-level POST call to any Bot API method */
@@ -101,6 +105,19 @@ export class TelegramBotApi {
 			throw new Error(`Telegram API error [${method}]: ${json.description ?? 'Unknown error'}`);
 		}
 
+		return json.result as T;
+	}
+
+	/**
+	 * Low-level multipart/form-data POST — used for media uploads (sendPhoto /
+	 * sendDocument), which Telegram only accepts as form data, not JSON.
+	 */
+	private async callMultipart<T>(method: string, form: FormData): Promise<T> {
+		const res = await fetch(`${this.baseUrl}/${method}`, { method: 'POST', body: form });
+		const json = (await res.json()) as BotApiResponse<T>;
+		if (!json.ok) {
+			throw new Error(`Telegram API error [${method}]: ${json.description ?? 'Unknown error'}`);
+		}
 		return json.result as T;
 	}
 
@@ -144,6 +161,54 @@ export class TelegramBotApi {
 			chat_id: chatId,
 			text,
 			...opts,
+		});
+	}
+
+	/** Send a photo (rendered inline in the chat). Bytes uploaded as multipart. */
+	async sendPhoto(
+		chatId: number | string,
+		bytes: Buffer,
+		filename: string,
+		caption?: string,
+	): Promise<TgMessage> {
+		const form = new FormData();
+		form.append('chat_id', String(chatId));
+		if (caption) form.append('caption', caption);
+		form.append('photo', new Blob([new Uint8Array(bytes)]), filename);
+		return this.callMultipart<TgMessage>('sendPhoto', form);
+	}
+
+	/** Send a document (any file, downloadable). Bytes uploaded as multipart. */
+	async sendDocument(
+		chatId: number | string,
+		bytes: Buffer,
+		filename: string,
+		caption?: string,
+		mimeType?: string,
+	): Promise<TgMessage> {
+		const form = new FormData();
+		form.append('chat_id', String(chatId));
+		if (caption) form.append('caption', caption);
+		const blob = mimeType
+			? new Blob([new Uint8Array(bytes)], { type: mimeType })
+			: new Blob([new Uint8Array(bytes)]);
+		form.append('document', blob, filename);
+		return this.callMultipart<TgMessage>('sendDocument', form);
+	}
+
+	/** Resolve a file_id to a downloadable file_path (valid for ~1 hour). */
+	async getFile(fileId: string): Promise<{ file_path?: string; file_size?: number }> {
+		return this.call<{ file_path?: string; file_size?: number }>('getFile', { file_id: fileId });
+	}
+
+	/**
+	 * Download a file's bytes given its file_path (from getFile). The body is read
+	 * with a hard `maxBytes` cap enforced while streaming, so an oversized file can
+	 * never force an unbounded allocation in the backend.
+	 */
+	async downloadFile(filePath: string, maxBytes: number): Promise<Buffer> {
+		return fetchCapped(`${this.fileBaseUrl}/${filePath}`, maxBytes, {
+			signal: AbortSignal.timeout(60_000),
 		});
 	}
 
