@@ -136,6 +136,10 @@ export class BrowserService {
 	// Hard cap on a session's total lifetime, regardless of activity, so a session
 	// that keeps getting touched still can't live forever (owner constraint).
 	private readonly maxLifetimeMs: number;
+	// Tears down the entire shared browser (and, in container mode, its container)
+	// after this long with zero active sessions, so an idle deployment reclaims the
+	// browser's memory instead of keeping it warm forever. The next command relaunches it.
+	private readonly containerIdleTimeoutMs: number;
 
 	private sharedBrowser: Browser | null = null;
 	private browserContainerId: string | null = null;
@@ -143,6 +147,8 @@ export class BrowserService {
 	private imagePullInFlight: Promise<void> | null = null;
 	/** Live sessions keyed by threadId. */
 	private readonly sessions = new Map<string, BrowserSession>();
+	/** Fires after containerIdleTimeoutMs with no sessions → tears the browser down. */
+	private containerIdleTimer: ReturnType<typeof setTimeout> | null = null;
 
 	constructor(private readonly agentService: AgentService) {
 		// dockerode honours DOCKER_HOST / DOCKER_TLS_VERIFY automatically.
@@ -182,6 +188,12 @@ export class BrowserService {
 		this.workspacesBasePath =
 			process.env.AGENT_WORKSPACES_PATH ?? resolve(process.cwd(), '../../.agent-workspaces');
 		this.maxLifetimeMs = parseInt(process.env.BROWSER_SESSION_MAX_LIFETIME_MS ?? '1800000', 10);
+		// Default 1h. After this long with no sessions, the shared browser/container
+		// is torn down (it is otherwise kept warm for the backend's whole lifetime).
+		this.containerIdleTimeoutMs = parseInt(
+			process.env.BROWSER_CONTAINER_IDLE_TIMEOUT_MS ?? '3600000',
+			10,
+		);
 	}
 
 	/** Whether the browser feature is enabled project-wide (the master kill-switch). */
@@ -241,6 +253,7 @@ export class BrowserService {
 
 	/** Tear down every session (saving state) and the shared browser + container. */
 	async shutdown(): Promise<void> {
+		this.cancelContainerIdleTimer();
 		const threadIds = [...this.sessions.keys()];
 		for (const threadId of threadIds) {
 			await this.closeSession(threadId);
@@ -297,6 +310,7 @@ export class BrowserService {
 		} catch {
 			// context may already be gone if the browser disconnected
 		}
+		this.armContainerIdleTimerIfEmpty();
 	}
 
 	/** Export a session's storageState to its backend-only per-agent path + flush history. */
@@ -500,11 +514,70 @@ export class BrowserService {
 		} catch {
 			// already gone
 		}
+		this.armContainerIdleTimerIfEmpty();
+	}
+
+	/**
+	 * Arm the idle-teardown timer once the last session is gone. The shared browser
+	 * is otherwise kept warm for the backend's whole lifetime; this reclaims it (and
+	 * its container) after containerIdleTimeoutMs of zero sessions. No-op while any
+	 * session is live, and cancelled the moment the browser is needed again
+	 * (see getBrowser). unref'd so it never holds the process open.
+	 */
+	private armContainerIdleTimerIfEmpty(): void {
+		if (this.sessions.size > 0) return;
+		if (this.containerIdleTimer) clearTimeout(this.containerIdleTimer);
+		this.containerIdleTimer = setTimeout(() => {
+			void this.closeIdleBrowser();
+		}, this.containerIdleTimeoutMs);
+		this.containerIdleTimer.unref();
+	}
+
+	/** Cancel a pending idle teardown — called whenever the browser is needed again. */
+	private cancelContainerIdleTimer(): void {
+		if (this.containerIdleTimer) {
+			clearTimeout(this.containerIdleTimer);
+			this.containerIdleTimer = null;
+		}
+	}
+
+	/**
+	 * Tear down the shared browser and (container mode) its container after a long
+	 * idle stretch. Re-checks under the timer that no session was created in the
+	 * meantime. The next browser command transparently relaunches everything via
+	 * getBrowser → ensureContainer. Best-effort — never throws.
+	 */
+	private async closeIdleBrowser(): Promise<void> {
+		this.containerIdleTimer = null;
+		if (this.sessions.size > 0) return; // a session appeared since the timer armed
+		if (this.sharedBrowser) {
+			try {
+				await this.sharedBrowser.close();
+			} catch {
+				// already gone
+			}
+			this.sharedBrowser = null;
+		}
+		if (this.browserContainerId) {
+			const id = this.browserContainerId;
+			this.browserContainerId = null;
+			try {
+				await this.docker.getContainer(id).remove({ force: true });
+			} catch {
+				// already gone
+			}
+			logger.info(
+				{ containerId: id.slice(0, 12), idleMs: this.containerIdleTimeoutMs },
+				'[browser] removed idle browser container (no sessions for the idle window)',
+			);
+		}
 	}
 
 	// ─── Browser provider ──────────────────────────────────────────────────────
 
 	private async getBrowser(): Promise<Browser> {
+		// The browser is being used again — abort any pending idle teardown.
+		this.cancelContainerIdleTimer();
 		if (this.sharedBrowser?.isConnected()) return this.sharedBrowser;
 		const browser = await this.connectBrowser();
 		browser.on('disconnected', () => {
