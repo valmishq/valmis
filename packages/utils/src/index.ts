@@ -3,6 +3,8 @@ export { logger } from './logger.js';
 
 export { resolveProviderApi, PROVIDER_TO_PI_API } from './llm-provider-api-map.js';
 
+export { EMAIL_REGEX, normalizeEmail, isValidEmail } from './validation.js';
+
 export {
 	loadCredentialDefinitions,
 	getCredentialDefinition,

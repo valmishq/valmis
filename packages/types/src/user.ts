@@ -35,9 +35,8 @@ export interface ApiKey {
 
 // ─── Request Bodies ───────────────────────────────────────────────────────────
 
-/** PATCH /v1/users/profile — update own profile fields */
+/** PATCH /v1/users/profile — update own profile fields (name only; email has its own route) */
 export interface UpdateProfileRequestBody {
-	email?: string;
 	first_name?: string;
 	last_name?: string;
 }
@@ -46,6 +45,12 @@ export interface UpdateProfileRequestBody {
 export interface ChangePasswordRequestBody {
 	currentPassword: string;
 	newPassword: string;
+}
+
+/** POST /v1/users/profile/email — change own email (current password required) */
+export interface ChangeEmailRequestBody {
+	newEmail: string;
+	currentPassword: string;
 }
 
 /** POST /v1/users — create a new user (admin) */

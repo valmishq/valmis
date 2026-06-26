@@ -38,7 +38,6 @@
 			sidebar.setOpenMobile(false);
 		}
 	}
-
 	/** Compute display name from first/last name or fall back to email prefix */
 	let displayName = $derived(
 		user.first_name || user.last_name

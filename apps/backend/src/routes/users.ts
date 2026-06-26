@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import type { Request, Response } from 'express';
-import { UserService } from '../services/UserService.js';
+import { UserService, EmailTakenError } from '../services/UserService.js';
+import type { UpdateEmailResult } from '../services/UserService.js';
 import { requireAuth, requirePermission } from '../middleware/auth.js';
 import type { AuthService } from '../services/AuthService.js';
 import type {
@@ -10,11 +11,26 @@ import type {
 	UserDeleteResponse,
 	UpdateProfileRequestBody,
 	ChangePasswordRequestBody,
+	ChangeEmailRequestBody,
+	LoginApiResponse,
 	CreateUserRequestBody,
 	UpdateUserRequestBody,
 } from '@repo/types';
 
 const userService = new UserService();
+
+type EmailChangeFailure = Extract<UpdateEmailResult, { ok: false }>['reason'];
+
+/** Maps an updateEmail failure reason to its HTTP status + user-facing message. */
+const EMAIL_CHANGE_ERRORS: Record<EmailChangeFailure, { status: number; message: string }> = {
+	invalid_email: { status: 400, message: 'Please enter a valid email address.' },
+	wrong_password: { status: 400, message: 'Current password is incorrect.' },
+	no_password: {
+		status: 400,
+		message: 'Your email is managed by your sign-in provider and cannot be changed here.',
+	},
+	email_taken: { status: 409, message: 'That email is already in use.' },
+};
 
 /**
  * Factory — creates the users router with an injected AuthService instance.
@@ -58,15 +74,15 @@ export function createUsersRouter(authService: AuthService): Router {
 		res.json(body);
 	});
 
-	/** PATCH /v1/users/profile — update own profile fields */
+	/** PATCH /v1/users/profile — update own profile fields (name only; email has its own route) */
 	router.patch('/profile', auth, async (req: Request, res: Response) => {
 		const userId = req.user!.sub!;
-		const { email, first_name, last_name } = req.body as UpdateProfileRequestBody;
+		const { first_name, last_name } = req.body as UpdateProfileRequestBody;
 
 		const ip = (req.ip ?? req.socket.remoteAddress) as string;
 		const updated = await userService.updateUser(
 			userId,
-			{ email, first_name, last_name },
+			{ first_name, last_name },
 			undefined,
 			userId,
 			ip,
@@ -105,6 +121,46 @@ export function createUsersRouter(authService: AuthService): Router {
 			return;
 		}
 		const body: PasswordUpdateResponse = { success: true, data: { updated: true } };
+		res.json(body);
+	});
+
+	/**
+	 * POST /v1/users/profile/email — change own email (current password required).
+	 * On success a fresh access token is issued so the new email propagates
+	 * immediately (the old token embeds the previous email).
+	 */
+	router.post('/profile/email', auth, async (req: Request, res: Response) => {
+		const userId = req.user!.sub!;
+		const { newEmail, currentPassword } = req.body as ChangeEmailRequestBody;
+
+		if (!newEmail || !currentPassword) {
+			const body: LoginApiResponse = {
+				success: false,
+				error: 'newEmail and currentPassword are required',
+			};
+			res.status(400).json(body);
+			return;
+		}
+
+		const ip = (req.ip ?? req.socket.remoteAddress) as string;
+		const result = await userService.updateEmail(userId, newEmail, currentPassword, userId, ip);
+
+		if (!result.ok) {
+			const { status, message } = EMAIL_CHANGE_ERRORS[result.reason];
+			const body: LoginApiResponse = { success: false, error: message };
+			res.status(status).json(body);
+			return;
+		}
+
+		const user = await userService.findById(userId);
+		if (!user) {
+			const body: LoginApiResponse = { success: false, error: 'User not found' };
+			res.status(404).json(body);
+			return;
+		}
+
+		const data = await authService.issueAccessToken(user);
+		const body: LoginApiResponse = { success: true, data };
 		res.json(body);
 	});
 
@@ -165,13 +221,23 @@ export function createUsersRouter(authService: AuthService): Router {
 
 			const ip = (req.ip ?? req.socket.remoteAddress) as string;
 			const actor = req.user!.sub!;
-			const updated = await userService.updateUser(
-				req.params.id as string,
-				{ email, first_name, last_name },
-				roleId,
-				actor,
-				ip,
-			);
+			let updated;
+			try {
+				updated = await userService.updateUser(
+					req.params.id as string,
+					{ email, first_name, last_name },
+					roleId,
+					actor,
+					ip,
+				);
+			} catch (err) {
+				if (err instanceof EmailTakenError) {
+					const body: UserResponse = { success: false, error: err.message };
+					res.status(409).json(body);
+					return;
+				}
+				throw err;
+			}
 
 			if (!updated) {
 				const body: UserResponse = { success: false, error: 'User not found' };
