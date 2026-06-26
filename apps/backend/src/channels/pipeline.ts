@@ -10,6 +10,13 @@ import { ContentProcessor } from './processor.js';
 import { logger } from '../config/logger.js';
 
 /**
+ * Placeholder title the web frontend persists on brand-new chat threads (the
+ * sidebar also shows it as the fallback for a null title). Treated as "untitled"
+ * by auto-titling so it still gets replaced — keep in sync with the frontend.
+ */
+const DEFAULT_THREAD_TITLE = 'New conversation';
+
+/**
  * MessagePipeline — the unified message processing service.
  *
  * Every message from every channel (web, Telegram, Discord, etc.) goes through
@@ -87,6 +94,10 @@ export class MessagePipeline {
 				await this.chatFileService.attachToMessage(fileIds, userMessage.id, threadId, userId);
 
 				this.proxyService.resolveHitlRequest(threadId, textContent);
+
+				// A HITL reply is a user message too — make sure an untitled thread still
+				// gets a title (this path doesn't run scheduleBackgroundTasks).
+				void this.maybeGenerateTitle(threadId, userId, agentId);
 
 				return {
 					ok: true,
@@ -187,40 +198,72 @@ export class MessagePipeline {
 					return;
 				}
 
-				if (userMessages.length !== 2) return;
-
-				// Extract text from first and second user messages
-				const textOf = (idx: number): string => {
-					const msg = userMessages[idx];
-					return msg.content
-						.filter((b): b is Extract<typeof b, { type: 'text' }> => b.type === 'text')
-						.map((b) => b.text)
-						.join(' ');
-				};
-
-				const first = textOf(0);
-				const second = textOf(1);
-				if (!first && !second) return;
-
-				const title = await this.llmProxyService.generateThreadTitle(
-					threadId,
-					ownerId,
-					agentId,
-					first,
-					second,
-				);
-
-				if (title) {
-					agentStreamBus.emit(threadId, {
-						type: 'thread_title_updated',
-						threadId,
-						title,
-					});
-				}
+				await this.maybeGenerateTitle(threadId, ownerId, agentId);
 			} catch (err) {
 				logger.warn({ err, threadId }, '[pipeline] background task failed (non-fatal)');
 			}
 		})();
+	}
+
+	/**
+	 * Ensure an untitled thread gets an auto-generated title once it has at least two
+	 * user messages. Idempotent and self-healing: the "still untitled" guard means it
+	 * skips already-titled threads (no clobbering of workflow/renamed titles) and
+	 * RETRIES on every later message until a title sticks — so a transient LLM error
+	 * or a user-message count shifted by a HITL reply can't permanently leave the
+	 * thread on "New conversation" (the previous `=== 2` single-shot check did).
+	 * Best-effort — never throws.
+	 */
+	private async maybeGenerateTitle(
+		threadId: string,
+		ownerId: string,
+		agentId: string,
+	): Promise<void> {
+		try {
+			const thread = await this.sessionService.getThreadByIdInternal(threadId);
+			if (!thread) return;
+			// Skip only if the thread has a REAL title. New chat threads are created
+			// with the placeholder 'New conversation' (DEFAULT_THREAD_TITLE) persisted as
+			// the title, which must still be replaced by the generated one; whereas
+			// workflow titles and user renames must NOT be clobbered.
+			const existing = thread.title?.trim();
+			if (existing && existing !== DEFAULT_THREAD_TITLE) return;
+
+			const allMessages = await this.sessionService.listMessages(threadId, ownerId);
+			const userMessages = allMessages.filter((m) => m.role === 'user');
+			if (userMessages.length < 2) return;
+
+			// Text of the first two user messages as title context.
+			const textOf = (idx: number): string => {
+				const msg = userMessages[idx];
+				return msg.content
+					.filter((b): b is Extract<typeof b, { type: 'text' }> => b.type === 'text')
+					.map((b) => b.text)
+					.join(' ');
+			};
+
+			const first = textOf(0);
+			const second = textOf(1);
+			if (!first && !second) return;
+
+			const title = await this.llmProxyService.generateThreadTitle(
+				threadId,
+				ownerId,
+				agentId,
+				first,
+				second,
+			);
+
+			if (title) {
+				agentStreamBus.emit(threadId, {
+					type: 'thread_title_updated',
+					threadId,
+					title,
+				});
+			}
+		} catch (err) {
+			logger.warn({ err, threadId }, '[pipeline] title generation failed (non-fatal)');
+		}
 	}
 
 	/**
