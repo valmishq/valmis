@@ -7,17 +7,21 @@
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Label } from '$lib/components/ui/label/index.js';
 	import { Badge } from '$lib/components/ui/badge/index.js';
+	import { Separator } from '$lib/components/ui/separator/index.js';
 	import PageHeader from '$lib/components/page-header.svelte';
 	import { authStore } from '$lib/stores/auth.store.js';
 	import { get } from 'svelte/store';
 	import PlusIcon from '@lucide/svelte/icons/plus';
 	import TrashIcon from '@lucide/svelte/icons/trash-2';
+	import PencilIcon from '@lucide/svelte/icons/pencil';
 	import LinkIcon from '@lucide/svelte/icons/link';
 	import CheckCircleIcon from '@lucide/svelte/icons/check-circle-2';
 	import LoaderIcon from '@lucide/svelte/icons/loader-circle';
 	import ShieldIcon from '@lucide/svelte/icons/shield';
 	import ChevronLeftIcon from '@lucide/svelte/icons/chevron-left';
 	import SearchIcon from '@lucide/svelte/icons/search';
+	import CredentialConnectPanel from '$lib/components/custom/credentials/CredentialConnectPanel.svelte';
+	import { connectOAuth2 } from '$lib/oauth2.js';
 	import type { PageData } from './$types';
 	import type { CredentialMetadata, CredentialDefinition, CredentialProperty } from '@repo/types';
 
@@ -61,9 +65,17 @@
 		}
 	});
 
-	// ── Multi-step "Add credential" dialog ────────────────────────────────────
-	// Step 1: pick a service type; Step 2: fill in the form
+	// ── Create / edit credential dialog ───────────────────────────────────────
+	// Create: pick a service type → fill in the form. Edit: jump straight to the
+	// form pre-filled from the credential's redacted data. Once saved, the connect
+	// & test panel appears inline on the same form view (not a new step).
 	type DialogStep = 'pick' | 'form';
+
+	// Sentinel the backend uses for redacted secrets. An untouched secret field is
+	// submitted as this value so the server restores the stored secret — the real
+	// secret is never sent to the browser. Must match CREDENTIAL_SENTINEL in
+	// apps/backend/src/services/CredentialService.ts.
+	const REDACTED = '__REDACTED__';
 
 	let addDialogOpen = $state(false);
 	let dialogStep = $state<DialogStep>('pick');
@@ -74,6 +86,39 @@
 	let credentialName = $state('');
 	let isCreating = $state(false);
 	let createError = $state('');
+	/** The credential just created/edited — drives the connect & test step */
+	let createdCredential = $state<CredentialMetadata | null>(null);
+	/** Controls the "unauthorized OAuth2" confirmation dialog */
+	let confirmCloseOpen = $state(false);
+	/** 'create' opens with the service picker; 'edit' pre-fills an existing credential */
+	let mode = $state<'create' | 'edit'>('create');
+	/** Id of the credential being edited (edit mode only) */
+	let editingId = $state<string | null>(null);
+	/** True while loading an existing credential's data for the edit form */
+	let isLoadingEditData = $state(false);
+	/** Snapshot of form values + name when the edit form loaded — used to detect changes */
+	let originalValues = $state<Record<string, string>>({});
+	let originalName = $state('');
+
+	/** True when a created OAuth2 credential still has no authorized account */
+	let oauthUnauthorized = $derived(
+		selectedDefinition?.type === 'oauth2' &&
+			createdCredential != null &&
+			!createdCredential.isAuthorized
+	);
+
+	/**
+	 * Close handler for the connect step. An OAuth2 credential is useless without
+	 * an authorized account, so finishing one that hasn't been authorized opens a
+	 * confirmation dialog rather than closing silently.
+	 */
+	function handleDone() {
+		if (oauthUnauthorized) {
+			confirmCloseOpen = true;
+			return;
+		}
+		closeAddDialog();
+	}
 
 	/** Definitions filtered by the search query */
 	let filteredDefinitions = $derived(
@@ -87,13 +132,69 @@
 	);
 
 	function openAddDialog() {
+		mode = 'create';
+		editingId = null;
 		dialogStep = 'pick';
 		searchQuery = '';
 		selectedDefinition = null;
 		formValues = {};
+		originalValues = {};
+		originalName = '';
 		credentialName = '';
 		createError = '';
+		createdCredential = null;
+		confirmCloseOpen = false;
+		isLoadingEditData = false;
 		addDialogOpen = true;
+	}
+
+	/**
+	 * Open the dialog in edit mode for an existing credential. Jumps straight to the
+	 * form (no service picker) and pre-fills it from the credential's redacted data —
+	 * secrets come back as the REDACTED sentinel and are shown as empty inputs, so the
+	 * real secret never reaches the browser.
+	 */
+	async function openEditDialog(cred: CredentialMetadata) {
+		const def = getDefinition(cred.type);
+		if (!def) return;
+
+		mode = 'edit';
+		editingId = cred.id;
+		dialogStep = 'form';
+		selectedDefinition = def;
+		credentialName = cred.name;
+		originalName = cred.name;
+		createError = '';
+		createdCredential = null;
+		confirmCloseOpen = false;
+		searchQuery = '';
+		formValues = {};
+		originalValues = {};
+		isLoadingEditData = true;
+		addDialogOpen = true;
+
+		try {
+			const res = await api(`/credentials/${cred.id}/data`);
+			const body = await res.json();
+			const data = (body.data ?? {}) as Record<string, unknown>;
+
+			const initial: Record<string, string> = {};
+			for (const prop of def.properties) {
+				if (prop.type === 'secret') {
+					// Leave secrets blank — the input shows a "keep current" placeholder.
+					initial[prop.name] = '';
+				} else {
+					const v = data[prop.name];
+					initial[prop.name] = v !== undefined && v !== null ? String(v) : '';
+				}
+			}
+			formValues = initial;
+			originalValues = { ...initial };
+		} catch {
+			createError = 'Failed to load credential data';
+		} finally {
+			isLoadingEditData = false;
+		}
 	}
 
 	/** Move from the service picker to the credential form */
@@ -119,30 +220,38 @@
 		addDialogOpen = false;
 		selectedDefinition = null;
 		formValues = {};
+		originalValues = {};
+		originalName = '';
 		credentialName = '';
 		createError = '';
 		searchQuery = '';
+		createdCredential = null;
+		confirmCloseOpen = false;
+		mode = 'create';
+		editingId = null;
+		isLoadingEditData = false;
 	}
 
-	async function handleCreate(e: SubmitEvent) {
-		e.preventDefault();
-		if (!selectedDefinition) return;
-
-		isCreating = true;
-		createError = '';
-
-		const { user } = get(authStore);
-		if (!user) {
-			createError = 'Not authenticated';
-			isCreating = false;
-			return;
+	/** Whether a given property's value differs from what was loaded into the edit form */
+	function propChanged(prop: CredentialProperty): boolean {
+		const current = formValues[prop.name] ?? '';
+		if (prop.type === 'secret') {
+			// Secrets load blank; a non-empty value means the user entered a new secret.
+			return current !== '';
 		}
+		return current !== (originalValues[prop.name] ?? '');
+	}
 
-		// Coerce form string values to the correct types
+	/** Build the typed data payload from the form, sending untouched secrets as the sentinel */
+	function buildPayload(): Record<string, unknown> {
+		if (!selectedDefinition) return {};
 		const payload: Record<string, unknown> = {};
 		for (const prop of selectedDefinition.properties) {
 			const raw = formValues[prop.name] ?? '';
-			if (prop.type === 'number') {
+			if (prop.type === 'secret' && mode === 'edit' && raw === '') {
+				// Blank secret in edit mode → keep the stored value (server unredacts).
+				payload[prop.name] = REDACTED;
+			} else if (prop.type === 'number') {
 				payload[prop.name] = raw !== '' ? Number(raw) : undefined;
 			} else if (prop.type === 'boolean') {
 				payload[prop.name] = raw === 'true';
@@ -150,29 +259,126 @@
 				payload[prop.name] = raw;
 			}
 		}
+		return payload;
+	}
+
+	async function handleSubmit(e: SubmitEvent) {
+		e.preventDefault();
+		if (!selectedDefinition) return;
+
+		const { user } = get(authStore);
+		if (!user) {
+			createError = 'Not authenticated';
+			return;
+		}
+
+		isCreating = true;
+		createError = '';
 
 		try {
-			const res = await api('/credentials', {
-				method: 'POST',
-				body: JSON.stringify({
-					name: credentialName,
-					type: selectedDefinition.id,
-					data: payload
-				})
-			});
-
-			if (!res.ok) {
-				const body = await res.json();
-				createError = body.error ?? 'Failed to create credential';
-				return;
+			if (mode === 'edit' && editingId) {
+				await submitEdit();
+			} else {
+				await submitCreate();
 			}
-
-			closeAddDialog();
-			await refreshCredentials();
 		} catch {
 			createError = 'An unexpected error occurred';
 		} finally {
 			isCreating = false;
+		}
+	}
+
+	async function submitCreate() {
+		if (!selectedDefinition) return;
+		const res = await api('/credentials', {
+			method: 'POST',
+			body: JSON.stringify({
+				name: credentialName,
+				type: selectedDefinition.id,
+				data: buildPayload()
+			})
+		});
+
+		const body = await res.json();
+		if (!res.ok) {
+			createError = body.error ?? 'Failed to create credential';
+			return;
+		}
+
+		const created = body.data as CredentialMetadata | undefined;
+		revealConnectOrClose(created, `"${credentialName}" was created.`);
+	}
+
+	async function submitEdit() {
+		if (!selectedDefinition || !editingId) return;
+
+		const nameChanged = credentialName !== originalName;
+		const dataChanged = selectedDefinition.properties.some(propChanged);
+
+		if (!nameChanged && !dataChanged) {
+			// Nothing to save.
+			closeAddDialog();
+			return;
+		}
+
+		// Only send `data` when a credential field actually changed — a pure rename
+		// keeps the authorized account; a data change resets it (server-side).
+		const payloadBody: { name: string; data?: Record<string, unknown> } = { name: credentialName };
+		if (dataChanged) payloadBody.data = buildPayload();
+
+		const res = await api(`/credentials/${editingId}`, {
+			method: 'PUT',
+			body: JSON.stringify(payloadBody)
+		});
+
+		const body = await res.json();
+		if (!res.ok) {
+			createError = body.error ?? 'Failed to update credential';
+			return;
+		}
+
+		const updated = body.data as CredentialMetadata | undefined;
+
+		// A data change de-authorizes the credential — reveal the connect & test
+		// panel so the user can re-authorize / re-test. A rename keeps auth, so just close.
+		if (dataChanged) {
+			revealConnectOrClose(updated, 'Credential updated. Re-authorize or test the connection.');
+		} else {
+			closeAddDialog();
+			await refreshCredentials();
+			setAlert({
+				type: 'success',
+				title: 'Credential updated',
+				message: `"${credentialName}" was renamed.`,
+				duration: 5000,
+				show: true
+			});
+		}
+	}
+
+	/**
+	 * After a successful create/edit: if the credential is OAuth2 or has a test
+	 * request, reveal the inline connect & test panel; otherwise close with an alert.
+	 */
+	function revealConnectOrClose(cred: CredentialMetadata | undefined, savedMessage: string) {
+		if (!selectedDefinition) return;
+		const needsConnect =
+			selectedDefinition.type === 'oauth2' || Boolean(selectedDefinition.testRequest);
+
+		if (cred && needsConnect) {
+			createdCredential = cred;
+			// Reflect the change in the list behind the dialog.
+			refreshCredentials();
+		} else {
+			closeAddDialog();
+			refreshCredentials();
+			setAlert({
+				type: 'success',
+				title: 'Credential saved',
+				message: savedMessage,
+				duration: 5000,
+				show: true
+			});
 		}
 	}
 
@@ -260,7 +466,7 @@
 		}
 	}
 
-	// ── OAuth2 connect ─────────────────────────────────────────────────────────
+	// ── OAuth2 connect (popup) ───────────────────────────────────────────────────
 	let oauthLoading = $state<Record<string, boolean>>({});
 
 	async function handleOAuth2Connect(cred: CredentialMetadata) {
@@ -268,17 +474,26 @@
 		if (!user) return;
 
 		oauthLoading[cred.id] = true;
+		const result = await connectOAuth2(cred.id);
+		oauthLoading[cred.id] = false;
 
-		try {
-			const res = await api(`/oauth2/authorize/${cred.id}`);
-			const body = await res.json();
-			if (body.success && body.data?.authorizationUrl) {
-				window.location.href = body.data.authorizationUrl as string;
-			} else {
-				oauthLoading[cred.id] = false;
-			}
-		} catch {
-			oauthLoading[cred.id] = false;
+		if (result.ok) {
+			setAlert({
+				type: 'success',
+				title: 'Account connected',
+				message: 'OAuth2 authorization completed successfully.',
+				duration: 5000,
+				show: true
+			});
+			await refreshCredentials();
+		} else {
+			setAlert({
+				type: 'error',
+				title: 'Connection failed',
+				message: result.message ?? 'OAuth2 authorization failed.',
+				duration: 5000,
+				show: true
+			});
 		}
 	}
 
@@ -374,6 +589,24 @@
 	</Dialog.Content>
 </Dialog.Root>
 
+<!-- ── Unauthorized OAuth2 close confirmation ───────────────────────────── -->
+<Dialog.Root bind:open={confirmCloseOpen}>
+	<!-- z-60 keeps this above the create dialog (z-50) it is layered on top of -->
+	<Dialog.Content class="z-60 sm:max-w-md">
+		<Dialog.Header>
+			<Dialog.Title>Account not connected</Dialog.Title>
+			<Dialog.Description>
+				This credential won't work until you connect an account. Authorize an account now, or close
+				anyway to finish without it.
+			</Dialog.Description>
+		</Dialog.Header>
+		<Dialog.Footer class="gap-2 sm:gap-0">
+			<Button variant="outline" onclick={closeAddDialog}>Close anyway</Button>
+			<Button onclick={() => (confirmCloseOpen = false)}>Go back to authorize</Button>
+		</Dialog.Footer>
+	</Dialog.Content>
+</Dialog.Root>
+
 <!-- ── Add credential dialog (multi-step) ───────────────────────────────── -->
 <Dialog.Root
 	bind:open={addDialogOpen}
@@ -381,7 +614,7 @@
 		if (!open) closeAddDialog();
 	}}
 >
-	<Dialog.Content class="sm:max-w-lg">
+	<Dialog.Content class="sm:max-w-2xl">
 		{#if dialogStep === 'pick'}
 			<!-- Step 1: service picker -->
 			<Dialog.Header>
@@ -438,23 +671,29 @@
 			<!-- Step 2: credential form -->
 			<Dialog.Header>
 				<div class="flex items-center gap-2">
-					<Button
-						variant="ghost"
-						size="sm"
-						onclick={backToPick}
-						class="-ml-1 h-7 w-7 shrink-0 p-0 text-muted-foreground hover:text-foreground"
-						aria-label="Back to service picker"
-					>
-						<ChevronLeftIcon class="size-4" />
-					</Button>
-					<Dialog.Title>{selectedDefinition.name}</Dialog.Title>
+					{#if !createdCredential && mode !== 'edit'}
+						<Button
+							variant="ghost"
+							size="sm"
+							onclick={backToPick}
+							class="-ml-1 h-7 w-7 shrink-0 p-0 text-muted-foreground hover:text-foreground"
+							aria-label="Back to service picker"
+						>
+							<ChevronLeftIcon class="size-4" />
+						</Button>
+					{/if}
+					<Dialog.Title>
+						{mode === 'edit' ? `Edit ${selectedDefinition.name}` : selectedDefinition.name}
+					</Dialog.Title>
 				</div>
 				{#if selectedDefinition.description}
-					<Dialog.Description class="pl-9">{selectedDefinition.description}</Dialog.Description>
+					<Dialog.Description class={mode === 'edit' ? '' : 'pl-9'}>
+						{selectedDefinition.description}
+					</Dialog.Description>
 				{/if}
 			</Dialog.Header>
 
-			<form onsubmit={handleCreate} class="space-y-4">
+			<form onsubmit={handleSubmit} class="space-y-4">
 				<!-- Scrollable field area so a long form never exceeds the viewport (the footer
 				     stays pinned below). -mx-1/px-1 give focus rings room without shifting layout. -->
 				<div class="-mx-1 max-h-[60vh] space-y-4 overflow-y-auto px-1">
@@ -462,6 +701,13 @@
 						<p class="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive" role="alert">
 							{createError}
 						</p>
+					{/if}
+
+					{#if isLoadingEditData}
+						<div class="flex items-center gap-2 text-sm text-muted-foreground">
+							<LoaderIcon class="size-4 animate-spin" />
+							Loading credential…
+						</div>
 					{/if}
 
 					<!-- OAuth2: show the callback URL the user must register with their OAuth provider -->
@@ -489,6 +735,7 @@
 							type="text"
 							bind:value={credentialName}
 							required
+							disabled={Boolean(createdCredential) || isLoadingEditData}
 							placeholder="e.g. My {selectedDefinition.name} account"
 						/>
 						<p class="text-xs text-muted-foreground">
@@ -507,7 +754,8 @@
 								<select
 									id={`prop-${prop.name}`}
 									bind:value={formValues[prop.name]}
-									class="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-none"
+									disabled={Boolean(createdCredential) || isLoadingEditData}
+									class="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
 								>
 									{#each prop.options as opt (opt.value)}
 										<option value={String(opt.value)}>{opt.name}</option>
@@ -517,7 +765,8 @@
 								<select
 									id={`prop-${prop.name}`}
 									bind:value={formValues[prop.name]}
-									class="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-none"
+									disabled={Boolean(createdCredential) || isLoadingEditData}
+									class="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
 								>
 									<option value="true">Yes</option>
 									<option value="false">No</option>
@@ -527,7 +776,11 @@
 									id={`prop-${prop.name}`}
 									type={inputType(prop)}
 									bind:value={formValues[prop.name]}
-									required={prop.required}
+									required={prop.required && !(mode === 'edit' && prop.type === 'secret')}
+									disabled={Boolean(createdCredential) || isLoadingEditData}
+									placeholder={mode === 'edit' && prop.type === 'secret'
+										? 'Leave blank to keep current value'
+										: undefined}
 								/>
 							{/if}
 
@@ -549,15 +802,49 @@
 							</a>
 						</p>
 					{/if}
+
+					<!-- Connect & test — appears inline once the credential is saved -->
+					{#if createdCredential}
+						<Separator />
+						<div class="space-y-1">
+							<h3 class="text-sm font-medium text-foreground">Connect &amp; test</h3>
+							<p class="text-xs text-muted-foreground">
+								{#if selectedDefinition.type === 'oauth2'}
+									Connect your account, then test the connection.
+								{:else}
+									Test the connection to make sure it works.
+								{/if}
+							</p>
+						</div>
+						<CredentialConnectPanel
+							credential={createdCredential}
+							definition={selectedDefinition}
+							onUpdated={(c) => {
+								createdCredential = c;
+								if (c.isAuthorized) confirmCloseOpen = false;
+								refreshCredentials();
+							}}
+						/>
+					{/if}
 				</div>
 
 				<Dialog.Footer class="pt-2">
-					<Button type="button" variant="outline" onclick={closeAddDialog} disabled={isCreating}>
-						Cancel
-					</Button>
-					<Button type="submit" disabled={isCreating}>
-						{isCreating ? 'Saving…' : 'Save credential'}
-					</Button>
+					{#if createdCredential}
+						<Button type="button" onclick={handleDone}>Done</Button>
+					{:else}
+						<Button type="button" variant="outline" onclick={closeAddDialog} disabled={isCreating}>
+							Cancel
+						</Button>
+						<Button type="submit" disabled={isCreating || isLoadingEditData}>
+							{#if isCreating}
+								Saving…
+							{:else if mode === 'edit'}
+								Save changes
+							{:else}
+								Save credential
+							{/if}
+						</Button>
+					{/if}
 				</Dialog.Footer>
 			</form>
 		{/if}
@@ -661,7 +948,7 @@
 								>
 									{#if oauthLoading[cred.id]}
 										<LoaderIcon class="size-3.5 animate-spin" />
-										Redirecting…
+										Connecting…
 									{:else}
 										<LinkIcon class="size-3.5" />
 										{cred.isAuthorized ? 'Re-authorize' : 'Connect account'}
@@ -696,12 +983,23 @@
 								</Button>
 							{/if}
 
+							<!-- Edit — opens the dialog pre-filled (secrets stay redacted) -->
+							<Button
+								variant="outline"
+								size="xs"
+								onclick={() => openEditDialog(cred)}
+								class="ml-auto gap-1.5 text-xs sm:ml-0"
+							>
+								<PencilIcon class="size-3.5" />
+								Edit
+							</Button>
+
 							<!-- Delete — pushed to end, icon only -->
 							<Button
 								variant="ghost"
 								size="xs"
 								onclick={() => requestDelete(cred)}
-								class="ml-auto text-destructive hover:bg-destructive/10 hover:text-destructive sm:ml-0"
+								class="text-destructive hover:bg-destructive/10 hover:text-destructive"
 							>
 								<TrashIcon class="size-4" />
 								<span class="sr-only">Delete {cred.name}</span>

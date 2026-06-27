@@ -6,6 +6,7 @@ import { agentStreamBus } from './AgentStreamBus.js';
 import { logger } from '../config/logger.js';
 import { db } from '../db/index.js';
 import { agentCredentials } from '../db/schema/agentCredentials.js';
+import { credentials } from '../db/schema/credentials.js';
 
 /**
  * TTL for a pending HITL request.
@@ -234,33 +235,51 @@ export class AgentProxyService {
 			return { status: response.status, headers, body };
 		}
 
-		// Step 3b — authenticated path: enforce credential allowlist (token-time snapshot)
-		if (!tokenPayload.credentialIds.includes(request.credentialId)) {
+		// Step 3b — authenticated path: enforce credential allowlist (token-time snapshot).
+		// Skipped for allCredentials agents, which may use any credential the owner has —
+		// including ones added after the token was issued.
+		if (!tokenPayload.allCredentials && !tokenPayload.credentialIds.includes(request.credentialId)) {
 			throw new Error(
 				`Credential ${request.credentialId} is not authorized for this sandbox session`,
 			);
 		}
 
-		// Step 4 — live revocation check: verify the junction row still exists in DB.
-		// The PROXY_TOKEN allowlist is a snapshot from spawn time; the user may have
-		// unlinked the credential from the agent after the token was issued. This check
-		// ensures revocation is effective immediately rather than at next spawn.
+		// Step 4 — live authorization check against the DB. The PROXY_TOKEN allowlist is
+		// a snapshot from spawn time; this ensures changes take effect immediately.
+		//   - allCredentials agents: the credential must still belong to the owner.
+		//   - otherwise: the agent_credentials junction row must still exist (revocation).
 		// The error message is propagated back to the agent as a tool result text block.
-		const junction = await db
-			.select({ agentId: agentCredentials.agentId })
-			.from(agentCredentials)
-			.where(
-				and(
-					eq(agentCredentials.agentId, tokenPayload.agentId),
-					eq(agentCredentials.credentialId, request.credentialId),
-				),
-			)
-			.limit(1);
+		let authorized: boolean;
+		if (tokenPayload.allCredentials) {
+			const owned = await db
+				.select({ id: credentials.id })
+				.from(credentials)
+				.where(
+					and(
+						eq(credentials.id, request.credentialId),
+						eq(credentials.ownerId, tokenPayload.ownerId),
+					),
+				)
+				.limit(1);
+			authorized = owned.length > 0;
+		} else {
+			const junction = await db
+				.select({ agentId: agentCredentials.agentId })
+				.from(agentCredentials)
+				.where(
+					and(
+						eq(agentCredentials.agentId, tokenPayload.agentId),
+						eq(agentCredentials.credentialId, request.credentialId),
+					),
+				)
+				.limit(1);
+			authorized = junction.length > 0;
+		}
 
-		if (junction.length === 0) {
+		if (!authorized) {
 			logger.warn(
 				{ agentId: tokenPayload.agentId, credentialId: request.credentialId },
-				'[proxy] credential access denied — junction row removed (revoked mid-session)',
+				'[proxy] credential access denied — no longer authorized for this agent',
 			);
 			throw new Error(
 				`Credential ${request.credentialId} has been revoked — it is no longer linked to this agent`,

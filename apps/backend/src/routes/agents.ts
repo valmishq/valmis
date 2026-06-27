@@ -117,6 +117,7 @@ export function createAgentsRouter(authService: AuthService, skillService: Skill
 			systemInstruction,
 			avatarUrl,
 			credentialIds,
+			allCredentials,
 			modelConfigId,
 			embeddingModelConfigId,
 			embeddingDim,
@@ -151,6 +152,7 @@ export function createAgentsRouter(authService: AuthService, skillService: Skill
 				systemInstruction,
 				avatarUrl,
 				credentialIds,
+				allCredentials,
 				modelConfigId,
 				embeddingModelConfigId,
 				embeddingDim,
@@ -185,6 +187,7 @@ export function createAgentsRouter(authService: AuthService, skillService: Skill
 			systemInstruction,
 			avatarUrl,
 			credentialIds,
+			allCredentials,
 			modelConfigId,
 			embeddingModelConfigId,
 			embeddingDim,
@@ -198,6 +201,7 @@ export function createAgentsRouter(authService: AuthService, skillService: Skill
 			systemInstruction === undefined &&
 			avatarUrl === undefined &&
 			credentialIds === undefined &&
+			allCredentials === undefined &&
 			modelConfigId === undefined &&
 			embeddingModelConfigId === undefined &&
 			embeddingDim === undefined &&
@@ -229,6 +233,7 @@ export function createAgentsRouter(authService: AuthService, skillService: Skill
 				systemInstruction,
 				avatarUrl,
 				credentialIds,
+				allCredentials,
 				modelConfigId,
 				embeddingModelConfigId,
 				embeddingDim,

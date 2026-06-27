@@ -15,6 +15,7 @@ export interface CreateAgentInput {
 	systemInstruction?: string;
 	avatarUrl?: string;
 	credentialIds?: string[];
+	allCredentials?: boolean;
 	modelConfigId?: string;
 	embeddingModelConfigId?: string;
 	embeddingDim?: number;
@@ -28,6 +29,7 @@ export interface UpdateAgentInput {
 	systemInstruction?: string;
 	avatarUrl?: string;
 	credentialIds?: string[];
+	allCredentials?: boolean;
 	modelConfigId?: string | null;
 	embeddingModelConfigId?: string | null;
 	embeddingDim?: number | null;
@@ -76,6 +78,7 @@ function rowToAgent(row: typeof agents.$inferSelect, credentialIds: string[]): A
 		systemInstruction: row.systemInstruction ?? undefined,
 		avatarUrl: row.avatarUrl ?? undefined,
 		credentialIds,
+		allCredentials: row.allCredentials,
 		modelConfigId: row.modelConfigId ?? undefined,
 		embeddingModelConfigId: row.embeddingModelConfigId ?? undefined,
 		embeddingDim: row.embeddingDim ?? undefined,
@@ -123,6 +126,7 @@ export class AgentService {
 				embeddingModelConfigId: input.embeddingModelConfigId ?? null,
 				embeddingDim: input.embeddingDim ?? null,
 				allowInternetAccess: input.allowInternetAccess ?? true,
+				allCredentials: input.allCredentials ?? false,
 				maxToolCallsPerTurn: input.maxToolCallsPerTurn ?? 20,
 				createdAt: now,
 				updatedAt: now,
@@ -226,6 +230,7 @@ export class AgentService {
 			embeddingModelConfigId: string | null;
 			embeddingDim: number | null;
 			allowInternetAccess: boolean;
+			allCredentials: boolean;
 			maxToolCallsPerTurn: number;
 			updatedAt: Date;
 		}> = { updatedAt: new Date() };
@@ -241,6 +246,7 @@ export class AgentService {
 		if (input.embeddingDim !== undefined) updates.embeddingDim = input.embeddingDim;
 		if (input.allowInternetAccess !== undefined)
 			updates.allowInternetAccess = input.allowInternetAccess;
+		if (input.allCredentials !== undefined) updates.allCredentials = input.allCredentials;
 		if (input.maxToolCallsPerTurn !== undefined)
 			updates.maxToolCallsPerTurn = input.maxToolCallsPerTurn;
 

@@ -6,6 +6,7 @@ import {
 	CredentialService,
 	redactCredentialData,
 	unredactCredentialData,
+	stripConnectionState,
 } from '../services/CredentialService.js';
 import { CredentialResolverService } from '../services/CredentialResolverService.js';
 import { requireAuth } from '../middleware/auth.js';
@@ -258,7 +259,9 @@ export function createCredentialsRouter(
 				res.status(404).json(body);
 				return;
 			}
-			finalData = unredactCredentialData(data, stored);
+			// Editing credential data invalidates any prior authorization — drop the
+			// OAuth tokens and account identifier so the user must re-authorize / re-test.
+			finalData = stripConnectionState(unredactCredentialData(data, stored));
 		}
 
 		const updated = await credentialService.update(updateId, ownerId, { name, data: finalData });
@@ -374,7 +377,13 @@ export function createCredentialsRouter(
 			return;
 		}
 
-		// On success, attempt to extract and persist the account identifier
+		// On success, persist a connectedAccount so the credential list shows a
+		// connected indicator. Prefer a freshly extracted identifier (when the
+		// definition provides accountIdentifierKey), otherwise keep any previously
+		// stored identifier, otherwise fall back to the literal "Connected".
+		// This makes the connected indicator work for every auth type and never
+		// downgrades a real account label to "Connected" on a later re-test.
+		let extracted: string | null = null;
 		if (definition.testRequest.accountIdentifierKey) {
 			try {
 				const responseBody = (await testResponse.json()) as Record<string, unknown>;
@@ -389,14 +398,7 @@ export function createCredentialsRouter(
 					}, responseBody);
 
 				if (typeof value === 'string' || typeof value === 'number') {
-					// Merge connectedAccount into the stored data without touching other fields
-					const currentData = await credentialService.getDecryptedData(testId, ownerId);
-					if (currentData) {
-						await credentialService.updateData(testId, ownerId, {
-							...currentData,
-							connectedAccount: String(value),
-						});
-					}
+					extracted = String(value);
 				}
 			} catch (err) {
 				// Non-fatal — test still passes even if identity extraction fails
@@ -406,6 +408,16 @@ export function createCredentialsRouter(
 				);
 			}
 		}
+
+		// Merge connectedAccount into the stored data without touching other fields.
+		const existingAccount =
+			typeof credentialData.connectedAccount === 'string'
+				? credentialData.connectedAccount
+				: null;
+		await credentialService.updateData(testId, ownerId, {
+			...credentialData,
+			connectedAccount: extracted ?? existingAccount ?? 'Connected',
+		});
 
 		const body: CredentialTestResponse = {
 			success: true,
