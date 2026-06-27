@@ -10,7 +10,7 @@ import {
 import { join, resolve, dirname, sep } from 'node:path';
 import { and, eq, inArray } from 'drizzle-orm';
 import { extractText } from '@repo/extractor';
-import { LLM_MODELS } from '@repo/models';
+import { findCatalogModel } from './llm/modelCatalog.js';
 import type { ChatFile, ChatFileKind, ContentBlock } from '@repo/types';
 import { db } from '../db/index.js';
 import { chatFiles } from '../db/schema/index.js';
@@ -201,9 +201,7 @@ export class ChatFileService {
 		if (!agent?.modelConfigId) return false;
 		const config = await this.llmProviderService.getById(agent.modelConfigId, ownerId);
 		if (!config) return false;
-		const catalogEntry =
-			LLM_MODELS.find((m) => m.id === config.model) ??
-			LLM_MODELS.find((m) => m.id.endsWith('/' + config.model));
+		const catalogEntry = findCatalogModel(config.provider, config.model);
 		return (catalogEntry?.architecture?.inputModalities ?? []).includes('image');
 	}
 

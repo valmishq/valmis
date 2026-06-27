@@ -1,6 +1,6 @@
 import type { Model } from '@earendil-works/pi-ai';
 import { resolveProviderApi } from '@repo/utils';
-import { LLM_MODELS } from '@repo/models';
+import { findCatalogModel, getCatalogProviders } from './modelCatalog.js';
 import { AgentService } from '../AgentService.js';
 import { LlmProviderService } from '../LlmProviderService.js';
 import { logger } from '../../config/logger.js';
@@ -54,20 +54,14 @@ export async function resolveAgentModel(
 	// and the backend always agree on the api field of AssistantMessage.
 	const api = resolveProviderApi(config.provider);
 
-	// Catalog model IDs use OpenRouter-style "{provider}/{model}" slugs (e.g. "google/gemini-2.5-flash").
-	// Native provider APIs (Google, Anthropic, OpenAI, Mistral) expect the bare model name only.
-	// Manual entries without a slash (e.g. "gpt-4o") pass through unchanged.
-	const nativeModelId = config.model.includes('/')
-		? config.model.split('/').slice(1).join('/')
-		: config.model;
+	// The stored model id IS the exact native id the provider/pi-ai API expects and
+	// is passed through verbatim. Slashes are NOT special — aggregators (OpenRouter,
+	// NVIDIA) legitimately use "vendor/model" ids and Bedrock uses dotted ids.
+	const nativeModelId = config.model;
 
-	// Look up catalog pricing and context window for accurate cost tracking.
-	// Try exact match first (catalog uses "provider/model" slugs like "openai/gpt-4o").
-	// Fall back to bare model name match for agents configured without the provider prefix
-	// (e.g. model stored as "gpt-4o" → matches catalog entry "openai/gpt-4o").
-	const catalogEntry =
-		LLM_MODELS.find((m) => m.id === config.model) ??
-		LLM_MODELS.find((m) => m.id.endsWith('/' + config.model));
+	// Look up catalog pricing, context window, modalities, and reasoning for accurate
+	// cost tracking. Matches on the compound (provider, model).
+	const catalogEntry = findCatalogModel(config.provider, config.model);
 
 	// IMPORTANT: The catalog stores pricing as cost-per-single-token (e.g. 0.000003).
 	// pi-ai expects cost-per-MILLION-tokens (e.g. 3.0).
@@ -96,7 +90,7 @@ export async function resolveAgentModel(
 		api,
 		provider: config.provider,
 		name: config.model,
-		reasoning: false,
+		reasoning: catalogEntry?.reasoning ?? false,
 		input: modelInput,
 		cost: {
 			input: perMillion(catalogEntry?.pricing.promptPerToken),
@@ -106,7 +100,12 @@ export async function resolveAgentModel(
 		},
 		contextWindow,
 		maxTokens: 4096,
-		baseUrl: secretData.baseUrl ?? '',
+		// Prefer a user-supplied baseUrl; otherwise fall back to the provider's fixed
+		// default (e.g. OpenRouter / NVIDIA) so those work with just an API key.
+		baseUrl:
+			secretData.baseUrl?.trim() ||
+			getCatalogProviders().find((p) => p.id === config.provider)?.defaultBaseUrl ||
+			'',
 	};
 
 	return { model, apiKey: secretData.apiKey };

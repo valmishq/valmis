@@ -4,6 +4,7 @@ import type { LoginResponse } from './auth.js';
 import type { HealthResponse } from './health.js';
 import type { CredentialMetadata, CredentialDefinition } from './credential.js';
 import type { LlmProviderConfig } from './llmProvider.js';
+import type { LlmCatalogProvider, LlmCatalogModel } from './llmCatalog.js';
 
 /** Standard API response envelope used by all backend endpoints */
 export interface ApiResponse<T = unknown> {
@@ -89,6 +90,13 @@ export type LlmProviderResponse = ApiResponse<LlmProviderConfig>;
 
 /** DELETE /llm-providers/:id */
 export type LlmProviderDeleteResponse = ApiResponse<{ deleted: true }>;
+
+/** GET /v1/llm-providers/catalog — curated providers + current model catalog */
+export interface LlmCatalogData {
+	providers: LlmCatalogProvider[];
+	models: LlmCatalogModel[];
+}
+export type LlmCatalogResponse = ApiResponse<LlmCatalogData>;
 
 // ─── OAuth2 ──────────────────────────────────────────────────────────────────
 

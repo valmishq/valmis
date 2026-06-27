@@ -113,9 +113,10 @@ export const load: PageServerLoad = async (event) => {
 		if (llmRes.ok) {
 			const llmBody = await llmRes.json();
 			const modelId: string = llmBody.data?.model ?? '';
+			const provider: string = llmBody.data?.provider ?? '';
 			const catalogEntry =
-				LLM_MODELS.find((m) => m.id === modelId) ??
-				LLM_MODELS.find((m) => m.id.endsWith('/' + modelId));
+				LLM_MODELS.find((m) => m.providerId === provider && m.id === modelId) ??
+				LLM_MODELS.find((m) => m.id === modelId);
 			modelContextLength = catalogEntry?.contextLength ?? null;
 			visionCapable = (catalogEntry?.architecture?.inputModalities ?? []).includes('image');
 		}

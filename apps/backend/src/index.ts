@@ -8,6 +8,7 @@ import { healthRouter } from './routes/health.js';
 import { createCredentialsRouter } from './routes/credentials.js';
 import { createOAuth2Router } from './routes/oauth2.js';
 import { createLlmProvidersRouter } from './routes/llmProviders.js';
+import { startModelCatalogRefresh } from './services/llm/modelCatalog.js';
 import { createAuthRouter } from './routes/auth.js';
 import { createUsersRouter } from './routes/users.js';
 import { createApiKeysRouter } from './routes/apiKeys.js';
@@ -417,6 +418,9 @@ app.listen(PORT, async () => {
 	await discordGatewayManager.loadActiveGateways();
 	// Schedule the skill evolution worker (SKILL_EVOLUTION_CRON, default every 6h)
 	skillEvolutionService.start();
+	// Seed + schedule the daily live model-catalog refresh from models.dev (non-blocking;
+	// falls back to the generated @repo/models baseline on any failure).
+	startModelCatalogRefresh();
 });
 
 // Kill all live agent runtimes on shutdown so containers/processes are not

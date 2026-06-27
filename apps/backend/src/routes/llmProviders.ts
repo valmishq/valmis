@@ -10,9 +10,11 @@ import type {
 	LlmProvidersListResponse,
 	LlmProviderResponse,
 	LlmProviderDeleteResponse,
+	LlmCatalogResponse,
 	CreateLlmProviderRequestBody,
 	UpdateLlmProviderRequestBody,
 } from '@repo/types';
+import { getCatalogProviders, getModelCatalog } from '../services/llm/modelCatalog.js';
 
 const encryption = new EncryptionService();
 const llmProviderService = new LlmProviderService(encryption);
@@ -51,6 +53,20 @@ export function createLlmProvidersRouter(authService: AuthService): Router {
 
 		const configs = await llmProviderService.listByOwner(ownerId);
 		const body: LlmProvidersListResponse = { success: true, data: configs };
+		res.json(body);
+	});
+
+	/**
+	 * GET /v1/llm-providers/catalog
+	 * Return the curated provider allowlist and the current model catalog (live
+	 * models.dev overlay when available, generated baseline otherwise). Declared
+	 * before "/:id" so "catalog" is not captured as a config id.
+	 */
+	router.get('/catalog', auth, (_req: Request, res: Response) => {
+		const body: LlmCatalogResponse = {
+			success: true,
+			data: { providers: getCatalogProviders(), models: getModelCatalog() },
+		};
 		res.json(body);
 	});
 
