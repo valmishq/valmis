@@ -12,10 +12,12 @@
 	"scripts": {
 		"build": "tsc",
 		"typecheck": "tsc --noEmit",
-		"lint": "tsc --noEmit"
+		"lint": "tsc --noEmit",
+		"sync": "tsx scripts/sync.ts"
 	},
 	"devDependencies": {
-		"@repo/tsconfig": "workspace:*"
+		"@repo/tsconfig": "workspace:*",
+		"tsx": "^4.19.2"
 	},
 	"dependencies": {
 		"@repo/types": "workspace:*"

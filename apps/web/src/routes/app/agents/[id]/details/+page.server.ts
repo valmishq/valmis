@@ -42,7 +42,10 @@ export const load: PageServerLoad = async (event) => {
 		if (llmRes.ok) {
 			const llmBody = await llmRes.json();
 			const modelId: string = llmBody.data?.model ?? '';
-			const catalogEntry = LLM_MODELS.find((m) => m.id === modelId);
+			const provider: string = llmBody.data?.provider ?? '';
+			const catalogEntry =
+				LLM_MODELS.find((m) => m.providerId === provider && m.id === modelId) ??
+				LLM_MODELS.find((m) => m.id === modelId);
 			modelContextLength = catalogEntry?.contextLength ?? null;
 		}
 	}

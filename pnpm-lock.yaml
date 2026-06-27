@@ -335,6 +335,9 @@ importers:
       '@repo/tsconfig':
         specifier: workspace:*
         version: link:../tsconfig
+      tsx:
+        specifier: ^4.19.2
+        version: 4.22.3
 
   packages/tsconfig: {}
 
