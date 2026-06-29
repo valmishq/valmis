@@ -40,3 +40,9 @@ export {
 
 export { evalFilter, isUnaryOperator } from './workflow/filter.js';
 export type { TemplateResolver } from './workflow/filter.js';
+
+export {
+	BROWSER_TOOL_GROUP,
+	WORKFLOW_TOOL_CATALOG,
+	WORKFLOW_TOOL_CATEGORIES,
+} from './workflow/tool-catalog.js';

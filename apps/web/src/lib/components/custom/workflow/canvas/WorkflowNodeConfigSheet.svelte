@@ -16,7 +16,8 @@
 		CredentialMetadata,
 		CredentialDefinition,
 		AppTriggerProviderInfo,
-		AppTriggerRegistrationStatus
+		AppTriggerRegistrationStatus,
+		WorkflowToolCatalog
 	} from '@repo/types';
 
 	/** The committed trigger fields the Save button hands back to the builder. */
@@ -47,6 +48,8 @@
 		definitions: CredentialDefinition[];
 		/** Whether the agent has browser access — gates the "Agent Browser" tool group. */
 		browserAvailable?: boolean;
+		/** Tool-picker catalog from the server load (values live in @repo/utils). */
+		toolCatalog: WorkflowToolCatalog;
 		onSaveStep: (step: WorkflowStep) => void;
 		// Condition / loop
 		condition: WorkflowConditionNodeData | null;
@@ -81,6 +84,7 @@
 		credentials,
 		definitions,
 		browserAvailable = false,
+		toolCatalog,
 		onSaveStep,
 		condition,
 		loop,
@@ -238,6 +242,7 @@
 						{credentials}
 						{definitions}
 						{browserAvailable}
+						{toolCatalog}
 						onChange={(s) => (pendingStep = s)}
 					/>
 				{/key}

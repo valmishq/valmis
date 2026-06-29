@@ -1,9 +1,8 @@
 import { Type } from '@earendil-works/pi-ai';
 import type { AgentTool } from '@earendil-works/pi-agent-core';
 import type { TextContent } from '@earendil-works/pi-ai';
-import { logger } from '@repo/utils';
+import { logger, BROWSER_TOOL_GROUP } from '@repo/utils';
 import type { Workflow, WorkflowNode, WorkflowEdge, FilterValue } from '@repo/types';
-import { BROWSER_TOOL_GROUP } from '@repo/types';
 import type { ToolContext } from './types.js';
 
 /** One-line summary of a Manual-mode filter (left op right, joined by and/or). */

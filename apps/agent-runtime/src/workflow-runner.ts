@@ -19,8 +19,14 @@ import type {
 	WorkflowConditionNode,
 	WorkflowLoopNode,
 } from '@repo/types';
-import { BROWSER_TOOL_GROUP } from '@repo/types';
-import { logger, resolveProviderApi, ensureGraph, graphToSteps, evalFilter } from '@repo/utils';
+import {
+	logger,
+	resolveProviderApi,
+	ensureGraph,
+	graphToSteps,
+	evalFilter,
+	BROWSER_TOOL_GROUP,
+} from '@repo/utils';
 import { ProxyClient } from './proxy-client.js';
 import { createAgentTools } from './tools/index.js';
 import { buildSkillsPromptSection } from './prompt-sections.js';

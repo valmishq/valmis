@@ -28,7 +28,8 @@
 		CredentialMetadata,
 		CredentialDefinition,
 		AppTriggerProviderInfo,
-		AppTriggerRegistrationStatus
+		AppTriggerRegistrationStatus,
+		WorkflowToolCatalog
 	} from '@repo/types';
 
 	/**
@@ -44,6 +45,8 @@
 		definitions: CredentialDefinition[];
 		/** Whether the agent has browser access — gates the "Agent Browser" tool group. */
 		browserAvailable?: boolean;
+		/** Tool-picker catalog from the server load (values live in @repo/utils). */
+		toolCatalog: WorkflowToolCatalog;
 		appTriggerProviders: AppTriggerProviderInfo[];
 		/** Serialized workflow JSON for the page's hidden form input. */
 		payload: string;
@@ -64,6 +67,7 @@
 		allCredentials,
 		definitions,
 		browserAvailable = false,
+		toolCatalog,
 		appTriggerProviders,
 		payload = $bindable(''),
 		validationErrors = $bindable([]),
@@ -385,14 +389,14 @@
 			required
 			aria-label="Workflow name"
 			placeholder="Untitled workflow"
-			class="w-64 max-w-[40%] flex-none rounded-md bg-transparent px-2 py-1 font-heading text-xl font-semibold tracking-tight outline-none transition-colors placeholder:text-muted-foreground/50 hover:bg-muted/60 focus:bg-muted/80"
+			class="w-64 max-w-[40%] flex-none rounded-md bg-transparent px-2 py-1 font-heading text-xl font-semibold tracking-tight transition-colors outline-none placeholder:text-muted-foreground/50 hover:bg-muted/60 focus:bg-muted/80"
 		/>
-		<span class="select-none text-muted-foreground/40" aria-hidden="true">/</span>
+		<span class="text-muted-foreground/40 select-none" aria-hidden="true">/</span>
 		<input
 			bind:value={workflowDescription}
 			aria-label="Workflow description"
 			placeholder="Add a description"
-			class="min-w-0 flex-1 rounded-md bg-transparent px-2 py-1 text-sm text-muted-foreground outline-none transition-colors placeholder:text-muted-foreground/50 hover:bg-muted/60 focus:bg-muted/80 focus:text-foreground"
+			class="min-w-0 flex-1 rounded-md bg-transparent px-2 py-1 text-sm text-muted-foreground transition-colors outline-none placeholder:text-muted-foreground/50 hover:bg-muted/60 focus:bg-muted/80 focus:text-foreground"
 		/>
 	</div>
 
@@ -467,6 +471,7 @@
 	{credentials}
 	{definitions}
 	{browserAvailable}
+	{toolCatalog}
 	{onSaveStep}
 	condition={selectedCondition}
 	loop={selectedLoop}

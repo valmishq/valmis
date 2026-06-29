@@ -3,23 +3,20 @@
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Label } from '$lib/components/ui/label/index.js';
 	import { Switch } from '$lib/components/ui/switch/index.js';
-	import type { WorkflowStep, CredentialMetadata, CredentialDefinition } from '@repo/types';
-	import { BROWSER_TOOL_GROUP, WORKFLOW_TOOL_CATALOG, WORKFLOW_TOOL_CATEGORIES } from '@repo/types';
+	import type {
+		WorkflowStep,
+		CredentialMetadata,
+		CredentialDefinition,
+		WorkflowToolCatalog
+	} from '@repo/types';
 	import ShieldIcon from '@lucide/svelte/icons/shield';
 	import GlobeIcon from '@lucide/svelte/icons/globe';
 
 	/**
-	 * The full set of editable fields for a single workflow agent step.
-	 * Extracted from WorkflowStepCard so both the (legacy) card and the visual
-	 * builder's node-config Sheet render the exact same fields from one source.
-	 * Emits the updated step on every change via `onChange`.
+	 * The full set of editable fields for a single workflow agent step, rendered by
+	 * the visual builder's node-config Sheet. Emits the updated step on every change
+	 * via `onChange`.
 	 */
-
-	/** Selectable individual tools, grouped by category for the picker sections. */
-	const TOOL_GROUPS = WORKFLOW_TOOL_CATEGORIES.map((category) => ({
-		category,
-		tools: WORKFLOW_TOOL_CATALOG.filter((t) => t.category === category)
-	}));
 
 	// Variable hints shown in placeholder/help text — stored as const to avoid
 	// Svelte template parser treating {{ as a Svelte expression.
@@ -37,10 +34,27 @@
 		definitions: CredentialDefinition[];
 		/** When true, show the "Agent Browser" tool group (agent has browser access). */
 		browserAvailable?: boolean;
+		/** Tool-picker catalog (values live in @repo/utils, passed from the server load). */
+		toolCatalog: WorkflowToolCatalog;
 		onChange: (updated: WorkflowStep) => void;
 	}
 
-	let { step, credentials, definitions, browserAvailable = false, onChange }: Props = $props();
+	let {
+		step,
+		credentials,
+		definitions,
+		browserAvailable = false,
+		toolCatalog,
+		onChange
+	}: Props = $props();
+
+	/** Selectable individual tools, grouped by category for the picker sections. */
+	const TOOL_GROUPS = $derived(
+		toolCatalog.categories.map((category) => ({
+			category,
+			tools: toolCatalog.catalog.filter((t) => t.category === category)
+		}))
+	);
 
 	function getDefinition(type: string): CredentialDefinition | undefined {
 		return definitions.find((d) => d.id === type);
@@ -188,7 +202,9 @@
 	<!-- Allowed tools -->
 	<div class="space-y-2">
 		<Label>Allowed tools</Label>
-		<div class="flex items-center justify-between gap-4 rounded-md border border-border px-3 py-2.5">
+		<div
+			class="flex items-center justify-between gap-4 rounded-md border border-border px-3 py-2.5"
+		>
 			<div class="space-y-0.5">
 				<p class="text-sm font-medium text-foreground">Use all tools</p>
 				<p class="text-xs text-muted-foreground">Grant this step every tool the agent has.</p>
@@ -222,7 +238,7 @@
 				{/each}
 
 				{#if browserAvailable}
-					{@const browserSelected = selectedTools.has(BROWSER_TOOL_GROUP)}
+					{@const browserSelected = selectedTools.has(toolCatalog.browserToolGroup)}
 					<div class="space-y-1.5">
 						<p class="text-xs font-medium text-muted-foreground">Web / Browser</p>
 						<label
@@ -233,7 +249,7 @@
 							<input
 								type="checkbox"
 								checked={browserSelected}
-								onchange={() => toggleTool(BROWSER_TOOL_GROUP)}
+								onchange={() => toggleTool(toolCatalog.browserToolGroup)}
 								class="size-3 rounded border-border accent-primary"
 							/>
 							<GlobeIcon class="size-3.5" />
@@ -267,31 +283,31 @@
 			{#if !useAllCredentials}
 				<div class="space-y-1.5">
 					{#each credentials as cred (cred.id)}
-					{@const isSelected = selectedCredentialIds.has(cred.id)}
-					{@const def = getDefinition(cred.type)}
-					<label
-						class="flex cursor-pointer items-center gap-2.5 rounded-md border px-2.5 py-2 text-xs transition-colors {isSelected
-							? 'border-primary bg-primary/5'
-							: 'border-border hover:bg-muted/50'}"
-					>
-						<input
-							type="checkbox"
-							checked={isSelected}
-							onchange={() => toggleCredential(cred.id)}
-							class="size-3 rounded border-border accent-primary"
-						/>
-						<div
-							class="flex size-5 shrink-0 items-center justify-center rounded bg-muted text-muted-foreground"
+						{@const isSelected = selectedCredentialIds.has(cred.id)}
+						{@const def = getDefinition(cred.type)}
+						<label
+							class="flex cursor-pointer items-center gap-2.5 rounded-md border px-2.5 py-2 text-xs transition-colors {isSelected
+								? 'border-primary bg-primary/5'
+								: 'border-border hover:bg-muted/50'}"
 						>
-							{#if def?.icon}
-								<img src={def.icon} alt={cred.type} class="size-3.5 object-contain" />
-							{:else}
-								<ShieldIcon class="size-3" />
-							{/if}
-						</div>
-						<span class="truncate font-medium text-foreground">{cred.name}</span>
-						<span class="ml-auto shrink-0 text-muted-foreground">{cred.type}</span>
-					</label>
+							<input
+								type="checkbox"
+								checked={isSelected}
+								onchange={() => toggleCredential(cred.id)}
+								class="size-3 rounded border-border accent-primary"
+							/>
+							<div
+								class="flex size-5 shrink-0 items-center justify-center rounded bg-muted text-muted-foreground"
+							>
+								{#if def?.icon}
+									<img src={def.icon} alt={cred.type} class="size-3.5 object-contain" />
+								{:else}
+									<ShieldIcon class="size-3" />
+								{/if}
+							</div>
+							<span class="truncate font-medium text-foreground">{cred.name}</span>
+							<span class="ml-auto shrink-0 text-muted-foreground">{cred.type}</span>
+						</label>
 					{/each}
 				</div>
 				<p class="text-xs text-muted-foreground">
