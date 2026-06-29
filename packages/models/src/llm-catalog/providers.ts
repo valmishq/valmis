@@ -1,8 +1,18 @@
 import type { LlmCatalogProvider } from '@repo/types';
 
 /**
- * Static catalog of the top 20 LLM providers.
- * `id` must match the prefix segment of each provider's model IDs.
+ * Curated allowlist of first-party LLM providers.
+ *
+ * `id` is the provider key as used by models.dev (https://models.dev/api.json)
+ * AND the value stored in `llm_provider_configs.provider`. The sync script and
+ * the backend live-overlay both filter models.dev down to exactly these keys.
+ *
+ * Model ids are the bare native ids the provider/pi-ai API expects — which for
+ * aggregators (OpenRouter, NVIDIA) legitimately contain slashes (e.g.
+ * "anthropic/claude-...", "meta-llama/llama-..."). Slashes are NOT treated as
+ * special anywhere; the stored model id is passed through verbatim. pi-ai
+ * natively supports all of these APIs (openai-completions / bedrock-converse-stream
+ * / azure-openai-responses); see llm-provider-api-map.ts for the mapping.
  */
 export const LLM_PROVIDERS: LlmCatalogProvider[] = [
 	{
@@ -10,14 +20,14 @@ export const LLM_PROVIDERS: LlmCatalogProvider[] = [
 		label: 'OpenAI',
 		url: 'https://openai.com',
 		requiresBaseUrl: false,
-		modelPlaceholder: 'e.g. gpt-4o',
+		modelPlaceholder: 'e.g. gpt-5',
 	},
 	{
 		id: 'anthropic',
 		label: 'Anthropic',
 		url: 'https://anthropic.com',
 		requiresBaseUrl: false,
-		modelPlaceholder: 'e.g. claude-sonnet-4',
+		modelPlaceholder: 'e.g. claude-sonnet-4-6',
 	},
 	{
 		id: 'google',
@@ -27,53 +37,11 @@ export const LLM_PROVIDERS: LlmCatalogProvider[] = [
 		modelPlaceholder: 'e.g. gemini-2.5-pro',
 	},
 	{
-		id: 'mistralai',
+		id: 'mistral',
 		label: 'Mistral AI',
 		url: 'https://mistral.ai',
 		requiresBaseUrl: false,
 		modelPlaceholder: 'e.g. mistral-large-latest',
-	},
-	{
-		id: 'deepseek',
-		label: 'DeepSeek',
-		url: 'https://www.deepseek.com',
-		requiresBaseUrl: false,
-		modelPlaceholder: 'e.g. deepseek-r1',
-	},
-	{
-		id: 'qwen',
-		label: 'Qwen (Alibaba)',
-		url: 'https://qwenlm.github.io',
-		requiresBaseUrl: false,
-		modelPlaceholder: 'e.g. qwen3-235b-a22b',
-	},
-	{
-		id: 'meta-llama',
-		label: 'Meta Llama',
-		url: 'https://llama.meta.com',
-		requiresBaseUrl: false,
-		modelPlaceholder: 'e.g. llama-4-maverick',
-	},
-	{
-		id: 'x-ai',
-		label: 'xAI',
-		url: 'https://x.ai',
-		requiresBaseUrl: false,
-		modelPlaceholder: 'e.g. grok-4.20',
-	},
-	{
-		id: 'moonshotai',
-		label: 'Moonshot AI',
-		url: 'https://moonshot.cn',
-		requiresBaseUrl: false,
-		modelPlaceholder: 'e.g. kimi-k2',
-	},
-	{
-		id: 'nvidia',
-		label: 'NVIDIA',
-		url: 'https://build.nvidia.com',
-		requiresBaseUrl: false,
-		modelPlaceholder: 'e.g. nemotron-3-super-120b-a12b',
 	},
 	{
 		id: 'cohere',
@@ -90,59 +58,79 @@ export const LLM_PROVIDERS: LlmCatalogProvider[] = [
 		modelPlaceholder: 'e.g. sonar-pro',
 	},
 	{
-		id: 'amazon',
-		label: 'Amazon',
-		url: 'https://aws.amazon.com/bedrock',
-		requiresBaseUrl: false,
-		modelPlaceholder: 'e.g. nova-premier-v1',
-	},
-	{
-		id: 'microsoft',
-		label: 'Microsoft',
-		url: 'https://azure.microsoft.com/en-us/products/ai-services',
-		requiresBaseUrl: false,
-		modelPlaceholder: 'e.g. phi-4-mini-instruct',
-	},
-	{
-		id: 'z-ai',
-		label: 'Z.ai (GLM)',
-		url: 'https://z.ai',
-		requiresBaseUrl: false,
-		modelPlaceholder: 'e.g. glm-5.1',
-	},
-	{
 		id: 'minimax',
 		label: 'MiniMax',
 		url: 'https://www.minimaxi.com',
 		requiresBaseUrl: false,
-		modelPlaceholder: 'e.g. minimax-m3',
+		modelPlaceholder: 'e.g. minimax-m2',
 	},
 	{
-		id: 'bytedance-seed',
-		label: 'ByteDance Seed',
-		url: 'https://seed.bytetech.com',
+		id: 'openrouter',
+		label: 'OpenRouter',
+		url: 'https://openrouter.ai',
 		requiresBaseUrl: false,
-		modelPlaceholder: 'e.g. seed-2.0-lite',
+		modelPlaceholder: 'e.g. anthropic/claude-sonnet-4.6',
+		defaultBaseUrl: 'https://openrouter.ai/api/v1',
 	},
 	{
-		id: 'ibm-granite',
-		label: 'IBM Granite',
-		url: 'https://www.ibm.com/granite',
+		id: 'nvidia',
+		label: 'NVIDIA NIM',
+		url: 'https://build.nvidia.com',
 		requiresBaseUrl: false,
-		modelPlaceholder: 'e.g. granite-4.1-8b',
+		modelPlaceholder: 'e.g. meta-llama/llama-3.1-405b-instruct',
+		defaultBaseUrl: 'https://integrate.api.nvidia.com/v1',
+		// Huge model list — keep the provider selectable but omit its catalog
+		// models (user types the model id manually).
+		manualModelOnly: true,
 	},
 	{
-		id: 'arcee-ai',
-		label: 'Arcee AI',
-		url: 'https://arcee.ai',
-		requiresBaseUrl: false,
-		modelPlaceholder: 'e.g. virtuoso-large',
+		id: 'amazon-bedrock',
+		label: 'Amazon Bedrock',
+		url: 'https://aws.amazon.com/bedrock',
+		requiresBaseUrl: true,
+		modelPlaceholder: 'e.g. anthropic.claude-sonnet-4-5-20250929-v1:0',
+		defaultBaseUrl: 'https://bedrock-runtime.us-east-1.amazonaws.com',
 	},
 	{
-		id: 'nousresearch',
-		label: 'Nous Research',
-		url: 'https://nousresearch.com',
+		id: 'azure',
+		label: 'Azure OpenAI',
+		url: 'https://azure.microsoft.com/products/ai-services/openai-service',
+		requiresBaseUrl: true,
+		modelPlaceholder: 'your deployment name, e.g. gpt-4o',
+	},
+	{
+		id: 'zai',
+		label: 'Z.ai (GLM)',
+		url: 'https://z.ai',
 		requiresBaseUrl: false,
-		modelPlaceholder: 'e.g. hermes-4-405b',
+		modelPlaceholder: 'e.g. glm-4.6',
+	},
+	{
+		id: 'deepseek',
+		label: 'DeepSeek',
+		url: 'https://www.deepseek.com',
+		requiresBaseUrl: false,
+		modelPlaceholder: 'e.g. deepseek-chat',
+	},
+	{
+		id: 'alibaba',
+		label: 'Qwen (Alibaba)',
+		url: 'https://qwenlm.github.io',
+		requiresBaseUrl: false,
+		modelPlaceholder: 'e.g. qwen-max',
+	},
+	{
+		id: 'xai',
+		label: 'xAI',
+		url: 'https://x.ai',
+		requiresBaseUrl: false,
+		modelPlaceholder: 'e.g. grok-4',
+	},
+	{
+		id: 'moonshotai',
+		label: 'Moonshot AI',
+		url: 'https://moonshot.cn',
+		requiresBaseUrl: false,
+		modelPlaceholder: 'e.g. kimi-k2',
 	},
 ];

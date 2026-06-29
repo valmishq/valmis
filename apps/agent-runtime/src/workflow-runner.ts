@@ -19,6 +19,7 @@ import type {
 	WorkflowConditionNode,
 	WorkflowLoopNode,
 } from '@repo/types';
+import { BROWSER_TOOL_GROUP } from '@repo/types';
 import { logger, resolveProviderApi, ensureGraph, graphToSteps, evalFilter } from '@repo/utils';
 import { ProxyClient } from './proxy-client.js';
 import { createAgentTools } from './tools/index.js';
@@ -223,11 +224,12 @@ function buildStepSystemPrompt(
 			`Return ONLY the JSON object with no other text, no markdown fences, no explanation.`;
 	}
 
-	// Credential guidance — filtered to this step's allowedCredentialIds
-	const effectiveCredentials =
-		step.allowedCredentialIds.length > 0
-			? config.credentials.filter((c) => step.allowedCredentialIds.includes(c.id))
-			: config.credentials;
+	// Credential guidance — all of the agent's credentials when allCredentials is set
+	// or the list is empty; otherwise the step's explicit subset.
+	const useAllCredentials = step.allCredentials || step.allowedCredentialIds.length === 0;
+	const effectiveCredentials = useAllCredentials
+		? config.credentials
+		: config.credentials.filter((c) => step.allowedCredentialIds.includes(c.id));
 
 	if (effectiveCredentials.length > 0) {
 		const credList = effectiveCredentials
@@ -294,10 +296,14 @@ async function executeStep(
 		// a step can still narrow them via allowedTools. Backend re-checks every call.
 		browserAvailable: config.browserAvailable ?? false,
 	});
-	const effectiveTools =
-		step.allowedTools.length > 0
-			? allTools.filter((t) => step.allowedTools.includes(t.name))
-			: allTools;
+	// All tools when allTools is set or the list is empty; otherwise the explicit
+	// subset. The `agent-browser` group token expands to every registered browser_*
+	// tool, so a step can grant the whole browser toolset with a single entry.
+	const useAllTools = step.allTools || step.allowedTools.length === 0;
+	const allowsTool = (name: string): boolean =>
+		step.allowedTools.includes(name) ||
+		(name.startsWith('browser_') && step.allowedTools.includes(BROWSER_TOOL_GROUP));
+	const effectiveTools = useAllTools ? allTools : allTools.filter((t) => allowsTool(t.name));
 
 	// Capture the final text from the last LLM call in this step.
 	// We use a mutable reference updated on every LLM call; the last one wins.

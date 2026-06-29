@@ -1,7 +1,7 @@
 import bcrypt from 'bcrypt';
 import { SignJWT, jwtVerify } from 'jose';
 import type { UserService } from './UserService.js';
-import type { AuthTokenPayload, LoginResult } from '@repo/types';
+import type { AuthTokenPayload, LoginResponse, LoginResult, User } from '@repo/types';
 
 /**
  * Service responsible for JWT issuance and credential verification.
@@ -45,15 +45,22 @@ export class AuthService {
 		const user = await this.#userService.findById(dbUser.id);
 		if (!user) return null;
 
+		return this.issueAccessToken(user);
+	}
+
+	/**
+	 * Issue a fresh access token for an already-authenticated user. Used after the
+	 * user's identity in the token changes (e.g. an email update), so the new email
+	 * propagates immediately instead of staying stale until the old token expires.
+	 */
+	async issueAccessToken(user: User): Promise<LoginResponse> {
 		const roles = user.role ? [user.role.name] : [];
 		const payload: AuthTokenPayload = {
 			sub: user.id,
 			email: user.email,
 			roles,
 		};
-
 		const accessToken = await this.#generateAccessToken(payload);
-
 		return { accessToken, user };
 	}
 

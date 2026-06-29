@@ -1305,7 +1305,9 @@ export function createRuntimeRouter(
 				name: string;
 				instruction: string;
 				allowedTools?: string[];
+				allTools?: boolean;
 				allowedCredentialIds?: string[];
+				allCredentials?: boolean;
 				errorHandlingAction?: 'stop' | 'continue' | 'retry';
 			}>;
 			graph?: WorkflowSpec;
@@ -1361,7 +1363,9 @@ export function createRuntimeRouter(
 					name: s.name,
 					instruction: s.instruction,
 					allowedTools: s.allowedTools ?? [],
+					allTools: s.allTools ?? false,
 					allowedCredentialIds: s.allowedCredentialIds ?? [],
+					allCredentials: s.allCredentials ?? false,
 					errorHandling: {
 						action: (s.errorHandlingAction ?? 'stop') as 'stop' | 'continue' | 'retry',
 					},

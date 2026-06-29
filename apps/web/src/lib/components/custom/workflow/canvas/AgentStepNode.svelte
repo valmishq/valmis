@@ -13,6 +13,8 @@
 	const step = $derived((data as AgentNodeRender).step);
 	const toolCount = $derived(step.allowedTools.length);
 	const credCount = $derived(step.allowedCredentialIds.length);
+	const allTools = $derived(step.allTools ?? false);
+	const allCredentials = $derived(step.allCredentials ?? false);
 	const errorAction = $derived(step.errorHandling.action);
 </script>
 
@@ -45,9 +47,16 @@
 		<div class="flex flex-wrap items-center gap-1.5">
 			<Badge variant="outline" class="gap-1 text-[10px] font-normal">
 				<WrenchIcon class="size-3" />
-				{toolCount === 0 ? 'all tools' : `${toolCount} tool${toolCount !== 1 ? 's' : ''}`}
+				{allTools || toolCount === 0
+					? 'all tools'
+					: `${toolCount} tool${toolCount !== 1 ? 's' : ''}`}
 			</Badge>
-			{#if credCount > 0}
+			{#if allCredentials}
+				<Badge variant="outline" class="gap-1 text-[10px] font-normal">
+					<KeyIcon class="size-3" />
+					all
+				</Badge>
+			{:else if credCount > 0}
 				<Badge variant="outline" class="gap-1 text-[10px] font-normal">
 					<KeyIcon class="size-3" />
 					{credCount}

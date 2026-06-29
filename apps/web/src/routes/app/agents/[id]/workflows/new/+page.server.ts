@@ -1,4 +1,5 @@
 import { error, fail, redirect } from '@sveltejs/kit';
+import { env } from '$env/dynamic/private';
 import type { PageServerLoad, Actions } from './$types';
 import { api } from '$lib/server/api';
 import type {
@@ -48,9 +49,13 @@ export const load: PageServerLoad = async (event) => {
 		const credsBody = await credsRes.json();
 		allCredentials = (credsBody.data ?? []) as CredentialMetadata[];
 	}
-	// Step cards only expose credentials linked to this agent (the agent's own authority).
+	// Step cards expose the credentials available to this agent. When the agent is
+	// flagged to use all credentials, that's every owner credential (current + future);
+	// otherwise just the ones explicitly linked to the agent.
 	const agentCredentialIds = new Set(agent.credentialIds);
-	const credentials = allCredentials.filter((c) => agentCredentialIds.has(c.id));
+	const credentials = agent.allCredentials
+		? allCredentials
+		: allCredentials.filter((c) => agentCredentialIds.has(c.id));
 
 	let definitions: CredentialDefinition[] = [];
 	if (defsRes.ok) {
@@ -75,12 +80,17 @@ export const load: PageServerLoad = async (event) => {
 		workflow = workflowBody.data as Workflow;
 	}
 
+	// Gate the workflow builder's "Agent Browser" tool group the same way chat does:
+	// the agent must allow internet access AND the deployment must enable the feature.
+	const browserAvailable = agent.allowInternetAccess && env.BROWSER_FEATURE_ENABLED === 'true';
+
 	return {
 		agent,
 		credentials,
 		allCredentials,
 		definitions,
 		appTriggerProviders,
+		browserAvailable,
 		workflow,
 		isEditMode
 	};

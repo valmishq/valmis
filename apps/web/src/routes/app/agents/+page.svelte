@@ -196,7 +196,9 @@
 								<div class="min-w-0 flex-1">
 									<div class="flex flex-wrap items-center gap-2">
 										<p class="truncate text-sm font-medium text-foreground">{agent.name}</p>
-										{#if agent.credentialIds.length > 0}
+										{#if agent.allCredentials}
+											<Badge variant="secondary" class="shrink-0 text-xs">All credentials</Badge>
+										{:else if agent.credentialIds.length > 0}
 											<Badge variant="secondary" class="shrink-0 text-xs">
 												{agent.credentialIds.length} credential{agent.credentialIds.length !== 1
 													? 's'

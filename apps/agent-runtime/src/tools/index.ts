@@ -14,6 +14,7 @@ import { createListWorkflowsTool } from './list-workflows.js';
 import { createReadWorkflowTool } from './read-workflow.js';
 import { createTriggerWorkflowTool } from './trigger-workflow.js';
 import { createCreateWorkflowTool } from './create-workflow.js';
+import { createChessEngineTool } from './chess-engine.js';
 import { createBrowserTools } from './browser.js';
 
 export type { ToolContext } from './types.js';
@@ -58,6 +59,7 @@ export function createAgentTools(ctx: Parameters<typeof createCallApiTool>[0]): 
 		createReadWorkflowTool(ctx),
 		createTriggerWorkflowTool(ctx),
 		createCreateWorkflowTool(ctx),
+		createChessEngineTool(ctx),
 	];
 	if (ctx.browserAvailable) {
 		tools.push(...createBrowserTools(ctx));

@@ -239,7 +239,9 @@ export function specToGraph(spec: WorkflowSpec): { nodes: WorkflowNode[]; edges:
 					name: n.name,
 					instruction: rewriteRefs(n.instruction, idByKey) ?? '',
 					allowedTools: n.allowedTools ?? [],
+					allTools: n.allTools ?? false,
 					allowedCredentialIds: n.allowedCredentialIds ?? [],
+					allCredentials: n.allCredentials ?? false,
 					errorHandling: { action: n.errorHandlingAction ?? 'stop' },
 				},
 			});

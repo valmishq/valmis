@@ -90,6 +90,24 @@ export function unredactCredentialData(
 }
 
 /**
+ * Removes connection/authorization state from a credential data blob.
+ *
+ * Called when a credential's data is edited: changing a secret/key/client id
+ * invalidates any previously authorized account, so the OAuth tokens and the
+ * derived account identifier are dropped, forcing the user to re-authorize
+ * (OAuth2) or re-test (api key, etc.). Returns a copy; does not mutate input.
+ */
+export function stripConnectionState(
+	data: Record<string, unknown>,
+): Record<string, unknown> {
+	const result = { ...data };
+	for (const field of ['accessToken', 'refreshToken', 'expiresAt', 'codeVerifier', 'connectedAccount']) {
+		delete result[field];
+	}
+	return result;
+}
+
+/**
  * Service responsible for credential CRUD operations.
  * Handles encryption/decryption of the secret payload transparently.
  *
@@ -148,6 +166,11 @@ export class CredentialService {
 	/**
 	 * Get a single credential's metadata by ID.
 	 * Returns null if the record does not exist or ownerId does not match.
+	 *
+	 * Mirrors listByOwner: `isAuthorized` and `connectedAccount` are derived from
+	 * the decrypted data blob so a single-credential fetch carries the same auth
+	 * status the list does (the credentials page refreshes a single credential
+	 * after authorize/test and relies on these fields).
 	 */
 	async getById(id: string, ownerId: string): Promise<CredentialMetadata | null> {
 		const rows = await db
@@ -156,6 +179,7 @@ export class CredentialService {
 				ownerId: credentials.ownerId,
 				name: credentials.name,
 				type: credentials.type,
+				data: credentials.data,
 				createdAt: credentials.createdAt,
 				updatedAt: credentials.updatedAt,
 			})
@@ -163,7 +187,20 @@ export class CredentialService {
 			.where(and(eq(credentials.id, id), eq(credentials.ownerId, ownerId)))
 			.limit(1);
 
-		return rows[0] ?? null;
+		const row = rows[0];
+		if (!row) return null;
+
+		const { data: encryptedData, ...meta } = row;
+		try {
+			const parsed = JSON.parse(this.encryption.decrypt(encryptedData)) as Record<string, unknown>;
+			const isAuthorized = typeof parsed.accessToken === 'string' && parsed.accessToken.length > 0;
+			const connectedAccount =
+				typeof parsed.connectedAccount === 'string' ? parsed.connectedAccount : undefined;
+			return { ...meta, isAuthorized, connectedAccount };
+		} catch {
+			// If decryption fails, return metadata without auth status
+			return meta;
+		}
 	}
 
 	/**

@@ -16,6 +16,13 @@ export const PROVIDER_TO_PI_API: Record<string, string> = {
 	google: 'google-generative-ai',
 	mistral: 'mistral-conversations',
 	mistralai: 'mistral-conversations',
+	// Aggregators / cloud gateways natively supported by pi-ai. Bedrock and Azure
+	// need their own API; OpenRouter/NVIDIA are OpenAI-compatible (listed explicitly
+	// for clarity even though 'openai-completions' is already the fallback).
+	'amazon-bedrock': 'bedrock-converse-stream',
+	azure: 'azure-openai-responses',
+	openrouter: 'openai-completions',
+	nvidia: 'openai-completions',
 };
 
 /**

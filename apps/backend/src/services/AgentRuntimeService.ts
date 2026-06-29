@@ -386,12 +386,20 @@ export class AgentRuntimeService {
 			workflowConfig,
 		);
 
+		// Resolve the effective credential allowlist. When the agent is flagged with
+		// allCredentials it may use any credential the owner has (current and future),
+		// so seed the snapshot with all of them and mark the token accordingly.
+		const effectiveCredentialIds = agent.allCredentials
+			? (await this.credentialService.listByOwner(ownerId)).map((c) => c.id)
+			: agent.credentialIds;
+
 		// Issue a scoped PROXY_TOKEN for this runtime session
 		const proxyToken = await this.proxyService.issueProxyToken({
 			agentId,
 			ownerId,
 			threadId,
-			credentialIds: agent.credentialIds,
+			credentialIds: effectiveCredentialIds,
+			allCredentials: agent.allCredentials,
 		});
 
 		// Mark thread as running before spawning
@@ -635,11 +643,14 @@ export class AgentRuntimeService {
 		//      customise the scopes). It lives in the decrypted data blob as `data.scope`.
 		//   2. The default scope declared in the definition's oauth2.scope field.
 		//   3. undefined — no scope info available; agent may attempt the call freely.
+		// When agent.allCredentials is set, the agent's prompt metadata lists every
+		// credential the owner has (current and future); otherwise only the explicitly
+		// linked ones.
 		const credentials: CredentialMeta[] = [];
-		if (agent.credentialIds.length > 0) {
+		if (agent.allCredentials || agent.credentialIds.length > 0) {
 			const allCredentials = await this.credentialService.listByOwner(ownerId);
 			for (const cred of allCredentials) {
-				if (agent.credentialIds.includes(cred.id)) {
+				if (agent.allCredentials || agent.credentialIds.includes(cred.id)) {
 					// Decrypt once — reused for both scope resolution and non-secret property extraction
 					let data: Record<string, unknown> | null = null;
 					try {
@@ -735,7 +746,7 @@ export class AgentRuntimeService {
 			systemInstruction: agent.systemInstruction ?? '',
 			modelProvider,
 			modelId,
-			credentialIds: agent.credentialIds,
+			credentialIds: credentials.map((c) => c.id),
 			credentials,
 			// Compact skill index only — full instructions are materialized into
 			// <workspace>/skills/ and read by the agent on demand.

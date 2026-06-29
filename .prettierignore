@@ -3,3 +3,6 @@ dist
 .turbo
 .svelte-kit
 build
+
+# Generated LLM catalog (pnpm --filter @repo/models sync)
+packages/models/src/llm-catalog/models.generated.ts

@@ -14,7 +14,9 @@
 		"@earendil-works/pi-ai": "^0.78.0",
 		"@repo/types": "workspace:*",
 		"@repo/utils": "workspace:*",
-		"ajv": "^8.17.1"
+		"ajv": "^8.17.1",
+		"chess.js": "^1.4.0",
+		"js-chess-engine": "^2.4.6"
 	},
 	"devDependencies": {
 		"@repo/tsconfig": "workspace:*",

@@ -69,6 +69,7 @@
 	let avatarEmoji = $state(agent?.avatarUrl ?? '🤖');
 	let emojiPickerOpen = $state(false);
 	let selectedCredentialIds = $state<Set<string>>(new Set(agent?.credentialIds ?? []));
+	let allCredentials = $state<boolean>(agent?.allCredentials ?? false);
 	let selectedModelConfigId = $state<string>(agent?.modelConfigId ?? '');
 	let selectedEmbeddingModelConfigId = $state<string>(agent?.embeddingModelConfigId ?? '');
 	/** Skill selections — same pattern as credential checkboxes */
@@ -197,7 +198,10 @@
 	<input type="hidden" name="avatarUrl" value={avatarEmoji} />
 	<!-- Switch is not a native form control — serialise it through a hidden input -->
 	<input type="hidden" name="allowInternetAccess" value={allowInternetAccess ? 'true' : 'false'} />
-	<!-- Credential IDs: one hidden input per selected credential -->
+	<!-- "Use all credentials" flag — serialised like the other switches -->
+	<input type="hidden" name="allCredentials" value={allCredentials ? 'true' : 'false'} />
+	<!-- Credential IDs: one hidden input per selected credential (kept even when
+	     allCredentials is on, so the manual selection is preserved if it's turned off) -->
 	{#each [...selectedCredentialIds] as credId (credId)}
 		<input type="hidden" name="credentialIds" value={credId} />
 	{/each}
@@ -435,7 +439,12 @@
 	</Card.Root>
 
 	<!-- ── Credentials ───────────────────────────────────────────────────────── -->
-	<AgentCredentialsPanel bind:selectedCredentialIds {credentials} {definitions} />
+	<AgentCredentialsPanel
+		bind:selectedCredentialIds
+		bind:allCredentials
+		{credentials}
+		{definitions}
+	/>
 
 	<!-- ── Knowledge Base ────────────────────────────────────────────────────── -->
 	<!--

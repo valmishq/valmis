@@ -134,6 +134,13 @@
       "when": 1782336438413,
       "tag": "0018_worried_deadpool",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1782591434333,
+      "tag": "0019_lumpy_alice",
+      "breakpoints": true
     }
   ]
 }

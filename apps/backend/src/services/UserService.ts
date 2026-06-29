@@ -2,6 +2,7 @@ import bcrypt from 'bcrypt';
 import { eq, count } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import { users, roles, userRoles } from '../db/schema/index.js';
+import { normalizeEmail, isValidEmail } from '@repo/utils';
 import type { User, Role } from '@repo/types';
 
 const BCRYPT_COST = 10;
@@ -31,6 +32,29 @@ export interface UpdateUserDetails {
 	last_name?: string;
 }
 
+/** Outcome of a self-service email change — lets the route pick the right status/message. */
+export type UpdateEmailResult =
+	| { ok: true }
+	| { ok: false; reason: 'no_password' | 'wrong_password' | 'email_taken' | 'invalid_email' };
+
+/** Thrown when an email update collides with another account's email. */
+export class EmailTakenError extends Error {
+	constructor() {
+		super('That email is already in use.');
+		this.name = 'EmailTakenError';
+	}
+}
+
+/** True for a Postgres unique-constraint violation (e.g. a concurrent email-change race). */
+function isUniqueViolation(err: unknown): boolean {
+	return (
+		typeof err === 'object' &&
+		err !== null &&
+		'code' in err &&
+		(err as { code?: string }).code === '23505'
+	);
+}
+
 /**
  * Service responsible for all user CRUD operations.
  * Methods that mutate data accept actor/ip parameters for audit logging.
@@ -53,7 +77,7 @@ export class UserService {
 				updatedAt: users.updatedAt,
 			})
 			.from(users)
-			.where(eq(users.email, email))
+			.where(eq(users.email, normalizeEmail(email)))
 			.limit(1);
 
 		return rows[0] ?? null;
@@ -169,7 +193,7 @@ export class UserService {
 		const [inserted] = await db
 			.insert(users)
 			.values({
-				email: details.email,
+				email: normalizeEmail(details.email),
 				first_name: details.first_name ?? null,
 				last_name: details.last_name ?? null,
 				password: hashedPassword,
@@ -199,11 +223,23 @@ export class UserService {
 		const existing = await this.findById(id);
 		if (!existing) return null;
 
-		if (Object.keys(details).length > 0) {
-			await db
-				.update(users)
-				.set({ ...details, updatedAt: new Date() })
-				.where(eq(users.id, id));
+		// Normalize email so admin edits stay consistent with self-service changes
+		// and the case-sensitive unique index (see normalizeEmail).
+		const normalizedDetails =
+			details.email !== undefined
+				? { ...details, email: normalizeEmail(details.email) }
+				: details;
+
+		if (Object.keys(normalizedDetails).length > 0) {
+			try {
+				await db
+					.update(users)
+					.set({ ...normalizedDetails, updatedAt: new Date() })
+					.where(eq(users.id, id));
+			} catch (err) {
+				if (isUniqueViolation(err)) throw new EmailTakenError();
+				throw err;
+			}
 		}
 
 		if (roleId && existing.role?.id !== roleId) {
@@ -232,6 +268,31 @@ export class UserService {
 	}
 
 	/**
+	 * Re-authenticate a user by their current password for sensitive self-service
+	 * changes (password/email). Returns the user's current email on success so the
+	 * caller can avoid a second SELECT. Single source of truth for the credential
+	 * check shared by updatePassword and updateEmail.
+	 */
+	async #reauth(
+		id: string,
+		currentPassword: string,
+	): Promise<{ ok: true; email: string } | { ok: false; reason: 'no_password' | 'wrong_password' }> {
+		const rows = await db
+			.select({ password: users.password, email: users.email })
+			.from(users)
+			.where(eq(users.id, id))
+			.limit(1);
+
+		const row = rows[0];
+		if (!row?.password) return { ok: false, reason: 'no_password' };
+
+		const valid = await bcrypt.compare(currentPassword, row.password);
+		if (!valid) return { ok: false, reason: 'wrong_password' };
+
+		return { ok: true, email: row.email };
+	}
+
+	/**
 	 * Update a user's password after verifying the current one via bcrypt.
 	 * Returns false if currentPassword does not match the stored hash.
 	 */
@@ -242,17 +303,8 @@ export class UserService {
 		_actor: string,
 		_ip: string,
 	): Promise<boolean> {
-		const rows = await db
-			.select({ password: users.password })
-			.from(users)
-			.where(eq(users.id, id))
-			.limit(1);
-
-		const hash = rows[0]?.password;
-		if (!hash) return false;
-
-		const valid = await bcrypt.compare(currentPassword, hash);
-		if (!valid) return false;
+		const auth = await this.#reauth(id, currentPassword);
+		if (!auth.ok) return false;
 
 		const newHash = await bcrypt.hash(newPassword, BCRYPT_COST);
 		await db
@@ -262,6 +314,47 @@ export class UserService {
 
 		console.info(`[audit] UPDATE user id=${id} field=password actor=${_actor} ip=${_ip}`);
 		return true;
+	}
+
+	/**
+	 * Change a user's own email after verifying their current password via bcrypt.
+	 * The new email is normalized (trimmed + lowercased) and checked for uniqueness;
+	 * a concurrent-insert race is caught via the DB unique constraint. Users without
+	 * a password (OAuth/SSO) cannot use this path. Returns a discriminated result.
+	 */
+	async updateEmail(
+		id: string,
+		newEmail: string,
+		currentPassword: string,
+		_actor: string,
+		_ip: string,
+	): Promise<UpdateEmailResult> {
+		const normalized = normalizeEmail(newEmail);
+		if (!isValidEmail(normalized)) return { ok: false, reason: 'invalid_email' };
+
+		const auth = await this.#reauth(id, currentPassword);
+		if (!auth.ok) return { ok: false, reason: auth.reason };
+
+		// Already stored in canonical form — nothing to persist. (Compare exactly,
+		// not case-insensitively, so a case-only change still writes the normalized
+		// value instead of silently leaving a mixed-case row behind.)
+		if (auth.email === normalized) return { ok: true };
+
+		const existing = await this.findByEmail(normalized);
+		if (existing && existing.id !== id) return { ok: false, reason: 'email_taken' };
+
+		try {
+			await db
+				.update(users)
+				.set({ email: normalized, updatedAt: new Date() })
+				.where(eq(users.id, id));
+		} catch (err) {
+			if (isUniqueViolation(err)) return { ok: false, reason: 'email_taken' };
+			throw err;
+		}
+
+		console.info(`[audit] UPDATE user id=${id} field=email actor=${_actor} ip=${_ip}`);
+		return { ok: true };
 	}
 
 	/**

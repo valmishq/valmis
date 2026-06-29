@@ -39,6 +39,12 @@ importers:
       ajv:
         specifier: ^8.17.1
         version: 8.20.0
+      chess.js:
+        specifier: ^1.4.0
+        version: 1.4.0
+      js-chess-engine:
+        specifier: ^2.4.6
+        version: 2.4.6
     devDependencies:
       '@repo/tsconfig':
         specifier: workspace:*
@@ -329,6 +335,9 @@ importers:
       '@repo/tsconfig':
         specifier: workspace:*
         version: link:../tsconfig
+      tsx:
+        specifier: ^4.19.2
+        version: 4.22.3
 
   packages/tsconfig: {}
 
@@ -2358,6 +2367,9 @@ packages:
   character-entities-legacy@3.0.0:
     resolution: {integrity: sha512-RpPp0asT/6ufRm//AJVwpViZbGM/MkjQFxJccQRHmISF/22NBtsHqAWmL+/pmkPWoIUJdWyeVleTl1wydHATVQ==}
 
+  chess.js@1.4.0:
+    resolution: {integrity: sha512-BBJgrrtKQOzFLonR0l+k64A98NLemPwNsCskwb+29bRwobUa4iTm51E1kwGPbWXAcfdDa18nad6vpPPKPWarqw==}
+
   chokidar@4.0.3:
     resolution: {integrity: sha512-Qgzu8kfBvo+cA4962jnP1KkS6Dop5NS6g7R5LFYJr4b8Ub94PPQXUksCw9PvXoeXPRRddRNC5C1JQUR2SMGtnA==}
     engines: {node: '>= 14.16.0'}
@@ -3016,6 +3028,10 @@ packages:
   joycon@3.1.1:
     resolution: {integrity: sha512-34wB/Y7MW7bzjKRjUKTa46I2Z7eV62Rkhva+KkopW7Qvv/OSWBqvkSY7vusOPrNuZcUG3tApvdVgNB8POj3SPw==}
     engines: {node: '>=10'}
+
+  js-chess-engine@2.4.6:
+    resolution: {integrity: sha512-OKvWKICifXLjUilGzT5RstUv9iGpk04PjGpTyVT0lMlxX2HptoXZ2Q9hNicidnYjFcR7FHpnXFVwreDSF6a5Ng==}
+    engines: {node: '>=24'}
 
   js-yaml@4.1.1:
     resolution: {integrity: sha512-qQKT4zQxXl8lLwBtHMWwaTcGfFOZviOJet3Oy/xmGk2gZH677CJM9EvtfdSkgWcATZhj/55JZ0rmy3myCT5lsA==}
@@ -6078,6 +6094,8 @@ snapshots:
 
   character-entities-legacy@3.0.0: {}
 
+  chess.js@1.4.0: {}
+
   chokidar@4.0.3:
     dependencies:
       readdirp: 4.1.2
@@ -6755,6 +6773,8 @@ snapshots:
   jose@6.2.3: {}
 
   joycon@3.1.1: {}
+
+  js-chess-engine@2.4.6: {}
 
   js-yaml@4.1.1:
     dependencies:

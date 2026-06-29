@@ -49,6 +49,13 @@ export const agents = pgTable(
 		 */
 		allowInternetAccess: boolean('allow_internet_access').notNull().default(true),
 		/**
+		 * When true, the agent has access to ALL of the owner's credentials —
+		 * current and any added later — instead of the explicit set in the
+		 * agent_credentials junction. Resolved at spawn time, so newly added
+		 * credentials are picked up automatically. Default false.
+		 */
+		allCredentials: boolean('all_credentials').notNull().default(false),
+		/**
 		 * Maximum number of tool calls the agent may make in a single chat turn.
 		 * Enforced by agent-runner.ts (interactive chat) — when exceeded the agent
 		 * is blocked from further tools and forced to give a final reply. Workflow

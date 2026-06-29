@@ -1,4 +1,3 @@
-import { redirect } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
 import { api } from '$lib/server/api';
 
@@ -10,25 +9,26 @@ import { api } from '$lib/server/api';
  * 1. Reads `code`, `state`, and `error` from the URL query params.
  * 2. Forwards them to the backend `GET /v1/oauth2/callback` which handles
  *    the provider-agnostic code-for-token exchange and stores the tokens.
- * 3. Redirects the browser to /app/credentials with a result query param.
+ * 3. Returns the result to the page.
  *
- * The page never renders — it always throws a redirect.
+ * Unlike a plain redirect, the result is returned so the client (+page.svelte)
+ * can decide how to finish: when authorization was started from a popup (the
+ * in-dialog "Connect account" flow) it posts the result back to the opener and
+ * closes; otherwise (the credentials list flow) it redirects to /app/credentials.
  */
 export const load: PageServerLoad = async (event) => {
 	const code = event.url.searchParams.get('code');
 	const state = event.url.searchParams.get('state');
 	const error = event.url.searchParams.get('error');
 
-	// If the OAuth provider returned an error, redirect with the error message
+	// If the OAuth provider returned an error, report it
 	if (error) {
-		const message = encodeURIComponent(error);
-		throw redirect(303, `/app/credentials?oauth=error&message=${message}`);
+		return { status: 'error' as const, message: error };
 	}
 
-	// If required params are missing, redirect with a generic error
+	// If required params are missing, report a generic error
 	if (!code || !state) {
-		const message = encodeURIComponent('Missing code or state from OAuth provider');
-		throw redirect(303, `/app/credentials?oauth=error&message=${message}`);
+		return { status: 'error' as const, message: 'Missing code or state from OAuth provider' };
 	}
 
 	// Forward the code and state to the backend callback endpoint.
@@ -38,7 +38,7 @@ export const load: PageServerLoad = async (event) => {
 	const res = await api(`/oauth2/callback?${params.toString()}`, event);
 
 	if (res.ok) {
-		throw redirect(303, '/app/credentials?oauth=success');
+		return { status: 'success' as const };
 	}
 
 	// Extract error message from backend response
@@ -52,5 +52,5 @@ export const load: PageServerLoad = async (event) => {
 		// Use the default message
 	}
 
-	throw redirect(303, `/app/credentials?oauth=error&message=${encodeURIComponent(message)}`);
+	return { status: 'error' as const, message };
 };

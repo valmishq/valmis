@@ -430,11 +430,42 @@
 	 * every (re)connecting client whose thread is no longer 'running'.
 	 */
 	async function reconcileAfterReconnect() {
+		// Title reconcile is independent of the message bubble — always attempt it.
+		void reconcileThreadTitle();
 		if (streamingMessageId !== null) {
 			staleSinceReconnect = true;
 			return;
 		}
 		await reconcileMessages();
+	}
+
+	/**
+	 * The auto-generated title normally arrives via a `thread_title_updated` SSE
+	 * event, but the bus has no replay — a missed event would leave the sidebar on
+	 * "New conversation" until a manual reload. So while the active thread is still
+	 * untitled, re-fetch the threads list (source of truth) and adopt any title that
+	 * has since landed in the DB. No-op once a title exists.
+	 */
+	async function reconcileThreadTitle() {
+		const current = threads.find((t) => t.id === data.thread.id);
+		// 'New conversation' is the placeholder persisted on new threads — treat it as
+		// untitled so the generated title still gets pulled in. Real titles stop here.
+		if (current?.title && current.title !== 'New conversation') return;
+		try {
+			const res = await api(`/runtime/${data.agent.id}/threads`);
+			if (!res.ok) return;
+			const body = await res.json();
+			const serverThreads = (body.data ?? []) as typeof threads;
+			const fresh = serverThreads.find((t) => t.id === data.thread.id);
+			if (fresh?.title) {
+				threads = threads.map((t) => (t.id === fresh.id ? { ...t, title: fresh.title } : t));
+				if (fresh.id === data.thread.id) {
+					activeBreadcrumbThreadTitle.set(fresh.title);
+				}
+			}
+		} catch {
+			// Non-fatal — the next turn end / reconnect retries.
+		}
 	}
 
 	/** Re-fetch the persisted transcript and rebuild the derived tool maps. */
@@ -655,6 +686,9 @@
 					staleSinceReconnect = false;
 					void reconcileMessages();
 				}
+				// The auto-title is generated in the background during the turn; by the
+				// time it ends it's persisted, so pull it in case the SSE event was missed.
+				void reconcileThreadTitle();
 				break;
 			}
 

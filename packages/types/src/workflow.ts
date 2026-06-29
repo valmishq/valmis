@@ -56,12 +56,26 @@ export interface WorkflowStep {
 	allowedTools: string[];
 
 	/**
+	 * When true, the step may use ALL of the agent's tools, overriding `allowedTools`.
+	 * Equivalent to an empty `allowedTools`, but an explicit, user/agent-set intent.
+	 * Use sparingly — it widens the step's blast radius. Default false.
+	 */
+	allTools?: boolean;
+
+	/**
 	 * Credential IDs the agent is allowed to use during this step (via call_api).
 	 * Empty array = all credentials linked to the agent are allowed.
 	 * Specified IDs = strict subset of the agent's linked credentials for this step.
 	 * IDs not in the agent's credential list are silently ignored.
 	 */
 	allowedCredentialIds: string[];
+
+	/**
+	 * When true, the step may use ALL credentials assigned to the agent, overriding
+	 * `allowedCredentialIds`. Equivalent to an empty list, but an explicit intent.
+	 * Never grants credentials the agent isn't assigned. Use sparingly. Default false.
+	 */
+	allCredentials?: boolean;
 
 	/**
 	 * Maximum number of tool calls the agent is allowed to make within this step's
@@ -256,7 +270,11 @@ export interface WorkflowSpecNode {
 	/** agent: the task instruction for this step. */
 	instruction?: string;
 	allowedTools?: string[];
+	/** agent: grant all of the agent's tools (overrides allowedTools). */
+	allTools?: boolean;
 	allowedCredentialIds?: string[];
+	/** agent: grant all credentials assigned to the agent (overrides allowedCredentialIds). */
+	allCredentials?: boolean;
 	errorHandlingAction?: 'stop' | 'continue' | 'retry';
 	/** agent / loop: key of the next node after this one (omit to end this path). */
 	next?: string;

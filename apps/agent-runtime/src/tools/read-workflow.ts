@@ -3,6 +3,7 @@ import type { AgentTool } from '@earendil-works/pi-agent-core';
 import type { TextContent } from '@earendil-works/pi-ai';
 import { logger } from '@repo/utils';
 import type { Workflow, WorkflowNode, WorkflowEdge, FilterValue } from '@repo/types';
+import { BROWSER_TOOL_GROUP } from '@repo/types';
 import type { ToolContext } from './types.js';
 
 /** One-line summary of a Manual-mode filter (left op right, joined by and/or). */
@@ -58,8 +59,15 @@ function describeGraph(nodes: WorkflowNode[], edges: WorkflowEdge[]): string {
 			const s = n.data;
 			let line = `[Step] **${s.name || 'Untitled step'}**\n    Instruction: ${s.instruction}`;
 			if (s.inputMapping) line += `\n    Input mapping: ${s.inputMapping}`;
-			if (s.allowedTools.length > 0) line += `\n    Tools: ${s.allowedTools.join(', ')}`;
-			if (s.allowedCredentialIds.length > 0)
+			if (s.allTools) line += `\n    Tools: all`;
+			else if (s.allowedTools.length > 0) {
+				const toolLabels = s.allowedTools.map((t) =>
+					t === BROWSER_TOOL_GROUP ? 'all browser tools' : t,
+				);
+				line += `\n    Tools: ${toolLabels.join(', ')}`;
+			}
+			if (s.allCredentials) line += `\n    Credentials: all assigned`;
+			else if (s.allowedCredentialIds.length > 0)
 				line += `\n    Credentials: ${s.allowedCredentialIds.join(', ')}`;
 			if (s.expectedResponseSchema)
 				line += `\n    Output schema: ${JSON.stringify(s.expectedResponseSchema)}`;

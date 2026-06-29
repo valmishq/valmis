@@ -23,8 +23,13 @@ export interface Agent {
 	systemInstruction?: string;
 	/** Emoji character (default) or image URL for the agent's avatar */
 	avatarUrl?: string;
-	/** IDs of credentials this agent has access to */
+	/** IDs of credentials this agent has access to (the explicit manual selection) */
 	credentialIds: string[];
+	/**
+	 * When true, the agent uses ALL of the owner's credentials (current and any
+	 * added later), overriding `credentialIds`. Default false.
+	 */
+	allCredentials: boolean;
 	/** LLM provider config ID used for chat/completion */
 	modelConfigId?: string;
 	/** LLM provider config ID used for generating memory embeddings */
@@ -139,6 +144,8 @@ export interface CreateAgentRequestBody {
 	systemInstruction?: string;
 	avatarUrl?: string;
 	credentialIds?: string[];
+	/** When true, the agent uses all of the owner's credentials (current and future). */
+	allCredentials?: boolean;
 	modelConfigId?: string;
 	embeddingModelConfigId?: string;
 	embeddingDim?: number;
@@ -154,6 +161,8 @@ export interface UpdateAgentRequestBody {
 	systemInstruction?: string;
 	avatarUrl?: string;
 	credentialIds?: string[];
+	/** When true, the agent uses all of the owner's credentials (current and future). */
+	allCredentials?: boolean;
 	modelConfigId?: string;
 	embeddingModelConfigId?: string;
 	embeddingDim?: number;

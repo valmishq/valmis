@@ -331,6 +331,12 @@ export interface SandboxTokenPayload {
 	threadId: string;
 	/** IDs of credentials this sandbox is allowed to use via the proxy */
 	credentialIds: string[];
+	/**
+	 * When true, the sandbox may use ANY credential owned by `ownerId` (not just
+	 * those in `credentialIds`). The proxy authorizes by ownership instead of the
+	 * agent_credentials junction. Set for agents flagged with `allCredentials`.
+	 */
+	allCredentials?: boolean;
 	iat: number;
 	exp: number;
 }

@@ -29,10 +29,14 @@ export const workflowStepSchema = z.object({
 	 * Empty array = all tools allowed. Non-empty = strict subset.
 	 */
 	allowedTools: z.array(z.string()).default([]),
+	/** Explicit "use all of the agent's tools" intent (overrides allowedTools). */
+	allTools: z.boolean().default(false),
 	/**
 	 * Empty array = all agent credentials allowed. Non-empty = strict subset.
 	 */
 	allowedCredentialIds: z.array(z.uuid()).default([]),
+	/** Explicit "use all credentials assigned to the agent" intent (overrides the list). */
+	allCredentials: z.boolean().default(false),
 	/**
 	 * Maximum tool calls allowed per step tool loop. Default is 20.
 	 * Each step runs like a chat turn — the agent can call tools repeatedly

@@ -146,6 +146,7 @@ export const actions: Actions = {
 		const embeddingModelConfigId =
 			(formData.get('embeddingModelConfigId') as string | null) || null;
 		const credentialIds = formData.getAll('credentialIds') as string[];
+		const allCredentials = formData.get('allCredentials') === 'true';
 		const skillNames = formData.getAll('skillNames') as string[];
 		const knowledgeFileIds = formData.getAll('knowledgeFileIds') as string[];
 		const allowInternetAccess = formData.get('allowInternetAccess') !== 'false';
@@ -166,6 +167,7 @@ export const actions: Actions = {
 					systemInstruction,
 					avatarUrl,
 					credentialIds,
+					allCredentials,
 					modelConfigId,
 					embeddingModelConfigId,
 					allowInternetAccess,
@@ -188,6 +190,7 @@ export const actions: Actions = {
 					systemInstruction,
 					avatarUrl,
 					credentialIds,
+					allCredentials,
 					modelConfigId,
 					embeddingModelConfigId,
 					allowInternetAccess,
