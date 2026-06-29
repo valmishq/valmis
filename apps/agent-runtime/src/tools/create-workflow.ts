@@ -73,7 +73,9 @@ export function createCreateWorkflowTool(ctx: ToolContext): AgentTool {
 							Type.Array(Type.String(), {
 								description:
 									'Tool names allowed for this step (a restricted subset). ' +
-									'Available: call_api, read_file, write_file, list_files, run_terminal, run_code, ask_human, memory_write, memory_search.',
+									'Available: call_api, read_file, write_file, list_files, share_file, run_terminal, run_code, ask_human, ' +
+									'memory_write, memory_search, memory_delete, list_workflows, read_workflow, trigger_workflow. ' +
+									'Use the special token "agent-browser" to grant ALL browser tools (browser_navigate, browser_click, etc.) at once.',
 							}),
 						),
 						allTools: Type.Optional(
@@ -130,7 +132,9 @@ export function createCreateWorkflowTool(ctx: ToolContext): AgentTool {
 								),
 								allowedTools: Type.Optional(
 									Type.Array(Type.String(), {
-										description: 'agent: allowed tool names (a restricted subset).',
+										description:
+											'agent: allowed tool names (a restricted subset). ' +
+											'Use the special token "agent-browser" to grant ALL browser tools at once.',
 									}),
 								),
 								allTools: Type.Optional(

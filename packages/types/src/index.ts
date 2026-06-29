@@ -11,6 +11,7 @@ export * from './llmCatalog.js';
 export * from './skill.js';
 export * from './agentRuntime.js';
 export * from './workflow.js';
+export * from './workflowTools.js';
 export * from './appTrigger.js';
 export * from './channel.js';
 export * from './knowledge.js';

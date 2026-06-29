@@ -1,4 +1,5 @@
 import { error, fail, redirect } from '@sveltejs/kit';
+import { env } from '$env/dynamic/private';
 import type { PageServerLoad, Actions } from './$types';
 import { api } from '$lib/server/api';
 import type {
@@ -79,12 +80,17 @@ export const load: PageServerLoad = async (event) => {
 		workflow = workflowBody.data as Workflow;
 	}
 
+	// Gate the workflow builder's "Agent Browser" tool group the same way chat does:
+	// the agent must allow internet access AND the deployment must enable the feature.
+	const browserAvailable = agent.allowInternetAccess && env.BROWSER_FEATURE_ENABLED === 'true';
+
 	return {
 		agent,
 		credentials,
 		allCredentials,
 		definitions,
 		appTriggerProviders,
+		browserAvailable,
 		workflow,
 		isEditMode
 	};

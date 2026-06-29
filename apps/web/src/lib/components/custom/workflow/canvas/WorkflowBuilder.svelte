@@ -42,6 +42,8 @@
 		credentials: CredentialMetadata[];
 		allCredentials: CredentialMetadata[];
 		definitions: CredentialDefinition[];
+		/** Whether the agent has browser access — gates the "Agent Browser" tool group. */
+		browserAvailable?: boolean;
 		appTriggerProviders: AppTriggerProviderInfo[];
 		/** Serialized workflow JSON for the page's hidden form input. */
 		payload: string;
@@ -61,6 +63,7 @@
 		credentials,
 		allCredentials,
 		definitions,
+		browserAvailable = false,
 		appTriggerProviders,
 		payload = $bindable(''),
 		validationErrors = $bindable([]),
@@ -463,6 +466,7 @@
 	step={selectedStep}
 	{credentials}
 	{definitions}
+	{browserAvailable}
 	{onSaveStep}
 	condition={selectedCondition}
 	loop={selectedLoop}

@@ -45,6 +45,8 @@
 		step: WorkflowStep | null;
 		credentials: CredentialMetadata[];
 		definitions: CredentialDefinition[];
+		/** Whether the agent has browser access — gates the "Agent Browser" tool group. */
+		browserAvailable?: boolean;
 		onSaveStep: (step: WorkflowStep) => void;
 		// Condition / loop
 		condition: WorkflowConditionNodeData | null;
@@ -78,6 +80,7 @@
 		step,
 		credentials,
 		definitions,
+		browserAvailable = false,
 		onSaveStep,
 		condition,
 		loop,
@@ -234,6 +237,7 @@
 						{step}
 						{credentials}
 						{definitions}
+						{browserAvailable}
 						onChange={(s) => (pendingStep = s)}
 					/>
 				{/key}

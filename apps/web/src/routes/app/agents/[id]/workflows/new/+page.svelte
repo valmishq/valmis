@@ -105,6 +105,7 @@
 		credentials={data.credentials}
 		allCredentials={data.allCredentials}
 		definitions={data.definitions}
+		browserAvailable={data.browserAvailable}
 		appTriggerProviders={data.appTriggerProviders}
 		bind:payload
 		bind:validationErrors
