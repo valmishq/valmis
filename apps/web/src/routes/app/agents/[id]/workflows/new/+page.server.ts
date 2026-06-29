@@ -9,6 +9,10 @@ import type {
 	CredentialDefinition,
 	AppTriggerProviderInfo
 } from '@repo/types';
+// Server-only: the workflow-step tool catalog lives in @repo/utils (Node-only).
+// It must never be imported in a .svelte/browser file — it is threaded to the
+// builder components as the `toolCatalog` prop from this load instead.
+import { BROWSER_TOOL_GROUP, WORKFLOW_TOOL_CATALOG, WORKFLOW_TOOL_CATEGORIES } from '@repo/utils';
 
 /**
  * Unified load for workflow create and edit.
@@ -91,6 +95,13 @@ export const load: PageServerLoad = async (event) => {
 		definitions,
 		appTriggerProviders,
 		browserAvailable,
+		// Tool picker catalog (from @repo/utils) — passed down so browser code never
+		// imports the Node-only package directly.
+		toolCatalog: {
+			catalog: WORKFLOW_TOOL_CATALOG,
+			categories: WORKFLOW_TOOL_CATEGORIES,
+			browserToolGroup: BROWSER_TOOL_GROUP
+		},
 		workflow,
 		isEditMode
 	};
@@ -106,7 +117,9 @@ function extractMessages(body: unknown): string[] {
 		return b.messages.filter((m): m is string => typeof m === 'string');
 	}
 	if (Array.isArray(b.issues)) {
-		return b.issues.map((i) => (i.path ? `${i.path}: ${i.message}` : (i.message ?? 'Invalid value')));
+		return b.issues.map((i) =>
+			i.path ? `${i.path}: ${i.message}` : (i.message ?? 'Invalid value')
+		);
 	}
 	return [];
 }

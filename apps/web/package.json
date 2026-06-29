@@ -19,6 +19,7 @@
 		"@iconify/svelte": "^5.2.1",
 		"@repo/models": "workspace:*",
 		"@repo/types": "workspace:*",
+		"@repo/utils": "workspace:*",
 		"@xyflow/svelte": "^1.6.0",
 		"dompurify": "^3.4.8",
 		"highlight.js": "^11.11.1",
