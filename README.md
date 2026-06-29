@@ -115,6 +115,12 @@ When enabled, agents can operate a headless browser, navigate, fill forms, click
 - **Knowledge base:** Connect your enterprise knowledge base using Google Drive, Dropbox, Notion, or simply upload files. Knowledge base files are also processed as memories for agents to ensure quicker knowledge recall.
 - **Skills system:** You can install third party skills from Github, or create your own self-evolving skills that learns from you as you interact with it.
 
+### Something fun
+
+Valmis is probably the first AI agent that is able to play real chess with legit moves. We all know [LLMs are notoriously terrible at playing chess and always hallucinate moves](https://www.youtube.com/watch?v=c5JDaZ4tEaY). So we added a tool to the agent called chess-engine which basically requires the agent to not rely on text generation to produce moves, but instead produce each move strictly based on the calculation of a lightweight chess engine built in. And AI can be a great (and sportsmanlike!) chess player.
+
+![alt text](/statics/screenshots/chess-1.png)
+
 ## Getting started
 
 ### With Docker (recommended)

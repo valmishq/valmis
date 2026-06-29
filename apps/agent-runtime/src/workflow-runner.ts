@@ -223,11 +223,12 @@ function buildStepSystemPrompt(
 			`Return ONLY the JSON object with no other text, no markdown fences, no explanation.`;
 	}
 
-	// Credential guidance — filtered to this step's allowedCredentialIds
-	const effectiveCredentials =
-		step.allowedCredentialIds.length > 0
-			? config.credentials.filter((c) => step.allowedCredentialIds.includes(c.id))
-			: config.credentials;
+	// Credential guidance — all of the agent's credentials when allCredentials is set
+	// or the list is empty; otherwise the step's explicit subset.
+	const useAllCredentials = step.allCredentials || step.allowedCredentialIds.length === 0;
+	const effectiveCredentials = useAllCredentials
+		? config.credentials
+		: config.credentials.filter((c) => step.allowedCredentialIds.includes(c.id));
 
 	if (effectiveCredentials.length > 0) {
 		const credList = effectiveCredentials
@@ -294,10 +295,11 @@ async function executeStep(
 		// a step can still narrow them via allowedTools. Backend re-checks every call.
 		browserAvailable: config.browserAvailable ?? false,
 	});
-	const effectiveTools =
-		step.allowedTools.length > 0
-			? allTools.filter((t) => step.allowedTools.includes(t.name))
-			: allTools;
+	// All tools when allTools is set or the list is empty; otherwise the explicit subset.
+	const useAllTools = step.allTools || step.allowedTools.length === 0;
+	const effectiveTools = useAllTools
+		? allTools
+		: allTools.filter((t) => step.allowedTools.includes(t.name));
 
 	// Capture the final text from the last LLM call in this step.
 	// We use a mutable reference updated on every LLM call; the last one wins.

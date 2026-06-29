@@ -67,7 +67,9 @@
 			/>
 		</button>
 
-		{#if !expanded && toolCount > 0}
+		{#if !expanded && step.allTools}
+			<Badge variant="outline" class="shrink-0 text-xs">All tools</Badge>
+		{:else if !expanded && toolCount > 0}
 			<Badge variant="outline" class="shrink-0 text-xs">
 				{toolCount} tool{toolCount !== 1 ? 's' : ''}
 			</Badge>

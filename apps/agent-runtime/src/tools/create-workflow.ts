@@ -10,7 +10,9 @@ interface WorkflowStepInput {
 	name: string;
 	instruction: string;
 	allowedTools?: string[];
+	allTools?: boolean;
 	allowedCredentialIds?: string[];
+	allCredentials?: boolean;
 	errorHandlingAction?: 'stop' | 'continue' | 'retry';
 }
 
@@ -51,6 +53,7 @@ export function createCreateWorkflowTool(ctx: ToolContext): AgentTool {
 			'you write the condition in plain language (e.g. "the price is above 1000") and the agent decides true/false from the prior steps\' output. ' +
 			'Steps read upstream data via {{steps.<key>.output}} / {{steps.<key>.output.field}} (graph) or {{steps.<index>.output}} (linear), ' +
 			'plus {{trigger.payload}} and, inside a loop body, {{loop.item}} / {{loop.index}}. ' +
+			'LEAST PRIVILEGE: give each step only the tools and credentials it needs. Set `allTools`/`allCredentials` to true ONLY when a step genuinely requires broad access — these widen the step’s blast radius, so use them cautiously. ' +
 			'IMPORTANT: After this tool completes, your reply to the user MUST include ALL ' +
 			'markdown links returned in the tool result exactly as they appear — do not omit or paraphrase them.',
 		parameters: Type.Object({
@@ -69,13 +72,27 @@ export function createCreateWorkflowTool(ctx: ToolContext): AgentTool {
 						allowedTools: Type.Optional(
 							Type.Array(Type.String(), {
 								description:
-									'Tool names allowed for this step. Empty = all. ' +
+									'Tool names allowed for this step (a restricted subset). ' +
 									'Available: call_api, read_file, write_file, list_files, run_terminal, run_code, ask_human, memory_write, memory_search.',
+							}),
+						),
+						allTools: Type.Optional(
+							Type.Boolean({
+								description:
+									'Grant ALL of the agent’s tools for this step (overrides allowedTools). ' +
+									'Use sparingly — prefer the minimum tools the step needs.',
 							}),
 						),
 						allowedCredentialIds: Type.Optional(
 							Type.Array(Type.String(), {
-								description: 'Credential IDs allowed for this step. Empty = all agent credentials.',
+								description: 'Credential IDs allowed for this step (a restricted subset).',
+							}),
+						),
+						allCredentials: Type.Optional(
+							Type.Boolean({
+								description:
+									'Grant ALL credentials assigned to the agent for this step (overrides allowedCredentialIds). ' +
+									'Use sparingly — prefer only the credentials the step needs.',
 							}),
 						),
 						errorHandlingAction: Type.Optional(
@@ -113,12 +130,24 @@ export function createCreateWorkflowTool(ctx: ToolContext): AgentTool {
 								),
 								allowedTools: Type.Optional(
 									Type.Array(Type.String(), {
-										description: 'agent: allowed tool names (empty = all).',
+										description: 'agent: allowed tool names (a restricted subset).',
+									}),
+								),
+								allTools: Type.Optional(
+									Type.Boolean({
+										description:
+											'agent: grant ALL of the agent’s tools (overrides allowedTools). Use sparingly.',
 									}),
 								),
 								allowedCredentialIds: Type.Optional(
 									Type.Array(Type.String(), {
-										description: 'agent: allowed credential IDs (empty = all).',
+										description: 'agent: allowed credential IDs (a restricted subset).',
+									}),
+								),
+								allCredentials: Type.Optional(
+									Type.Boolean({
+										description:
+											'agent: grant ALL credentials assigned to the agent (overrides allowedCredentialIds). Use sparingly.',
 									}),
 								),
 								errorHandlingAction: Type.Optional(

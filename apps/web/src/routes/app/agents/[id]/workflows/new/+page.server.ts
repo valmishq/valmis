@@ -48,9 +48,13 @@ export const load: PageServerLoad = async (event) => {
 		const credsBody = await credsRes.json();
 		allCredentials = (credsBody.data ?? []) as CredentialMetadata[];
 	}
-	// Step cards only expose credentials linked to this agent (the agent's own authority).
+	// Step cards expose the credentials available to this agent. When the agent is
+	// flagged to use all credentials, that's every owner credential (current + future);
+	// otherwise just the ones explicitly linked to the agent.
 	const agentCredentialIds = new Set(agent.credentialIds);
-	const credentials = allCredentials.filter((c) => agentCredentialIds.has(c.id));
+	const credentials = agent.allCredentials
+		? allCredentials
+		: allCredentials.filter((c) => agentCredentialIds.has(c.id));
 
 	let definitions: CredentialDefinition[] = [];
 	if (defsRes.ok) {

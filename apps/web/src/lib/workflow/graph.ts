@@ -38,7 +38,9 @@ export function defaultStep(): WorkflowStep {
 		name: '',
 		instruction: '',
 		allowedTools: [],
+		allTools: false,
 		allowedCredentialIds: [],
+		allCredentials: false,
 		errorHandling: { action: 'stop' }
 	};
 }

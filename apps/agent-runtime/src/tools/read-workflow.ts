@@ -58,8 +58,10 @@ function describeGraph(nodes: WorkflowNode[], edges: WorkflowEdge[]): string {
 			const s = n.data;
 			let line = `[Step] **${s.name || 'Untitled step'}**\n    Instruction: ${s.instruction}`;
 			if (s.inputMapping) line += `\n    Input mapping: ${s.inputMapping}`;
-			if (s.allowedTools.length > 0) line += `\n    Tools: ${s.allowedTools.join(', ')}`;
-			if (s.allowedCredentialIds.length > 0)
+			if (s.allTools) line += `\n    Tools: all`;
+			else if (s.allowedTools.length > 0) line += `\n    Tools: ${s.allowedTools.join(', ')}`;
+			if (s.allCredentials) line += `\n    Credentials: all assigned`;
+			else if (s.allowedCredentialIds.length > 0)
 				line += `\n    Credentials: ${s.allowedCredentialIds.join(', ')}`;
 			if (s.expectedResponseSchema)
 				line += `\n    Output schema: ${JSON.stringify(s.expectedResponseSchema)}`;

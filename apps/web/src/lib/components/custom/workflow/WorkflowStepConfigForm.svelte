@@ -2,6 +2,7 @@
 	import * as Select from '$lib/components/ui/select/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Label } from '$lib/components/ui/label/index.js';
+	import { Switch } from '$lib/components/ui/switch/index.js';
 	import type { WorkflowStep, CredentialMetadata, CredentialDefinition } from '@repo/types';
 	import ShieldIcon from '@lucide/svelte/icons/shield';
 
@@ -63,6 +64,8 @@
 
 	let selectedTools = $state<Set<string>>(new Set(step.allowedTools));
 	let selectedCredentialIds = $state<Set<string>>(new Set(step.allowedCredentialIds));
+	let useAllTools = $state(step.allTools ?? false);
+	let useAllCredentials = $state(step.allCredentials ?? false);
 
 	/** Emit updated step to parent */
 	function emit() {
@@ -82,8 +85,10 @@
 			name,
 			instruction,
 			inputMapping: inputMapping.trim() || undefined,
-			allowedTools: [...selectedTools],
-			allowedCredentialIds: [...selectedCredentialIds],
+			allowedTools: useAllTools ? [] : [...selectedTools],
+			allTools: useAllTools,
+			allowedCredentialIds: useAllCredentials ? [] : [...selectedCredentialIds],
+			allCredentials: useAllCredentials,
 			maxToolCallsPerStep,
 			expectedResponseSchema: parsedSchema,
 			errorHandling: {
@@ -106,6 +111,20 @@
 		if (next.has(id)) next.delete(id);
 		else next.add(id);
 		selectedCredentialIds = next;
+		emit();
+	}
+
+	// Keep the selected subset intact while "use all" is on (the list is merely
+	// hidden) so toggling off restores the user's prior selection instead of
+	// silently widening the step to all tools/credentials. emit() already sends
+	// an empty list when the flag is on.
+	function setUseAllTools(v: boolean) {
+		useAllTools = v;
+		emit();
+	}
+
+	function setUseAllCredentials(v: boolean) {
+		useAllCredentials = v;
 		emit();
 	}
 
@@ -171,48 +190,57 @@
 
 	<!-- Allowed tools -->
 	<div class="space-y-2">
-		<Label>
-			Allowed tools
-			<span class="ml-1 font-normal text-muted-foreground">
-				({selectedTools.size === 0 ? 'all allowed' : selectedTools.size + ' selected'})
-			</span>
-		</Label>
-		<div class="grid grid-cols-2 gap-1.5">
-			{#each AVAILABLE_TOOLS as tool (tool.name)}
-				{@const isSelected = selectedTools.has(tool.name)}
-				<label
-					class="flex cursor-pointer items-center gap-2 rounded-md border px-2.5 py-1.5 text-xs transition-colors {isSelected
-						? 'border-primary bg-primary/5 text-foreground'
-						: 'border-border text-muted-foreground hover:bg-muted/50'}"
-				>
-					<input
-						type="checkbox"
-						checked={isSelected}
-						onchange={() => toggleTool(tool.name)}
-						class="size-3 rounded border-border accent-primary"
-					/>
-					{tool.label}
-				</label>
-			{/each}
+		<Label>Allowed tools</Label>
+		<div class="flex items-center justify-between gap-4 rounded-md border border-border px-3 py-2.5">
+			<div class="space-y-0.5">
+				<p class="text-sm font-medium text-foreground">Use all tools</p>
+				<p class="text-xs text-muted-foreground">Grant this step every tool the agent has.</p>
+			</div>
+			<Switch checked={useAllTools} onCheckedChange={setUseAllTools} />
 		</div>
-		<p class="text-xs text-muted-foreground">
-			Leave all unchecked to allow all tools. Check specific tools to restrict this step.
-		</p>
+		{#if !useAllTools}
+			<div class="grid grid-cols-2 gap-1.5">
+				{#each AVAILABLE_TOOLS as tool (tool.name)}
+					{@const isSelected = selectedTools.has(tool.name)}
+					<label
+						class="flex cursor-pointer items-center gap-2 rounded-md border px-2.5 py-1.5 text-xs transition-colors {isSelected
+							? 'border-primary bg-primary/5 text-foreground'
+							: 'border-border text-muted-foreground hover:bg-muted/50'}"
+					>
+						<input
+							type="checkbox"
+							checked={isSelected}
+							onchange={() => toggleTool(tool.name)}
+							class="size-3 rounded border-border accent-primary"
+						/>
+						{tool.label}
+					</label>
+				{/each}
+			</div>
+			<p class="text-xs text-muted-foreground">
+				Leave all unchecked to allow all tools. Check specific tools to restrict this step.
+			</p>
+		{/if}
 	</div>
 
 	<!-- Allowed credentials -->
 	{#if credentials.length > 0}
 		<div class="space-y-2">
-			<Label>
-				Allowed credentials
-				<span class="ml-1 font-normal text-muted-foreground">
-					({selectedCredentialIds.size === 0
-						? 'all allowed'
-						: selectedCredentialIds.size + ' selected'})
-				</span>
-			</Label>
-			<div class="space-y-1.5">
-				{#each credentials as cred (cred.id)}
+			<Label>Allowed credentials</Label>
+			<div
+				class="flex items-center justify-between gap-4 rounded-md border border-border px-3 py-2.5"
+			>
+				<div class="space-y-0.5">
+					<p class="text-sm font-medium text-foreground">Use all credentials</p>
+					<p class="text-xs text-muted-foreground">
+						All credentials assigned to this agent, including ones added later.
+					</p>
+				</div>
+				<Switch checked={useAllCredentials} onCheckedChange={setUseAllCredentials} />
+			</div>
+			{#if !useAllCredentials}
+				<div class="space-y-1.5">
+					{#each credentials as cred (cred.id)}
 					{@const isSelected = selectedCredentialIds.has(cred.id)}
 					{@const def = getDefinition(cred.type)}
 					<label
@@ -238,11 +266,12 @@
 						<span class="truncate font-medium text-foreground">{cred.name}</span>
 						<span class="ml-auto shrink-0 text-muted-foreground">{cred.type}</span>
 					</label>
-				{/each}
-			</div>
-			<p class="text-xs text-muted-foreground">
-				Leave all unchecked to allow all agent credentials for this step.
-			</p>
+					{/each}
+				</div>
+				<p class="text-xs text-muted-foreground">
+					Leave all unchecked to allow all agent credentials for this step.
+				</p>
+			{/if}
 		</div>
 	{/if}
 
