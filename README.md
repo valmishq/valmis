@@ -1,22 +1,22 @@
 # Valmis - The OpenClaw alternative designed for work, with security in mind
 
-Valmis is a cloud-based application for building AI agents for work, with the ability to connect to 100+ business and productivity integrations. The system is designed with security in mind and agents runs in isolated containers, meaning AI never get access to your API credentials or your host files.
+Valmis is a cloud-based application for building AI agents for work, with the ability to connect to 100+ business and productivity integrations. The system is designed with security in mind, and agents run in isolated containers, meaning AI never gets access to your API credentials or your host files.
 
-Valmis is designed to automate workflows using AI. You can interact with your agent using the chat interface, or ask it to create multi-step workflows and trigger it with cron, webhook, or app events (new email, form submission etc).
+Valmis is designed to automate workflows using AI. You can interact with your agent using the chat interface, or ask it to create multi-step workflows and trigger it with cron, webhook, or app events (new email, form submission, etc.).
 
 ## Why we built it
 
-OpenClaw is a great tool to create personal assistants, but it is not for work. The biggest concern is security, as agents stores credentials in its memory as plain text and sometimes send credentials directly to LLM providers.
+OpenClaw is a great tool to create personal assistants, but it is not for work. The biggest concern is security, as agents store credentials in their memory as plain text and sometimes send credentials directly to LLM providers.
 
-Valmis addresses this issue by designing a **proxy system**: dockerized agent runtime can only request the host machine to make API requests by providing the relevant credential ID. The host then makes the actual request and return the JSON data back to the agent runtime. Even the LLM API calls themselves are made using proxy. With this design, you can even turn off the internet access of the agent container while making it work.
+Valmis addresses this issue by designing a **proxy system**: dockerized agent runtime can only request the host machine to make API requests by providing the relevant credential ID. The host then makes the actual request and returns the JSON data back to the agent runtime. Even the LLM API calls themselves are made using proxy. With this design, you can even turn off the internet access of the agent container while making it work.
 
 Each agent has its own file system and is completely isolated from the host machine or from other agents.
 
-Agents can only work for you when they have access (safely) to your apps. Our proxy system now supports 100+ business and productivity integrations, including all Google Workspace apps, Slack, Notion, Hubspot, Salesforce, Figma. See [integrations](packages/utils/src/integrations/definitions) folder for all currently supported apps. Each agent you create can be assigned access to specific (or all) credentials, and this boundary is strictly followed at the code level. You can then talk to the agent to complete certain tasks, and agents will formulate proxy requests to the host machine to actual send the requests.
+Agents can only work for you when they have access (safely) to your apps. Our proxy system now supports 100+ business and productivity integrations, including all Google Workspace apps, Slack, Notion, Hubspot, Salesforce, and Figma. See [integrations](packages/utils/src/integrations/definitions) folder for all currently supported apps. Each agent you create can be assigned access to specific (or all) credentials, and this boundary is strictly followed at the code level. You can then talk to the agent to complete certain tasks, and agents will formulate proxy requests to the host machine to actually send the requests.
 
 ![alt text](statics/screenshots/chat-1.png)
 
-Finally, you don't always want to manually ask your agents to work. You can automate multi-step workflows using our automation feature. Each workflow can be triggered by cron, webhooks, app events and it supports conditions and loops. You can create multi-step workflows using our workflow builder UI, or you can simply ask your agent to create by providing a description.
+Finally, you don't always want to manually ask your agents to work. You can automate multi-step workflows using our automation feature. Each workflow can be triggered by cron, webhooks, app events and it supports conditions and loops. You can create multi-step workflows using our workflow builder UI, or you can simply ask your agent to create one by providing a description.
 
 ![alt text](statics/screenshots/workflow-1.png)
 
@@ -26,29 +26,29 @@ Then it comes to why the project is called Valmis. Valmis is an Estonian word th
 
 ### Build a fleet of agents
 
-You can create a fleet of agents that act independently or in collaboration. Each agent can be assigned with different credentials, different skills, and different knowledge bases. You can also assign different LLM providers for each agent, making sure less critical missions are done by less expensive models.
+You can create a fleet of agents that act independently or in collaboration. Each agent can be assigned different credentials, different skills, and different knowledge bases. You can also assign different LLM providers for each agent, making sure less critical missions are done by less expensive models.
 
-When given the proper permission, some agents can act as a team lead and have the authority to manage the workflow of other agents, forming a decision tree that is ultimately controller by the human user.
+When given the proper permission, some agents can act as a team lead and have the authority to manage the workflow of other agents, forming a decision tree that is ultimately controlled by the human user.
 
 ### Build multi-step workflows
 
-You can use our workflow builder canvas to create multi-step workflows that the agent will run automatically. This is especially useful when you have workflows that repeat everyday or is triggered by specific events (form submission, Slack mentions etc.)
+You can use our workflow builder canvas to create multi-step workflows that the agent will run automatically. This is especially useful when you have workflows that repeat every day or are triggered by specific events (form submission, Slack mentions etc.)
 
 For better data security and control, you can limit the credentials and tools the agent can use in each step. You can also define the schema for the output of each step for more efficient data mapping. You can add conditions and loops to the workflow. Conditions can by smart (you describe the condition using human language and AI decides if the condition is met) or strict (compare values rigorously using programming logic).
 
 ### Agents have cross-session memory
 
-Each agent has its own memory system that is organized nto four categories: episodic (what happened), semantic (durable facts), procedural (rules and constraints), and working (short-lived context). This is a mechanism inspired by cognitive-memory research.
+Each agent has its own memory system that is organized into four categories: episodic (what happened), semantic (durable facts), procedural (rules and constraints), and working (short-lived context). This is a mechanism inspired by cognitive-memory research.
 
 Your agents are able to automatically write memory when you tell them anything worth remembering or when it discovers something that might be useful in the future. Agent memory is persistent across sessions, meaning the more you interact with the agent, the more it will know your workflow. When a session ends, the agent automatically distills what it learned so the next conversation starts smarter. You can also instruct the agent to modify or remove memory items.
 
-Valmis system uses `pgvector` to store and fetch memories. Each memory item is embedded using embedding models and the search is done semantically using text embedding.
+Valmis system uses `pgvector` to store and fetch memories. Each memory item is embedded using embedding models, and the search is done semantically using text embedding.
 
 ### Connect to your tools safely with proxies
 
-You can connect to more than 100 business and productivity apps using API key or Oauth2 authentication. The credentials are encrypted with AES-256-GCM and are stored in your database. AI agents never get access to the credentials themselves, but instead call these APIs through the host machine using a proxy. Theoretically, you can configure to make your agent runtime have no access to the internet, and it will still work.
+You can connect to more than 100 business and productivity apps using an API key or Oauth2 authentication. The credentials are encrypted with AES-256-GCM and are stored in your database. AI agents never get access to the credentials themselves, but instead call these APIs through the host machine using a proxy. Theoretically, you can configure your agent runtime to have no access to the internet, and it will still work.
 
-Here is a preview of some of the apps we already supported.
+Here is a preview of some of the apps we already support.
 
 <table align="center">
   <tr>
@@ -113,11 +113,11 @@ When enabled, agents can operate a headless browser, navigate, fill forms, click
 - **Use any LLM provider:** You can connect to any LLM provider and use their chat or embedding models flexibly. We already support nearly 200 models from 20 providers (OpenAI,
   Anthropic, Google, Mistral, Cohere, and more), you can also use OpenRouter for more choices.
 - **Knowledge base:** Connect your enterprise knowledge base using Google Drive, Dropbox, Notion, or simply upload files. Knowledge base files are also processed as memories for agents to ensure quicker knowledge recall.
-- **Skills system:** You can install third party skills from Github, or create your own self-evolving skills that learns from you as you interact with it.
+- **Skills system:** You can install third-party skills from Github, or create your own self-evolving skills that learn from you as you interact with it.
 
 ### Something fun
 
-Valmis is probably the first AI agent that is able to play real chess with legit moves. We all know [LLMs are notoriously terrible at playing chess and always hallucinate moves](https://www.youtube.com/watch?v=c5JDaZ4tEaY). So we added a tool to the agent called chess-engine which basically requires the agent to not rely on text generation to produce moves, but instead produce each move strictly based on the calculation of a lightweight chess engine built in. And AI can be a great (and sportsmanlike!) chess player.
+Valmis is probably the first AI agent that is able to play real chess with legit moves. We all know [LLMs are notoriously terrible at playing chess and always hallucinate moves](https://www.youtube.com/watch?v=c5JDaZ4tEaY). So we added a tool to the agent called chess-engine, which basically requires the agent not to rely on text generation to produce moves, but instead to produce each move strictly based on the calculation of a lightweight chess engine built in. And AI can be a great (and sportsmanlike!) chess player.
 
 ![alt text](/statics/screenshots/chess-1.png)
 
