@@ -1,12 +1,10 @@
 # Valmis - The OpenClaw alternative designed for work, with security in mind
 
-Valmis is a cloud-based application for building AI agents for work, with the ability to connect to 100+ business and productivity integrations. The system is designed with security in mind, and agents run in isolated containers, meaning AI never gets access to your API credentials or your host files.
+Valmis is a cloud-based application for shipping AI agents for production work. It allows you to build a fleet of agents that can talk to 100+ business and productivity integrations. The system is designed with security in mind, and agents run in isolated containers, meaning AI never gets access to your API credentials or your host files.
 
 Valmis is designed to automate workflows using AI. You can interact with your agent using the chat interface, or ask it to create multi-step workflows and trigger it with cron, webhook, or app events (new email, form submission, etc.).
 
-https://github.com/user-attachments/assets/82d1b6f7-2b07-482b-9f3a-67900ca9c72b
-
-[Watch on Youtube](https://www.youtube.com/watch?v=JRj9tP_7dRo)
+![alt text](statics/screenshots/01-heading.png)
 
 ## Why we built it
 
@@ -18,11 +16,11 @@ Each agent has its own file system and is completely isolated from the host mach
 
 Agents can only work for you when they have access (safely) to your apps. Our proxy system now supports 100+ business and productivity integrations, including all Google Workspace apps, Slack, Notion, Hubspot, Salesforce, and Figma. See [integrations](packages/utils/src/integrations/definitions) folder for all currently supported apps. Each agent you create can be assigned access to specific (or all) credentials, and this boundary is strictly followed at the code level. You can then talk to the agent to complete certain tasks, and agents will formulate proxy requests to the host machine to actually send the requests.
 
-![alt text](statics/screenshots/chat-1.png)
+https://github.com/user-attachments/assets/82d1b6f7-2b07-482b-9f3a-67900ca9c72b
+
+[Watch intro on Youtube](https://www.youtube.com/watch?v=-R6ea1UYge0)
 
 Finally, you don't always want to manually ask your agents to work. You can automate multi-step workflows using our automation feature. Each workflow can be triggered by cron, webhooks, app events and it supports conditions and loops. You can create multi-step workflows using our workflow builder UI, or you can simply ask your agent to create one by providing a description.
-
-![alt text](statics/screenshots/workflow-1.png)
 
 Then it comes to why the project is called Valmis. Valmis is an Estonian word that means "completed" or "done"(Same in Finnish). This is because the project was inspired and designed in Estonia, Europe's digital nation. It also has the domain name valm.is that uses the Icelandic TLD, so the project is pretty Nordic. (Please do not open issues discussing whether Estonia is Nordic :) )
 
@@ -39,6 +37,8 @@ When given the proper permission, some agents can act as a team lead and have th
 You can use our workflow builder canvas to create multi-step workflows that the agent will run automatically. This is especially useful when you have workflows that repeat every day or are triggered by specific events (form submission, Slack mentions etc.)
 
 For better data security and control, you can limit the credentials and tools the agent can use in each step. You can also define the schema for the output of each step for more efficient data mapping. You can add conditions and loops to the workflow. Conditions can by smart (you describe the condition using human language and AI decides if the condition is met) or strict (compare values rigorously using programming logic).
+
+![alt text](statics/screenshots/05-workflow.png)
 
 ### Agents have cross-session memory
 
