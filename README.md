@@ -22,7 +22,7 @@ Agents can only work for you when they have access (safely) to your apps. Our pr
 
 Finally, you don't always want to manually ask your agents to work. You can automate multi-step workflows using our automation feature. Each workflow can be triggered by cron, webhooks, app events and it supports conditions and loops. You can create multi-step workflows using our workflow builder UI, or you can simply ask your agent to create one by providing a description.
 
-![alt text](statics/screenshots/workflow-1.png)
+![alt text](statics/screenshots/05-workflow.png)
 
 Then it comes to why the project is called Valmis. Valmis is an Estonian word that means "completed" or "done"(Same in Finnish). This is because the project was inspired and designed in Estonia, Europe's digital nation. It also has the domain name valm.is that uses the Icelandic TLD, so the project is pretty Nordic. (Please do not open issues discussing whether Estonia is Nordic :) )
 
