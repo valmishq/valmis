@@ -1,5 +1,13 @@
 # Valmis - The OpenClaw alternative designed for work, with security in mind
 
+## We are live on Product Hunt today!
+
+Valmis is launching on Product Hunt today. If you like the project, we'd love your support.
+
+<a href="https://www.producthunt.com/products/valmis?embed=true&utm_source=badge-featured&utm_medium=badge&utm_campaign=badge-valmis" target="_blank" rel="noopener noreferrer"><img alt="Valmis - Open-source alternative to Claude Cowork / OpenClaw for work | Product Hunt" width="250" height="54" src="https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=1185519&theme=light&t=1782946465084"></a>
+
+---
+
 Valmis is a cloud-based application for shipping AI agents for production work. It allows you to build a fleet of agents that can talk to 100+ business and productivity integrations. The system is designed with security in mind, and agents run in isolated containers, meaning AI never gets access to your API credentials or your host files.
 
 Valmis is designed to automate workflows using AI. You can interact with your agent using the chat interface, or ask it to create multi-step workflows and trigger it with cron, webhook, or app events (new email, form submission, etc.).
