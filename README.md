@@ -4,6 +4,10 @@ Valmis is a cloud-based application for shipping AI agents for production work. 
 
 Valmis is designed to automate workflows using AI. You can interact with your agent using the chat interface, or ask it to create multi-step workflows and trigger it with cron, webhook, or app events (new email, form submission, etc.).
 
+https://github.com/user-attachments/assets/82d1b6f7-2b07-482b-9f3a-67900ca9c72b
+
+[Watch on Youtube](https://www.youtube.com/watch?v=JRj9tP_7dRo)
+
 ## Why we built it
 
 OpenClaw is a great tool to create personal assistants, but it is not for work. The biggest concern is security, as agents store credentials in their memory as plain text and sometimes send credentials directly to LLM providers.
