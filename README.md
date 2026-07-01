@@ -1,6 +1,6 @@
 # Valmis - The OpenClaw alternative designed for work, with security in mind
 
-## We are live on Product Hunt today!
+### We are live on Product Hunt today!
 
 Valmis is launching on Product Hunt today. If you like the project, we'd love your support.
 
