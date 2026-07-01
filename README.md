@@ -6,7 +6,7 @@ Valmis is designed to automate workflows using AI. You can interact with your ag
 
 https://github.com/user-attachments/assets/82d1b6f7-2b07-482b-9f3a-67900ca9c72b
 
-[Watch on Youtube](https://www.youtube.com/watch?v=JRj9tP_7dRo)
+[Watch intro on Youtube](https://www.youtube.com/watch?v=-R6ea1UYge0)
 
 ## Why we built it
 
