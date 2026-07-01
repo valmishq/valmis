@@ -65,6 +65,9 @@ export class AgentProxyService {
 			ownerId: payload.ownerId,
 			threadId: payload.threadId,
 			credentialIds: payload.credentialIds,
+			// Without this, an allCredentials agent's token loses the flag and the proxy
+			// falls back to the junction check — denying any owner credential not linked.
+			allCredentials: payload.allCredentials,
 		})
 			.setProtectedHeader({ alg: 'HS256' })
 			.setIssuedAt()
@@ -238,7 +241,10 @@ export class AgentProxyService {
 		// Step 3b — authenticated path: enforce credential allowlist (token-time snapshot).
 		// Skipped for allCredentials agents, which may use any credential the owner has —
 		// including ones added after the token was issued.
-		if (!tokenPayload.allCredentials && !tokenPayload.credentialIds.includes(request.credentialId)) {
+		if (
+			!tokenPayload.allCredentials &&
+			!tokenPayload.credentialIds.includes(request.credentialId)
+		) {
 			throw new Error(
 				`Credential ${request.credentialId} is not authorized for this sandbox session`,
 			);

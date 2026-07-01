@@ -41,7 +41,7 @@ function googleEmbedding(
 
 export const SUPPLEMENTAL_MODELS: LlmCatalogModel[] = [
 	// Older but still-served Gemini API embedding model (768 dims). Free tier.
-	googleEmbedding('text-embedding-004', 'Google Text Embedding 004', 2048, '0'),
+	googleEmbedding('gemini-embedding-2', 'Google Gemini Embedding 2', 8192, '0'),
 	// Multilingual embedding model (768 dims). Note: primarily a Vertex model —
 	// availability via the Generative Language API key path may vary.
 	googleEmbedding(

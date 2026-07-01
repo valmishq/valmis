@@ -1,6 +1,6 @@
 # Valmis - The OpenClaw alternative designed for work, with security in mind
 
-Valmis is a cloud-based application for building AI agents for work, with the ability to connect to 100+ business and productivity integrations. The system is designed with security in mind, and agents run in isolated containers, meaning AI never gets access to your API credentials or your host files.
+Valmis is a cloud-based application for shipping AI agents for production work. It allows you to build a fleet of agents that can talk to 100+ business and productivity integrations. The system is designed with security in mind, and agents run in isolated containers, meaning AI never gets access to your API credentials or your host files.
 
 Valmis is designed to automate workflows using AI. You can interact with your agent using the chat interface, or ask it to create multi-step workflows and trigger it with cron, webhook, or app events (new email, form submission, etc.).
 
