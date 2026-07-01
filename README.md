@@ -22,8 +22,6 @@ https://github.com/user-attachments/assets/82d1b6f7-2b07-482b-9f3a-67900ca9c72b
 
 Finally, you don't always want to manually ask your agents to work. You can automate multi-step workflows using our automation feature. Each workflow can be triggered by cron, webhooks, app events and it supports conditions and loops. You can create multi-step workflows using our workflow builder UI, or you can simply ask your agent to create one by providing a description.
 
-![alt text](statics/screenshots/05-workflow.png)
-
 Then it comes to why the project is called Valmis. Valmis is an Estonian word that means "completed" or "done"(Same in Finnish). This is because the project was inspired and designed in Estonia, Europe's digital nation. It also has the domain name valm.is that uses the Icelandic TLD, so the project is pretty Nordic. (Please do not open issues discussing whether Estonia is Nordic :) )
 
 ## What you can do with Valmis
@@ -39,6 +37,8 @@ When given the proper permission, some agents can act as a team lead and have th
 You can use our workflow builder canvas to create multi-step workflows that the agent will run automatically. This is especially useful when you have workflows that repeat every day or are triggered by specific events (form submission, Slack mentions etc.)
 
 For better data security and control, you can limit the credentials and tools the agent can use in each step. You can also define the schema for the output of each step for more efficient data mapping. You can add conditions and loops to the workflow. Conditions can by smart (you describe the condition using human language and AI decides if the condition is met) or strict (compare values rigorously using programming logic).
+
+![alt text](statics/screenshots/05-workflow.png)
 
 ### Agents have cross-session memory
 
