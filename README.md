@@ -4,9 +4,7 @@ Valmis is a cloud-based application for shipping AI agents for production work. 
 
 Valmis is designed to automate workflows using AI. You can interact with your agent using the chat interface, or ask it to create multi-step workflows and trigger it with cron, webhook, or app events (new email, form submission, etc.).
 
-https://github.com/user-attachments/assets/82d1b6f7-2b07-482b-9f3a-67900ca9c72b
-
-[Watch intro on Youtube](https://www.youtube.com/watch?v=-R6ea1UYge0)
+![alt text](statics/screenshots/01-heading.png)
 
 ## Why we built it
 
@@ -18,7 +16,9 @@ Each agent has its own file system and is completely isolated from the host mach
 
 Agents can only work for you when they have access (safely) to your apps. Our proxy system now supports 100+ business and productivity integrations, including all Google Workspace apps, Slack, Notion, Hubspot, Salesforce, and Figma. See [integrations](packages/utils/src/integrations/definitions) folder for all currently supported apps. Each agent you create can be assigned access to specific (or all) credentials, and this boundary is strictly followed at the code level. You can then talk to the agent to complete certain tasks, and agents will formulate proxy requests to the host machine to actually send the requests.
 
-![alt text](statics/screenshots/01-heading.png)
+https://github.com/user-attachments/assets/82d1b6f7-2b07-482b-9f3a-67900ca9c72b
+
+[Watch intro on Youtube](https://www.youtube.com/watch?v=-R6ea1UYge0)
 
 Finally, you don't always want to manually ask your agents to work. You can automate multi-step workflows using our automation feature. Each workflow can be triggered by cron, webhooks, app events and it supports conditions and loops. You can create multi-step workflows using our workflow builder UI, or you can simply ask your agent to create one by providing a description.
 
